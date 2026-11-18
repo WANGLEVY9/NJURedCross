@@ -1,4 +1,4 @@
-import { h } from '../../core/dom.js';
+import { h, icon } from '../../core/dom.js';
 import { request } from '../../core/api.js';
 import { badge, button, checkbox, emptyState, metric, metricRow, notice, pageHead, segmented } from '../../ui/primitives.js';
 import * as fmt from '../../core/format.js';
@@ -102,10 +102,22 @@ export default async function feedbackPage() {
           attrs: item.submittedAt ? { datetime: item.submittedAt } : {},
         })),
       h('p', { class: 'feedback-item__content', text: item.content }),
+      item.activityName
+        ? h('div', { class: 'feedback-item__activity' },
+          h('span', { class: 'row-2' }, icon('calendar', 'ico ico--sm'), h('span', { text: item.activityName })),
+          item.ownerMailStatus
+            ? badge(`负责人邮件：${item.ownerMailStatus}`, {
+              tone: item.ownerMailStatus === '已发送' ? 'success' : item.ownerMailStatus === '部分发送' ? 'warning' : 'error',
+            })
+            : null)
+        : null,
       h('footer', { class: 'feedback-item__foot' },
         h('div', { class: 'feedback-item__meta' },
           h('span', { text: item.source || '活动平台' }),
           h('span', { class: 't-faint', text: item.feedbackId || item.id }),
+          item.ownerMailAt
+            ? h('span', { text: `负责人邮件时间：${fmt.fullDateTime(item.ownerMailAt)}` })
+            : null,
           item.resolved
             ? h('span', { text: `${item.resolvedBy || '管理员'} · ${item.resolvedAt ? fmt.fullDateTime(item.resolvedAt) : '已归类为已解决'}` })
             : null),

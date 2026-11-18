@@ -26,8 +26,10 @@ function syntheticBase({ ready = true, rows = [] } = {}) {
     },
     async appendRow(table, row) {
       assert.equal(table, FEEDBACK_TABLE);
-      appended.push(row);
-      return { _id: 'row-1' };
+      const saved = { ...row, _id: `row-${appended.length + 1}` };
+      appended.push(saved);
+      rows.push(saved);
+      return { _id: saved._id };
     },
     async listRows() {
       return rows;
@@ -62,12 +64,14 @@ function context(base, overrides = {}) {
 
 test('feedback categories and payload are validated at the public boundary', () => {
   assert.deepEqual(FEEDBACK_CATEGORIES, ['活动', '物资', '内建', '宣传', '其他']);
-  assert.deepEqual(normalizeFeedback({ category: '活动', content: '  希望报名页更清楚  ' }), {
+  assert.deepEqual(normalizeFeedback({ category: '活动', activityId: 'workflow:event-1', content: '  希望报名页更清楚  ' }), {
     category: '活动',
     content: '希望报名页更清楚',
+    activityId: 'workflow:event-1',
   });
   assert.throws(() => normalizeFeedback({ category: '系统', content: '内容' }), /有效的问题分类/);
   assert.throws(() => normalizeFeedback({ category: '活动', content: '   ' }), /请填写反馈意见/);
+  assert.throws(() => normalizeFeedback({ category: '活动', content: '缺少活动' }), /选择反馈对应的活动/);
   assert.throws(() => normalizeFeedback({ category: '活动', content: '字'.repeat(201) }), /不能超过 200 字/);
   assert.equal(normalizeFeedback({ category: '其他', content: '😀'.repeat(200) }).content.length, 400);
   assert.doesNotThrow(() => normalizeFeedback({ category: '其他', content: '😀'.repeat(200) }));
@@ -109,7 +113,7 @@ test('public submission writes, audits, and never trusts client attribution', as
   assert.equal(base.appended.length, 1);
   assert.equal(base.appended[0]['提交人'], '访客');
   assert.equal(audits[0].action, 'feedback.submit');
-  assert.deepEqual(audits[0].metadata, { category: '物资' });
+  assert.deepEqual(audits[0].metadata, { category: '物资', activityId: '', ownerMailStatus: '' });
   assert.deepEqual(limits, [{ bucket: 'feedback', limit: 5 }]);
 });
 
@@ -133,7 +137,7 @@ test('cross-origin public feedback is refused before writing', async () => {
 test('missing schema blocks writes and the console reports readiness', async () => {
   const base = syntheticBase({ ready: false });
   const write = await feedbackRoutes(
-    { method: 'POST', body: { category: '活动', content: '测试' } },
+    { method: 'POST', body: { category: '其他', content: '测试' } },
     {},
     { pathname: '/api/public/feedback' },
     context(base),
@@ -242,6 +246,121 @@ test('console resolution updates are audited and require CSRF', async () => {
   assert.equal(rows[0]['解决人'], '');
   assert.equal(rows[0]['解决时间'], '');
   assert.equal(audits[1].action, 'feedback.reopen');
+});
+
+test('activity feedback requires the selected public activity and emails its owners', async () => {
+  const base = syntheticBase();
+  const mails = [];
+  const audits = [];
+  const result = await feedbackRoutes(
+    {
+      method: 'POST',
+      body: {
+        category: '活动',
+        activityId: 'workflow:event-1',
+        content: '现场指引不清楚，希望补充路线说明。',
+      },
+    },
+    {},
+    { pathname: '/api/public/feedback' },
+    context(base, {
+      resolveActivity: async (activityId) => ({
+        id: activityId,
+        name: '校园急救培训',
+        recipients: [{ email: 'owner@example.test', name: '合成负责人' }],
+      }),
+      sendActivityMail: async (message) => {
+        mails.push(message);
+        return { ok: true };
+      },
+      recordAudit: async (_req, _session, action, _target, _outcome, metadata) => {
+        audits.push({ action, metadata });
+      },
+      managementUrl: 'https://platform.example/console/feedback',
+    }),
+  );
+  assert.equal(result.status, 201);
+  assert.equal(base.appended.length, 1);
+  assert.equal(base.appended[0]['关联活动ID'], 'workflow:event-1');
+  assert.equal(base.appended[0]['关联活动名称'], '校园急救培训');
+  assert.equal(base.appended[0]['负责人邮件状态'], '已发送');
+  assert.equal(mails.length, 1);
+  assert.equal(mails[0].to, 'owner@example.test');
+  assert.match(mails[0].text, /校园急救培训/);
+  assert.match(mails[0].text, /现场指引不清楚/);
+  assert.equal(result.body.notification.ok, true);
+  assert.equal(audits[0].metadata.activityId, 'workflow:event-1');
+  assert.equal(audits[0].metadata.ownerMailStatus, '已发送');
+});
+
+test('activity feedback is refused before storage when no owner email can receive it', async () => {
+  const base = syntheticBase();
+  const result = await feedbackRoutes(
+    {
+      method: 'POST',
+      body: { category: '活动', activityId: 'workflow:event-2', content: '无法送达的反馈' },
+    },
+    {},
+    { pathname: '/api/public/feedback' },
+    context(base, {
+      resolveActivity: async (activityId) => ({
+        id: activityId,
+        name: '邮箱缺失的活动',
+        recipients: [],
+      }),
+      sendActivityMail: async () => ({ ok: true }),
+    }),
+  ).catch((error) => error);
+  assert.equal(result.statusCode, 409);
+  assert.equal(result.code, 'feedback_owner_email_unavailable');
+  assert.equal(base.appended.length, 0);
+});
+
+test('activity feedback remains visible when owner email delivery fails', async () => {
+  const base = syntheticBase();
+  const result = await feedbackRoutes(
+    {
+      method: 'POST',
+      body: { category: '活动', activityId: 'workflow:event-3', content: '邮件失败仍保留' },
+    },
+    {},
+    { pathname: '/api/public/feedback' },
+    context(base, {
+      resolveActivity: async (activityId) => ({
+        id: activityId,
+        name: '邮件测试活动',
+        recipients: [{ email: 'owner@example.test', name: '合成负责人' }],
+      }),
+      sendActivityMail: async () => {
+        throw new Error('synthetic SMTP failure');
+      },
+    }),
+  );
+  assert.equal(result.status, 201);
+  assert.equal(base.appended[0]['负责人邮件状态'], '发送失败');
+  assert.equal(result.body.notification.ok, false);
+  assert.match(result.body.message, /邮件暂未送达/);
+});
+
+test('public activity choices expose only display data', async () => {
+  const result = await feedbackRoutes(
+    { method: 'GET' },
+    {},
+    { pathname: '/api/public/feedback/activities' },
+    context(syntheticBase(), {
+      listActivities: async () => [{
+        id: 'workflow:event-1',
+        name: '校园急救培训',
+        status: '报名中',
+        startAt: '2026-11-20T09:00:00+08:00',
+        location: '合成教学楼',
+      }],
+    }),
+  );
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.activities[0].id, 'workflow:event-1');
+  assert.equal(Object.hasOwn(result.body.activities[0], 'owner'), false);
+  assert.equal(JSON.stringify(result.body).includes('@'), false);
 });
 
 test('schema readiness requires every declared text column', async () => {

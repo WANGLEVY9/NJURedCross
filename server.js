@@ -90,7 +90,8 @@ import {createActivityApprovalRouter,readWorkspaceProfileData,createWorkspaceRos
 import {workspaceDraftAccess,workspaceDraftListScope,createWorkspaceDraftAuthorization} from './lib/events/workspace-draft-access.js';
 import {assertWorkspaceResponsible} from './lib/events/workspace-responsible.js';
 import {configureMailer,mailerStatus,sendMail,getMailDeliveryStatuses,repairMailRecords,retryQueuedMail} from './lib/mailer.js';
-import {mailRecipient} from './lib/identity/mail-recipient.js';
+import {isValidDeliveryEmail, mailRecipient} from './lib/identity/mail-recipient.js';
+import {eventResponsibleIds} from './public/app/shared/activity-responsibility.js';
 import { eventsOpsRoutes } from './lib/events/api.js';
 import { assertApiRequestPath } from './lib/http/request-path.js';
 import * as njubox from './lib/events/njubox.js';
@@ -3659,6 +3660,64 @@ function getPublicEvents(client) {
   return publicReadCache.get('events', () => loadPublicEvents(client));
 }
 
+async function feedbackActivityChoices(client) {
+  return (await getPublicEvents(client)).map((event) => ({
+    id: event.eventId,
+    name: event.name,
+    status: event.status,
+    startAt: event.startAt || '',
+    location: event.location || '',
+  }));
+}
+
+async function resolveFeedbackActivity(client, activityId) {
+  const selected = (await getPublicEvents(client)).find((event) => event.eventId === activityId);
+  if (!selected) throw httpError(400, '所选活动不存在或当前不可反馈。');
+
+  let ownerRefs = [];
+  if (activityId.startsWith('workflow:')) {
+    const rowId = activityId.slice('workflow:'.length);
+    const workflow = await getPublicWorkflowData();
+    const row = workflow.events.find((event) => event._id === rowId);
+    if (!row) throw httpError(400, '所选活动不存在或当前不可反馈。');
+    ownerRefs = eventResponsibleIds(row);
+  } else {
+    const projects = await listAllRows(client, eventProjectTable);
+    const project = projects.find((event) => String(event['活动ID'] || '') === activityId);
+    if (!project || !isPubliclyListed(project)) throw httpError(400, '所选活动不存在或当前不可反馈。');
+    ownerRefs = [String(project['负责人'] || '').trim()].filter(Boolean);
+  }
+
+  const accounts = await eventDirectory();
+  const accountIndex = new Map();
+  for (const account of accounts) {
+    for (const ref of [account?.accountId, account?.username]) {
+      const key = String(ref || '').trim();
+      if (key && !accountIndex.has(key)) accountIndex.set(key, account);
+    }
+  }
+  const recipients = [];
+  const seenEmails = new Set();
+  for (const ref of ownerRefs) {
+    const account = accountIndex.get(String(ref));
+    if (!account || !isAccountActive(account) || account.emailVerified !== true) continue;
+    const email = mailRecipient(account);
+    const key = email.toLowerCase();
+    if (!isValidDeliveryEmail(email) || seenEmails.has(key)) continue;
+    seenEmails.add(key);
+    recipients.push({
+      email,
+      name: account.realName || account.label || account.username || '活动负责人',
+    });
+  }
+  return {
+    id: selected.eventId,
+    name: selected.name,
+    status: selected.status,
+    recipients,
+  };
+}
+
 async function loadPublicEvents(client) {
   const [projects, sessions, registrations, workflow] = await Promise.all([
     listAllRows(client, eventProjectTable),
@@ -5465,6 +5524,7 @@ async function dispatchApi(req, res, url) {
     if (await reimbursementApi(req, res, url) !== false) return;
     if (
       url.pathname === '/api/public/feedback'
+      || url.pathname.startsWith('/api/public/feedback/')
       || url.pathname === '/api/console/feedback'
       || url.pathname.startsWith('/api/console/feedback/')
     ) {
@@ -5479,6 +5539,10 @@ async function dispatchApi(req, res, url) {
         isAccountActive,
         requireConsoleAccess,
         requireCsrf,
+        listActivities: async () => feedbackActivityChoices(await getBase()),
+        resolveActivity: async (activityId) => resolveFeedbackActivity(await getBase(), activityId),
+        sendActivityMail: (message) => sendMail(message, { renderTemplate: false }),
+        managementUrl: `${publicBaseUrl}/console/feedback`,
       });
     }
 

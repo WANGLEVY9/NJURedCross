@@ -120,8 +120,8 @@ const e=await workflow.create({name:'工位值班（合成界面测试）',date:
 const b=(await workflow.publicRead()).events.find(e=>e['活动ID'].startsWith('BS-')&&e['地点']==='新街口中央');const br=await workflow.register(b._id,account);await workflow.confirm(br._id);clock=Date.parse('2026-10-12T11:15:00+08:00');
 rows[MESSAGE_TABLE]=[{_id:'synthetic-message',内容:'合成测试寄语：每一次行动，都让善意更近一步。',署名:'合成测试',来源:'仅用于界面测试',状态:'已发布',更新时间:'2026-10-09T00:00:00Z'}];
 rows[FEEDBACK_TABLE]=[
- {_id:'synthetic-feedback-1',反馈ID:'FDB-SYNTHETIC-1',分类:'活动',反馈内容:'合成示例：希望活动详情页更早显示集合地点，方便提前安排交通。',提交人:'合成测试同学',提交人标识:'ACC-SYNTHETIC',来源:'活动平台成员',提交时间:'2026-10-09T08:30:00.000Z',状态:'待解决',解决人:'',解决时间:''},
- {_id:'synthetic-feedback-2',反馈ID:'FDB-SYNTHETIC-2',分类:'物资',反馈内容:'合成示例：物资借用表单的归还时间提示可以更醒目。',提交人:'访客',提交人标识:'',来源:'公众访客',提交时间:'2026-10-08T03:15:00.000Z',状态:'待解决',解决人:'',解决时间:''},
+ {_id:'synthetic-feedback-1',反馈ID:'FDB-SYNTHETIC-1',分类:'活动',反馈内容:'合成示例：希望活动详情页更早显示集合地点，方便提前安排交通。',提交人:'合成测试同学',提交人标识:'ACC-SYNTHETIC',来源:'活动平台成员',提交时间:'2026-10-09T08:30:00.000Z',状态:'待解决',解决人:'',解决时间:'',关联活动ID:'preview-first-aid',关联活动名称:'校园急救培训',负责人邮件状态:'已发送',负责人邮件时间:'2026-10-09T08:30:01.000Z'},
+ {_id:'synthetic-feedback-2',反馈ID:'FDB-SYNTHETIC-2',分类:'物资',反馈内容:'合成示例：物资借用表单的归还时间提示可以更醒目。',提交人:'访客',提交人标识:'',来源:'公众访客',提交时间:'2026-10-08T03:15:00.000Z',状态:'待解决',解决人:'',解决时间:'',关联活动ID:'',关联活动名称:'',负责人邮件状态:'',负责人邮件时间:''},
 ];
 const demoDate=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
 clock=Date.parse(`${demoDate}T09:00:00+08:00`);
@@ -377,7 +377,7 @@ if(url.pathname==='/api/notifications/overview'){if(!signedIn)return json(res,40
 if(url.pathname==='/api/audit/recent')return json(res,200,{ok:true,entries:[]});
 if(url.pathname==='/api/volunteer/workflow/sources'&&process.env.PREVIEW_SOURCE_DELAY_MS)await new Promise(resolve=>setTimeout(resolve,Number(process.env.PREVIEW_SOURCE_DELAY_MS)));
 const ctx={getWorkspaceRoleStore:async()=>previewRoleStore,sendHoursMail:async()=>({ok:true,transport:"smtp"}),getWorkspaceBridge:async()=>previewWorkspaceBridge,getWorkspaceSubmissions:async()=>previewWorkspaceSubmissions,getWorkspaceRoster:async()=>workspaceRoster,getWorkspaceProfileData:async()=>workspaceProfileData,getWorkspaceDrafts:async()=>previewWorkspaceDrafts,approvalRouting:{...approvalRouting,assertHoursReviewer:async(event,actor)=>bloodAttendancePreview&&JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.assertHoursReviewer(event,actor):approvalRouting.assertReviewer(event,actor),describe:async(events,actor,role)=>Promise.all(events.map(async event=>(await (JSON.parse(event['报名页配置']||'{}').source?.kind==='generated_blood'?workspaceApprovalRouting.describeSourceRegistration([event],actor):(regionalEvent(event)?workspaceApprovalRouting:approvalRouting).describe([event],actor,role)))[0]))},getDirectory:async()=>approvalAccounts,json,requireConsoleAccess:()=>hasConsolePreviewAccess()?session:null,requirePortalSession:()=>signedIn?session:null,requireCsrf:(_req,response)=>{if(_req.headers['x-csrf-token']===session.csrf)return true;json(response,403,{ok:false,code:'csrf_failed'});return false;},getWorkflow:async()=>workflow,getAccount:async()=>specialPreviewEnabled?{...account,role:session.role,status:'启用'}:account,actor:()=>session.username,audit:async()=>{},readJson:async request=>{let body='';for await(const chunk of request)body+=chunk;return JSON.parse(body||'{}');}};
-if(url.pathname==='/api/public/feedback'||url.pathname==='/api/console/feedback'||url.pathname.startsWith('/api/console/feedback/')){
+if(url.pathname==='/api/public/feedback'||url.pathname.startsWith('/api/public/feedback/')||url.pathname==='/api/console/feedback'||url.pathname.startsWith('/api/console/feedback/')){
  return await feedbackRoutes(req,res,url,{
   json,readJson:ctx.readJson,getBase:async()=>base,enforceLimit:()=>{},recordAudit:async()=>{},
   getSession:()=>signedIn?session:null,getAccount:()=>account,
@@ -387,6 +387,13 @@ if(url.pathname==='/api/public/feedback'||url.pathname==='/api/console/feedback'
    return null;
   },
   requireCsrf:ctx.requireCsrf,
+  listActivities:async()=>discoveryEvents.map(event=>({id:event.eventId,name:event.name,status:event.status,startAt:event.startAt,location:event.location})),
+  resolveActivity:async id=>{
+   const activity=discoveryEvents.find(event=>event.eventId===id);
+   return activity?{id:activity.eventId,name:activity.name,status:activity.status,recipients:[{email:'activity-owner@example.test',name:'合成活动负责人'}]}:null;
+  },
+  sendActivityMail:async()=>({ok:true,transport:'synthetic'}),
+  managementUrl:`http://127.0.0.1:${process.env.PORT||3121}/console/feedback`,
  });
 }
 if(url.pathname==='/api/public/cranes'){

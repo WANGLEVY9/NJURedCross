@@ -16,12 +16,17 @@ export function openFeedbackDrawer() {
   }
 
   let category = '';
+  let activityId = '';
+  let activityField = null;
+  let activityLoading = false;
+  let activitiesLoaded = false;
   const categoryError = h('p', {
     class: 'field__error',
     id: 'feedback-category-error',
     attrs: { role: 'alert', 'aria-live': 'polite' },
     hidden: true,
   });
+  const activitySlot = h('div', { class: 'feedback-compose__activity', hidden: true });
   const categoryTabs = segmented({
     items: CATEGORIES.map((value) => ({ value, label: value })),
     value: category,
@@ -33,6 +38,8 @@ export function openFeedbackDrawer() {
       categoryTabs.setValue(value);
       categoryTabs.dataset.selected = value;
       categoryError.hidden = true;
+      activitySlot.hidden = value !== '活动';
+      if (value === '活动') void ensureActivities();
     },
   });
   categoryTabs.dataset.selected = '';
@@ -61,6 +68,53 @@ export function openFeedbackDrawer() {
   content.control.addEventListener('input', syncCounter);
   syncCounter();
 
+  async function ensureActivities() {
+    if (activityLoading || activitiesLoaded) return;
+    activityLoading = true;
+    activitySlot.replaceChildren(notice('正在读取可反馈的活动…', { tone: 'neutral' }));
+    try {
+      const result = await request('/api/public/feedback/activities');
+      const activities = Array.isArray(result.activities) ? result.activities : [];
+      if (!activities.length) {
+        activitySlot.replaceChildren(notice('当前没有可供选择的活动。', { tone: 'warning' }));
+        return;
+      }
+      const options = [
+        { value: '', label: '请选择活动', disabled: true },
+        ...activities.map((activity) => ({
+          value: activity.id,
+          label: [
+            activity.name,
+            activity.startAt ? String(activity.startAt).slice(0, 10) : '',
+            activity.status || '',
+          ].filter(Boolean).join(' · '),
+        })),
+      ];
+      activityField = field({
+        label: '关联活动',
+        name: 'feedback-activity',
+        options,
+        value: activityId,
+        required: true,
+        searchable: true,
+        hint: '反馈提交后会直接发送给该活动的负责人。',
+        onInput: (event) => {
+          activityId = event.target.value;
+          activityField?.setError('');
+        },
+      });
+      activitySlot.replaceChildren(activityField);
+      activitiesLoaded = true;
+    } catch (error) {
+      activitySlot.replaceChildren(
+        notice(error.message || '活动列表暂时无法读取。', { tone: 'error', title: '无法选择活动' }),
+        button({ label: '重新读取活动', variant: 'secondary', size: 'sm', onClick: () => ensureActivities() }),
+      );
+    } finally {
+      activityLoading = false;
+    }
+  }
+
   let drawer;
   const submit = button({
     label: '提交反馈',
@@ -77,6 +131,14 @@ export function openFeedbackDrawer() {
         categoryTabs.querySelector('[role="radio"]')?.focus();
         return;
       }
+      if (category === '活动' && (!activityId || !activityField)) {
+        activityField?.setError('请选择反馈对应的活动。');
+        activityField?.control.focus();
+        if (!activityField) {
+          formError.replaceChildren(notice('活动列表尚未加载完成，请稍后重试。', { tone: 'warning' }));
+        }
+        return;
+      }
       if (!text) {
         content.setError('请填写反馈意见。');
         content.control.focus();
@@ -89,9 +151,13 @@ export function openFeedbackDrawer() {
       try {
         const result = await request('/api/public/feedback', {
           method: 'POST',
-          body: { category, content: text },
+          body: { category, content: text, ...(category === '活动' ? { activityId } : {}) },
         });
-        notify.success('反馈已提交', result.message, { duration: 5000 });
+        if (result.notification?.required && !result.notification.ok) {
+          notify.warning('反馈已记录，但负责人邮件暂未送达', result.message, { duration: 7000 });
+        } else {
+          notify.success('反馈已提交', result.message, { duration: 5000 });
+        }
         drawer.close();
       } catch (error) {
         formError.replaceChildren(notice(error.message || '反馈未提交，请稍后重试。', {
@@ -109,12 +175,13 @@ export function openFeedbackDrawer() {
     description: '请选择问题所属分类，再填写具体意见。',
     width: 560,
     body: [
-      notice('反馈会直接进入管理端的问题反馈列表。请勿填写密码、身份证号等敏感信息。', { tone: 'info' }),
+      notice('活动类反馈会直接发送给所选活动的负责人；其他分类进入管理端问题反馈列表。请勿填写密码、身份证号等敏感信息。', { tone: 'info' }),
       h('div', { class: 'feedback-compose' },
         h('div', { class: 'feedback-compose__field', data: { feedbackCategory: 'true' } },
           h('p', { class: 'field__label' }, h('span', { text: '问题分类' }), h('span', { class: 'field__req', text: '必选' })),
           categoryTabs,
           categoryError),
+        activitySlot,
         content,
         counter,
         formError),
