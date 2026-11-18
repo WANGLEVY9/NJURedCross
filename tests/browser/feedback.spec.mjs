@@ -45,6 +45,8 @@ test('activity feedback requires a specific activity and records owner delivery'
   }
 
   const dialog = page.getByRole('dialog', { name: '告诉我们哪里可以做得更好' });
+  await expect(dialog).toContainText('通知偏好');
+  await expect(dialog.getByLabel('处理结果接收邮箱')).toHaveCount(0);
   await dialog.getByRole('radio', { name: '活动', exact: true }).click();
   const activity = dialog.getByRole('combobox', { name: '关联活动', exact: true });
   await expect(activity).toBeVisible();

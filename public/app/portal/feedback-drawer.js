@@ -1,7 +1,7 @@
 import { h } from '../core/dom.js';
 import { request, getSessionState } from '../core/api.js';
 import { reportError, notify } from '../core/toast.js';
-import { button, field, notice, readonlyField, runWithLoading, segmented } from '../ui/primitives.js';
+import { button, field, notice, runWithLoading, segmented } from '../ui/primitives.js';
 import { openDrawer } from '../ui/overlay.js';
 
 const CATEGORIES = ['活动', '物资', '内建', '宣传', '其他'];
@@ -21,7 +21,6 @@ export function openFeedbackDrawer() {
   let activityLoading = false;
   let activitiesLoaded = false;
   const session = getSessionState();
-  const accountEmail = session.user?.notificationEmail || session.user?.email || '';
   const categoryError = h('p', {
     class: 'field__error',
     id: 'feedback-category-error',
@@ -56,13 +55,7 @@ export function openFeedbackDrawer() {
     placeholder: '请具体描述你遇到的问题或建议，最多 200 字',
   });
   const resultEmail = session.authenticated
-    ? readonlyField({
-      label: '处理结果接收邮箱',
-      name: 'feedback-result-email',
-      value: accountEmail,
-      hint: '管理员完成处理后，解决方案会发送到该邮箱。',
-      iconName: 'mail',
-    })
+    ? null
     : field({
       label: '处理结果接收邮箱',
       name: 'feedback-result-email',
@@ -168,7 +161,7 @@ export function openFeedbackDrawer() {
         content.control.focus();
         return;
       }
-      if (!session.authenticated && !resultEmail.control.reportValidity()) {
+      if (resultEmail && !resultEmail.control.reportValidity()) {
         resultEmail.control.focus();
         return;
       }
@@ -179,7 +172,7 @@ export function openFeedbackDrawer() {
             category,
             content: text,
             ...(category === '活动' ? { activityId } : {}),
-            ...(!session.authenticated ? { contactEmail: resultEmail.control.value } : {}),
+            ...(resultEmail ? { contactEmail: resultEmail.control.value } : {}),
           },
         });
         if (result.notification?.required && !result.notification.ok) {
@@ -204,7 +197,12 @@ export function openFeedbackDrawer() {
     description: '请选择问题所属分类，再填写具体意见。',
     width: 560,
     body: [
-      notice('活动类反馈会直接发送给所选活动的负责人；管理员完成后，解决方案会发送到你填写的处理结果接收邮箱。请勿填写密码、身份证号等敏感信息。', { tone: 'info' }),
+      notice(
+        session.authenticated
+          ? '活动类反馈会直接发送给所选活动的负责人；管理员完成后，解决方案会发送到你在“会员中心 › 通知偏好”中设置的收信邮箱。'
+          : '活动类反馈会直接发送给所选活动的负责人；管理员完成后，解决方案会发送到你填写的处理结果接收邮箱。请勿填写密码、身份证号等敏感信息。',
+        { tone: 'info' },
+      ),
       h('div', { class: 'feedback-compose' },
         h('div', { class: 'feedback-compose__field', data: { feedbackCategory: 'true' } },
           h('p', { class: 'field__label' }, h('span', { text: '问题分类' }), h('span', { class: 'field__req', text: '必选' })),
@@ -213,7 +211,7 @@ export function openFeedbackDrawer() {
         activitySlot,
         content,
         counter,
-        resultEmail,
+        ...(resultEmail ? [resultEmail] : []),
         formError),
     ],
     footer: [
