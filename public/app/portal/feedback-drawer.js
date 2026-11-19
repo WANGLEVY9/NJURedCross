@@ -91,32 +91,34 @@ export function openFeedbackDrawer() {
 
   function activityLabel(activity) {
     return [
-      activity.center === '献血车专项' ? '献血车活动 · 4 个地点' : activity.name,
-      activity.center === '献血车专项' ? '' : activity.startAt ? String(activity.startAt).slice(0, 10) : '',
+      activity.name,
+      activity.startAt ? String(activity.startAt).slice(0, 10) : '',
       activity.status || '',
     ].filter(Boolean).join(' · ');
   }
 
   function activityHintText() {
     const selected = activities.find((activity) => activity.id === activityId);
-    if (!activityCenter) {
-      return '请先选择中心分类，再从该中心选择活动。';
-    } else if (!activities.some((activity) => centerOf(activity) === activityCenter)) {
+    if (activityCenter && !activities.some((activity) => centerOf(activity) === activityCenter)) {
       return '该中心当前没有可反馈的活动。';
     } else if (selected?.locations?.length) {
       return `服务地点：${selected.locations.join('、')}`;
+    } else if (!activityCenter) {
+      return '可不选中心，直接选择或搜索关联活动。';
     } else {
       return '反馈提交后会直接发送给该活动的负责人。';
     }
   }
 
   function renderActivityOptions({ focus = false } = {}) {
-    const inCenter = activities.filter((activity) => centerOf(activity) === activityCenter);
+    const inCenter = activityCenter
+      ? activities.filter((activity) => centerOf(activity) === activityCenter)
+      : activities;
     if (activityId && !inCenter.some((activity) => activity.id === activityId)) activityId = '';
     const options = [
       {
         value: '',
-        label: !activityCenter ? '请先选择中心分类' : inCenter.length ? '请选择活动' : '该中心暂无活动',
+        label: inCenter.length ? '请选择或搜索活动' : '该中心暂无活动',
         disabled: true,
       },
       ...inCenter.map((activity) => ({
@@ -133,8 +135,8 @@ export function openFeedbackDrawer() {
       options,
       value: activityId,
       required: true,
-      searchable: inCenter.length > 5,
-      disabled: !activityCenter || !inCenter.length,
+      searchable: true,
+      disabled: !inCenter.length,
       hint: activityHintText(),
       onInput: (event) => {
         activityId = event.target.value;
@@ -156,18 +158,16 @@ export function openFeedbackDrawer() {
     ];
     if (!centers.includes(activityCenter)) activityCenter = '';
     centerField = field({
-      label: '中心分类',
+      label: '中心分类（可选）',
       name: 'feedback-activity-center',
       options: [
-        { value: '', label: '请选择中心分类', disabled: true },
+        { value: '', label: '全部中心' },
         ...centers.map((center) => ({ value: center, label: center })),
       ],
       value: activityCenter,
-      required: true,
       onInput: (event) => {
         activityCenter = event.target.value;
         activityId = '';
-        centerField.setError('');
         renderActivityOptions({ focus: true });
       },
     });
@@ -214,14 +214,6 @@ export function openFeedbackDrawer() {
         categoryError.hidden = false;
         categoryError.replaceChildren('请先选择问题分类。');
         categoryTabs.querySelector('[role="radio"]')?.focus();
-        return;
-      }
-      if (category === '活动' && !activityCenter) {
-        centerField?.setError('请先选择中心分类。');
-        focusSelect(centerField);
-        if (!centerField) {
-          formError.replaceChildren(notice('活动列表尚未加载完成，请稍后重试。', { tone: 'warning' }));
-        }
         return;
       }
       if (category === '活动' && (!activityId || !activityField)) {
@@ -274,7 +266,7 @@ export function openFeedbackDrawer() {
   drawer = openDrawer({
     eyebrow: '南京大学红十字会 · 问题反馈',
     title: '告诉我们哪里可以做得更好',
-    description: '请选择问题所属分类；活动反馈需先选中心分类，再选具体活动。',
+    description: '请选择问题所属分类；活动反馈可先按中心筛选，也可直接选择或搜索活动。',
     width: 560,
     body: [
       notice(

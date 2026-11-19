@@ -128,9 +128,9 @@ import * as taskApi from './lib/attachment/tasks.js';
 import { searchBusinessRecords } from './lib/console-search.js';
 import { agentRoutes } from './lib/agent/api.js';
 import {
-  FEEDBACK_BLOOD_ACTIVITY_ID,
   FEEDBACK_TABLE,
   feedbackActivityChoices,
+  feedbackBloodPointIndex,
   feedbackRoutes,
   isFeedbackBloodActivity,
 } from './lib/feedback/index.js';
@@ -3669,8 +3669,16 @@ function getPublicEvents(client) {
 
 async function feedbackActivityOwnerRefs(client, activityId) {
   const events = await getPublicEvents(client);
-  const selectedIds = activityId === FEEDBACK_BLOOD_ACTIVITY_ID
-    ? events.filter(isFeedbackBloodActivity).map((event) => event.eventId)
+  const bloodEvents = events.filter(isFeedbackBloodActivity);
+  const pointIndex = feedbackBloodPointIndex(activityId);
+  const pointChoice = pointIndex >= 0
+    ? feedbackActivityChoices(events).find((activity) => activity.id === activityId)
+    : null;
+  const pointEvents = pointChoice
+    ? bloodEvents.filter((event) => String(event.location || '').trim() === pointChoice.location)
+    : [];
+  const selectedIds = pointIndex >= 0
+    ? (pointEvents.length ? pointEvents : bloodEvents).map((event) => event.eventId)
     : [activityId];
   const workflowIds = selectedIds.filter((id) => id.startsWith('workflow:'));
   const projectIds = selectedIds.filter((id) => !id.startsWith('workflow:'));
@@ -3720,9 +3728,16 @@ async function canViewFeedbackActivity(client, activityId, session = null, accou
 async function resolveFeedbackActivity(client, activityId) {
   const events = await getPublicEvents(client);
   const choice = feedbackActivityChoices(events).find((activity) => activity.id === activityId);
+  const bloodPointIndex = feedbackBloodPointIndex(activityId);
+  const pointEvents = bloodPointIndex >= 0 && choice
+    ? events.filter((event) => (
+      isFeedbackBloodActivity(event)
+      && String(event.location || '').trim() === choice.location
+    ))
+    : [];
   const selected = events.find((event) => event.eventId === activityId)
-    || (activityId === FEEDBACK_BLOOD_ACTIVITY_ID ? events.find(isFeedbackBloodActivity) : null);
-  if (!selected) throw httpError(400, '所选活动不存在或当前不可反馈。');
+    || (bloodPointIndex >= 0 ? pointEvents[0] || events.find(isFeedbackBloodActivity) : null);
+  if (!choice || !selected) throw httpError(400, '所选活动不存在或当前不可反馈。');
 
   const ownerRefs = await feedbackActivityOwnerRefs(client, activityId);
   if (!ownerRefs.length) throw httpError(400, '所选活动不存在或当前不可反馈。');
@@ -3751,9 +3766,9 @@ async function resolveFeedbackActivity(client, activityId) {
   }
   return {
     id: activityId,
-    name: choice?.name || selected.name,
-    status: choice?.status || selected.status,
-    ...(choice?.locations ? { locations: choice.locations } : {}),
+    name: choice.name,
+    status: choice.status || selected.status,
+    ...(choice.locations ? { locations: choice.locations } : {}),
     recipients,
   };
 }

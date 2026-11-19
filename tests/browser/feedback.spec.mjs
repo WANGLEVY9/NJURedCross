@@ -48,18 +48,16 @@ test('activity feedback requires a specific activity and records owner delivery'
   await expect(dialog).toContainText('通知偏好');
   await expect(dialog.getByLabel('处理结果接收邮箱')).toHaveCount(0);
   await dialog.getByRole('radio', { name: '活动', exact: true }).click();
-  const centre = dialog.getByRole('combobox', { name: '中心分类', exact: true });
+  const centre = dialog.getByRole('combobox', { name: /中心分类/ });
   const activity = dialog.getByRole('combobox', { name: '关联活动', exact: true });
   await expect(activity).toBeVisible();
-  await expect(activity).toBeDisabled();
+  await expect(activity).toBeEnabled();
+  await expect(centre).toContainText('全部中心');
   await dialog.getByRole('textbox', { name: /^反馈意见/ }).fill(content);
   await dialog.getByRole('button', { name: '提交反馈', exact: true }).click();
-  await expect(dialog.getByText('请先选择中心分类。', { exact: true })).toBeVisible();
-  await centre.click();
-  await dialog.getByRole('option', { name: '生命中心', exact: true }).click();
-  await expect(activity).toBeEnabled();
+  await expect(dialog.getByText('请选择反馈对应的活动。', { exact: true })).toBeVisible();
   const hint = dialog.locator('[data-field-name="feedback-activity"] .field__hint');
-  await expect(hint).toContainText('反馈提交后会直接发送给该活动的负责人。');
+  await expect(hint).toContainText('可不选中心，直接选择或搜索关联活动。');
   const hintLayout = await dialog.locator('[data-field-name="feedback-activity"]').evaluate((field) => {
     const select = field.querySelector('.select-menu__trigger').getBoundingClientRect();
     const hint = field.querySelector('.field__hint').getBoundingClientRect();
@@ -68,9 +66,8 @@ test('activity feedback requires a specific activity and records owner delivery'
   });
   expect(hintLayout.hintTop).toBeGreaterThanOrEqual(hintLayout.selectBottom);
   expect(hintLayout.hintBottom).toBeLessThanOrEqual(hintLayout.fieldBottom + 0.5);
-  await dialog.getByRole('button', { name: '提交反馈', exact: true }).click();
-  await expect(dialog.getByText('请选择反馈对应的活动。', { exact: true })).toBeVisible();
   await activity.click();
+  await dialog.getByRole('searchbox', { name: '搜索关联活动', exact: true }).fill('校园急救培训');
   await dialog.getByRole('option', { name: /校园急救培训/ }).click();
   await dialog.getByRole('button', { name: '提交反馈', exact: true }).click();
   await expect(dialog).toBeHidden();
@@ -85,8 +82,8 @@ test('activity feedback requires a specific activity and records owner delivery'
   await expect(card.getByText('synthetic-organizer', { exact: true })).toHaveCount(0);
 });
 
-test('blood feedback is one activity with four locations', async ({ page }, testInfo) => {
-  const content = `献血车反馈 ${testInfo.project.name}：希望四个地点的服务说明保持一致。`;
+test('blood feedback exposes four independent location activities', async ({ page }, testInfo) => {
+  const content = `献血车反馈 ${testInfo.project.name}：希望新街口中央的服务说明更清楚。`;
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-organizer' } });
   await page.goto('/');
   await expect(page.locator('#root')).not.toHaveAttribute('data-booting', 'true');
@@ -100,22 +97,21 @@ test('blood feedback is one activity with four locations', async ({ page }, test
   }
   const dialog = page.getByRole('dialog', { name: '告诉我们哪里可以做得更好' });
   await dialog.getByRole('radio', { name: '活动', exact: true }).click();
-  const centre = dialog.getByRole('combobox', { name: '中心分类', exact: true });
+  const centre = dialog.getByRole('combobox', { name: /中心分类/ });
   const activity = dialog.getByRole('combobox', { name: '关联活动', exact: true });
-  await expect(activity).toBeDisabled();
   await centre.click();
   await dialog.getByRole('option', { name: '献血车专项', exact: true }).click();
   await expect(activity).toBeEnabled();
   await activity.click();
-  await expect(dialog.getByRole('option', { name: /献血车活动 · 4 个地点/ })).toHaveCount(1);
-  await dialog.getByRole('option', { name: /献血车活动 · 4 个地点/ }).click();
-  await expect(dialog).toContainText('新街口中央、新街口印象汇、仙林学则路、浦口弘阳广场');
+  await expect(dialog.getByRole('option', { name: /市献血车活动 ·/ })).toHaveCount(4);
+  await dialog.getByRole('option', { name: /市献血车活动 · 新街口中央/ }).click();
+  await expect(dialog).toContainText('服务地点：新街口中央');
   await dialog.getByRole('textbox', { name: /^反馈意见/ }).fill(content);
   await dialog.getByRole('button', { name: '提交反馈', exact: true }).click();
   await expect(dialog).toBeHidden();
   await page.goto('/console/feedback');
   await page.getByRole('tab', { name: '活动', exact: true }).click();
-  await expect(page.locator('.feedback-item').filter({ hasText: content })).toContainText('献血车活动');
+  await expect(page.locator('.feedback-item').filter({ hasText: content })).toContainText('市献血车活动 · 新街口中央');
 });
 
 test('unrelated administrators cannot see activity feedback', async ({ page }) => {
