@@ -76,5 +76,5 @@ test('lazy management catalog and scoped detail compress over HTTP without cachi
 test('member summary avoids checkin and aggregate tables; mutation reads still include all evidence',async()=>{
  const tables=[];const base={listRows:async table=>{tables.push(table);return[];}};const workflow=createWorkflow(base);
  await workflow.memberRead();assert.deepEqual(tables.sort(),[WF.events,WF.registrations,WF.ledger,WF.profiles].sort());
- tables.length=0;await workflow.read();assert.deepEqual(tables.sort(),Object.values(WF).sort());
+ tables.length=0;await workflow.read();assert.deepEqual(tables.sort(),Object.values(WF).filter(name=>name!==WF.rosterResults).sort());
 });

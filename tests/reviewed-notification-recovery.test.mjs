@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createWorkflow,WF} from '../lib/events/workflow.js';
 import {createRegistrationNotifications,NOTIFICATION_TABLE} from '../lib/events/registration-notifications.js';
 import {rosterReview} from '../public/app/shared/roster-review.js';
+import {inlineReview,needsTableReview,reviewSections} from '../lib/events/roster-result-store.js';
 
 async function fixture(send=async()=>({ok:true,transport:'smtp'})){
  let seq=0,time=Date.parse('2030-01-01T00:00:00Z');const sent=[];
@@ -13,7 +14,11 @@ async function fixture(send=async()=>({ok:true,transport:'smtp'})){
  const event=await w.create({name:'合成重试活动',date:'2030-01-10',slot:'09:00-12:00',capacity:20,serviceHours:3,location:'合成场地',work:'合成工作'},'owner');
  await w.approve(event._id,'reviewer');await w.publish(event._id);
  for(let i=0;i<2;i++)await w.register(event._id,{accountId:`p${i}`,realName:'合成同学',studentId:`99999${i}`,email:`99999${i}@smail.nju.edu.cn`,emailVerified:true});
- const rows=tables[WF.registrations],current=()=>tables[WF.events][0];
+ const rows=tables[WF.registrations];
+ // 结果已移到独立表：复刻读路径的合并，断言才能看到暂定与已发布状态。
+ const current=()=>{const raw=tables[WF.events][0],meta=inlineReview(raw);
+  if(!meta||!needsTableReview(meta))return raw;
+  return {...raw,rosterState:{...meta,...reviewSections(tables[WF.rosterResults].filter(row=>row['活动ID']===raw['活动ID']))}};};
  const token=async()=>(await w.overview()).events[0].rosterToken;
  const approve=async()=>w.stageRoster(event._id,[rows[0]._id],'confirm','',await token(),{immediate:true});
  const worker=()=>createRegistrationNotifications(base,{now:()=>time,enabled:()=>true,send:async m=>{sent.push(m);return send(m);}});
@@ -59,7 +64,7 @@ test('unknown transport outcome remains blocked across background wakeups',async
 test('durable queue receipt recovers a lost roster receipt without resending',async()=>{
  const f=await fixture();await f.approve();const worker=f.worker(),update=f.base.updateRow;
  f.base.updateRow=async(t,id,p)=>{
-  if(t===WF.events&&Object.values(JSON.parse(p.报名页配置||'{}').rosterReview?.deliveries||{}).some(r=>r.status==='sent'))throw Error('lost roster receipt');
+  if(t===WF.rosterResults&&p.投递状态==='sent')throw Error('lost roster receipt');
   return update(t,id,p);
  };
  await assert.rejects(f.w.deliverRoster(f.event()._id,{send:worker.dispatch}),/lost roster receipt/);
@@ -71,7 +76,7 @@ test('known durable failure safely recovers a roster left in sending state',asyn
  let calls=0;const f=await fixture(async()=>++calls===1?{ok:false,retryable:true}:{ok:true,transport:'smtp'});
  await f.approve();const worker=f.worker(),update=f.base.updateRow;
  f.base.updateRow=async(t,id,p)=>{
-  if(t===WF.events&&Object.values(JSON.parse(p.报名页配置||'{}').rosterReview?.deliveries||{}).some(r=>r.status==='failed'))throw Error('lost failure receipt');
+  if(t===WF.rosterResults&&p.投递状态==='failed')throw Error('lost failure receipt');
   return update(t,id,p);
  };
  await assert.rejects(f.w.deliverRoster(f.event()._id,{send:worker.dispatch}),/lost failure receipt/);
