@@ -15,7 +15,7 @@ import {createWorkspaceWorkflowBridge} from '../lib/events/workspace-workflow-br
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {messageRoutes,MESSAGE_TABLE,MESSAGE_COLUMNS} from '../lib/community/messages.js';
 import {craneRoutes,CRANE_TABLE,CRANE_COLUMNS} from '../lib/community/cranes.js';
-import {feedbackRoutes,FEEDBACK_TABLE,FEEDBACK_COLUMNS} from '../lib/feedback/index.js';
+import {FEEDBACK_TABLE,FEEDBACK_COLUMNS,feedbackActivityChoices,feedbackRoutes} from '../lib/feedback/index.js';
 /** Isolated browser QA: synthetic in-memory rows; no .env, SMTP or SeaTable. */
 import http from 'node:http';
 import {fileURLToPath} from 'node:url';
@@ -360,6 +360,8 @@ const discoveryEvents=[
  {eventId:'preview-ended',name:'生命教育主题活动',type:'生命教育',campus:'鼓楼',location:'合成报告厅',status:'已结束',remaining:0,capacity:10,confirmed:10},
  {eventId:'preview-blood',name:'献血车志愿服务',type:'献血车专项',blood:true,workflowId:'preview-blood',campus:'南京',location:'新街口中央',status:'报名中',remaining:2,capacity:3,confirmed:1},
 ].map(event=>({...event,description:'仅用于界面测试的合成活动，不是真实排班。',startAt:'2026-10-12T11:00:00+08:00',endAt:'2026-10-12T15:00:00+08:00',registrationEnd:'2026-10-11T23:00:00+08:00',waitlisted:0,sessions:[]}));
+const feedbackCenters={ 'preview-first-aid':'生命中心', 'preview-suzhou':'博爱中心', 'preview-ended':'生命中心', 'preview-blood':'献血车专项' };
+const feedbackPreviewEvents=()=>discoveryEvents.map(event=>({...event,activityCategory:event.activityCategory||feedbackCenters[event.eventId]||''}));
 if(process.env.PREVIEW_CATEGORY_LABELS==='1'){
  const template=discoveryEvents[0];
  discoveryEvents.splice(0,discoveryEvents.length,...ACTIVITY_CATEGORY_OPTIONS.map((category,index)=>({
@@ -387,10 +389,10 @@ if(url.pathname==='/api/public/feedback'||url.pathname.startsWith('/api/public/f
    return null;
   },
   requireCsrf:ctx.requireCsrf,
-  listActivities:async()=>discoveryEvents.map(event=>({id:event.eventId,name:event.name,status:event.status,startAt:event.startAt,location:event.location})),
+  listActivities:async()=>feedbackActivityChoices(feedbackPreviewEvents()),
   resolveActivity:async id=>{
-   const activity=discoveryEvents.find(event=>event.eventId===id);
-   return activity?{id:activity.eventId,name:activity.name,status:activity.status,recipients:[{email:'activity-owner@example.test',name:'合成活动负责人'}]}:null;
+   const activity=feedbackActivityChoices(feedbackPreviewEvents()).find(event=>event.id===id);
+   return activity?{...activity,recipients:[{email:'activity-owner@example.test',name:'合成活动负责人'}]}:null;
   },
   sendActivityMail:async()=>({ok:true,transport:'synthetic'}),
   sendResolutionMail:async()=>({ok:true,transport:'synthetic'}),

@@ -107,6 +107,8 @@ h1, h2, h3 { text-wrap: balance; }
    inbox in the console. Both reuse shared fields, metrics and empty states. */
 .feedback-compose { display:grid; gap:20px; }
 .feedback-compose__field { display:grid; gap:9px; }
+.feedback-compose__activity-fields { display:grid; gap:16px; }
+.feedback-compose__activity-hint { margin:-8px 0 0; color:var(--text-muted); }
 .feedback-compose .segmented { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); width:100%; }
 .feedback-compose .segmented__thumb { display:none; }
 .feedback-compose .segmented button { min-width:0; height:40px; padding-inline:8px; }

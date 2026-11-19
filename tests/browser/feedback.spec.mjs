@@ -48,9 +48,16 @@ test('activity feedback requires a specific activity and records owner delivery'
   await expect(dialog).toContainText('通知偏好');
   await expect(dialog.getByLabel('处理结果接收邮箱')).toHaveCount(0);
   await dialog.getByRole('radio', { name: '活动', exact: true }).click();
+  const centre = dialog.getByRole('combobox', { name: '中心分类', exact: true });
   const activity = dialog.getByRole('combobox', { name: '关联活动', exact: true });
   await expect(activity).toBeVisible();
+  await expect(activity).toBeDisabled();
   await dialog.getByRole('textbox', { name: /^反馈意见/ }).fill(content);
+  await dialog.getByRole('button', { name: '提交反馈', exact: true }).click();
+  await expect(dialog.getByText('请先选择中心分类。', { exact: true })).toBeVisible();
+  await centre.click();
+  await dialog.getByRole('option', { name: '生命中心', exact: true }).click();
+  await expect(activity).toBeEnabled();
   await dialog.getByRole('button', { name: '提交反馈', exact: true }).click();
   await expect(dialog.getByText('请选择反馈对应的活动。', { exact: true })).toBeVisible();
   await activity.click();
@@ -66,6 +73,39 @@ test('activity feedback requires a specific activity and records owner delivery'
   await expect(card).toContainText('校园急救培训');
   await expect(card).not.toContainText('负责人通知未完成');
   await expect(card.getByText('synthetic-organizer', { exact: true })).toHaveCount(0);
+});
+
+test('blood feedback is one activity with four locations', async ({ page }, testInfo) => {
+  const content = `献血车反馈 ${testInfo.project.name}：希望四个地点的服务说明保持一致。`;
+  await page.request.post('/api/auth/login', { data: { username: 'synthetic-organizer' } });
+  await page.goto('/');
+  await expect(page.locator('#root')).not.toHaveAttribute('data-booting', 'true');
+  if (testInfo.project.name.startsWith('mobile')) {
+    await page.getByRole('button', { name: '展开导航', exact: true }).click();
+    await page.getByRole('navigation', { name: '主导航', exact: true })
+      .getByRole('button', { name: '问题反馈', exact: true })
+      .click();
+  } else {
+    await page.locator('.phead__auth').getByRole('button', { name: '问题反馈', exact: true }).click();
+  }
+  const dialog = page.getByRole('dialog', { name: '告诉我们哪里可以做得更好' });
+  await dialog.getByRole('radio', { name: '活动', exact: true }).click();
+  const centre = dialog.getByRole('combobox', { name: '中心分类', exact: true });
+  const activity = dialog.getByRole('combobox', { name: '关联活动', exact: true });
+  await expect(activity).toBeDisabled();
+  await centre.click();
+  await dialog.getByRole('option', { name: '献血车专项', exact: true }).click();
+  await expect(activity).toBeEnabled();
+  await activity.click();
+  await expect(dialog.getByRole('option', { name: /献血车活动 · 4 个地点/ })).toHaveCount(1);
+  await dialog.getByRole('option', { name: /献血车活动 · 4 个地点/ }).click();
+  await expect(dialog).toContainText('新街口中央、新街口印象汇、仙林学则路、浦口弘阳广场');
+  await dialog.getByRole('textbox', { name: /^反馈意见/ }).fill(content);
+  await dialog.getByRole('button', { name: '提交反馈', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.goto('/console/feedback');
+  await page.getByRole('tab', { name: '活动', exact: true }).click();
+  await expect(page.locator('.feedback-item').filter({ hasText: content })).toContainText('献血车活动');
 });
 
 test('unrelated administrators cannot see activity feedback', async ({ page }) => {

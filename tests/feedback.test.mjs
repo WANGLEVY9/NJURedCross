@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import {
   FEEDBACK_CATEGORIES,
   FEEDBACK_COLUMNS,
+  FEEDBACK_BLOOD_ACTIVITY_ID,
   FEEDBACK_TABLE,
+  feedbackActivityChoices,
   feedbackRow,
   feedbackRoutes,
   feedbackSchemaReady,
@@ -81,6 +83,20 @@ test('feedback categories and payload are validated at the public boundary', () 
   assert.throws(() => normalizeFeedback({ category: '活动', content: '字'.repeat(201) }), /不能超过 200 字/);
   assert.equal(normalizeFeedback({ category: '其他', content: '😀'.repeat(200) }).content.length, 400);
   assert.doesNotThrow(() => normalizeFeedback({ category: '其他', content: '😀'.repeat(200) }));
+});
+
+test('feedback activity choices group blood into one programme with fixed sites and keep centre categories', () => {
+  const choices = feedbackActivityChoices([
+    { eventId: 'blood-a', name: '合成献血车一', type: '献血车专项', status: '报名中', location: '新街口中央' },
+    { eventId: 'blood-b', name: '合成献血车二', type: '献血车专项', status: '进行中', location: '仙林学则路' },
+    { eventId: 'care', name: '合成急救活动', activityCategory: '生命中心', type: '公益活动', status: '报名中', location: '合成教室' },
+  ]);
+  assert.equal(choices.filter((choice) => choice.center === '献血车专项').length, 1);
+  const blood = choices.find((choice) => choice.id === FEEDBACK_BLOOD_ACTIVITY_ID);
+  assert.equal(blood.name, '献血车活动');
+  assert.deepEqual(blood.locations, ['新街口中央', '新街口印象汇', '仙林学则路', '浦口弘阳广场']);
+  assert.equal(blood.status, '报名中');
+  assert.equal(choices.find((choice) => choice.id === 'care').center, '生命中心');
 });
 
 test('anonymous and signed-in submissions keep only the intended attribution', () => {

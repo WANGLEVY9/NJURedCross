@@ -127,7 +127,13 @@ import { applyReviewStep, authorizeOpinionExport } from './lib/attachment/review
 import * as taskApi from './lib/attachment/tasks.js';
 import { searchBusinessRecords } from './lib/console-search.js';
 import { agentRoutes } from './lib/agent/api.js';
-import { feedbackRoutes, FEEDBACK_TABLE } from './lib/feedback/index.js';
+import {
+  FEEDBACK_BLOOD_ACTIVITY_ID,
+  FEEDBACK_TABLE,
+  feedbackActivityChoices,
+  feedbackRoutes,
+  isFeedbackBloodActivity,
+} from './lib/feedback/index.js';
 import { FEEDBACK_SCHEMA } from './lib/production-schema.js';
 import { createAgentTaskService } from './lib/agent/task-service.js';
 import { createConfiguredAgentModel } from './lib/agent/model-factory.js';
@@ -3565,6 +3571,7 @@ function publicEventProjection(project, sessions, registrations) {
     name: String(project['活动名称'] || '未命名活动'),
     type: String(project['活动类型'] || '公益活动'),
     description: String(project['活动简介'] || ''),
+    activityCategory: String(project['组织类别'] || project['活动类别'] || ''),
     campus: String(project['校区'] || ''),
     location: String(project['地点'] || ''),
     registrationStart: project['报名开始'] || null,
@@ -3660,29 +3667,29 @@ function getPublicEvents(client) {
   return publicReadCache.get('events', () => loadPublicEvents(client));
 }
 
-async function feedbackActivityChoices(client) {
-  return (await getPublicEvents(client)).map((event) => ({
-    id: event.eventId,
-    name: event.name,
-    status: event.status,
-    startAt: event.startAt || '',
-    location: event.location || '',
-  }));
-}
-
 async function feedbackActivityOwnerRefs(client, activityId) {
-  let ownerRefs = [];
-  if (activityId.startsWith('workflow:')) {
-    const rowId = activityId.slice('workflow:'.length);
-    const workflow = await getPublicWorkflowData();
-    const row = workflow.events.find((event) => event._id === rowId);
-    ownerRefs = row ? eventResponsibleIds(row) : [];
-  } else {
-    const projects = await listAllRows(client, eventProjectTable);
-    const project = projects.find((event) => String(event['活动ID'] || '') === activityId);
-    ownerRefs = [String(project?.['负责人'] || '').trim()].filter(Boolean);
-  }
-  return ownerRefs;
+  const events = await getPublicEvents(client);
+  const selectedIds = activityId === FEEDBACK_BLOOD_ACTIVITY_ID
+    ? events.filter(isFeedbackBloodActivity).map((event) => event.eventId)
+    : [activityId];
+  const workflowIds = selectedIds.filter((id) => id.startsWith('workflow:'));
+  const projectIds = selectedIds.filter((id) => !id.startsWith('workflow:'));
+  const [workflow, projects] = await Promise.all([
+    workflowIds.length ? getPublicWorkflowData() : Promise.resolve({ events: [] }),
+    projectIds.length ? listAllRows(client, eventProjectTable) : Promise.resolve([]),
+  ]);
+  const projectOwners = new Map(projects.map((project) => [
+    String(project['活动ID'] || ''),
+    String(project['负责人'] || '').trim(),
+  ]));
+  return [...new Set(selectedIds.flatMap((id) => {
+    if (id.startsWith('workflow:')) {
+      const row = workflow.events.find((event) => event._id === id.slice('workflow:'.length));
+      return row ? eventResponsibleIds(row) : [];
+    }
+    const owner = projectOwners.get(id);
+    return owner ? [owner] : [];
+  }).filter(Boolean))];
 }
 
 async function canViewFeedbackActivity(client, activityId, session = null, account = null) {
@@ -3711,7 +3718,10 @@ async function canViewFeedbackActivity(client, activityId, session = null, accou
 }
 
 async function resolveFeedbackActivity(client, activityId) {
-  const selected = (await getPublicEvents(client)).find((event) => event.eventId === activityId);
+  const events = await getPublicEvents(client);
+  const choice = feedbackActivityChoices(events).find((activity) => activity.id === activityId);
+  const selected = events.find((event) => event.eventId === activityId)
+    || (activityId === FEEDBACK_BLOOD_ACTIVITY_ID ? events.find(isFeedbackBloodActivity) : null);
   if (!selected) throw httpError(400, '所选活动不存在或当前不可反馈。');
 
   const ownerRefs = await feedbackActivityOwnerRefs(client, activityId);
@@ -3740,9 +3750,10 @@ async function resolveFeedbackActivity(client, activityId) {
     });
   }
   return {
-    id: selected.eventId,
-    name: selected.name,
-    status: selected.status,
+    id: activityId,
+    name: choice?.name || selected.name,
+    status: choice?.status || selected.status,
+    ...(choice?.locations ? { locations: choice.locations } : {}),
     recipients,
   };
 }
@@ -5592,7 +5603,10 @@ async function dispatchApi(req, res, url) {
         isAccountActive,
         requireConsoleAccess,
         requireCsrf,
-        listActivities: async () => feedbackActivityChoices(await getBase()),
+        listActivities: async () => {
+          const client = await getBase();
+          return feedbackActivityChoices(await getPublicEvents(client));
+        },
         resolveActivity: async (activityId) => resolveFeedbackActivity(await getBase(), activityId),
         sendActivityMail: (message) => sendMail(message, { renderTemplate: false }),
         sendResolutionMail: (message) => sendMail(message, { renderTemplate: false }),
