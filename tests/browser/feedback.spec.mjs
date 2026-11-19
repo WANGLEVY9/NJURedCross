@@ -58,6 +58,16 @@ test('activity feedback requires a specific activity and records owner delivery'
   await centre.click();
   await dialog.getByRole('option', { name: '生命中心', exact: true }).click();
   await expect(activity).toBeEnabled();
+  const hint = dialog.locator('[data-field-name="feedback-activity"] .field__hint');
+  await expect(hint).toContainText('反馈提交后会直接发送给该活动的负责人。');
+  const hintLayout = await dialog.locator('[data-field-name="feedback-activity"]').evaluate((field) => {
+    const select = field.querySelector('.select-menu__trigger').getBoundingClientRect();
+    const hint = field.querySelector('.field__hint').getBoundingClientRect();
+    const bounds = field.getBoundingClientRect();
+    return { selectBottom: select.bottom, hintTop: hint.top, hintBottom: hint.bottom, fieldBottom: bounds.bottom };
+  });
+  expect(hintLayout.hintTop).toBeGreaterThanOrEqual(hintLayout.selectBottom);
+  expect(hintLayout.hintBottom).toBeLessThanOrEqual(hintLayout.fieldBottom + 0.5);
   await dialog.getByRole('button', { name: '提交反馈', exact: true }).click();
   await expect(dialog.getByText('请选择反馈对应的活动。', { exact: true })).toBeVisible();
   await activity.click();

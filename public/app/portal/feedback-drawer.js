@@ -23,7 +23,6 @@ export function openFeedbackDrawer() {
   let centerField = null;
   let activityField = null;
   let activityHost = null;
-  let activityHint = null;
   let activityLoading = false;
   let activitiesLoaded = false;
   const session = getSessionState();
@@ -98,16 +97,16 @@ export function openFeedbackDrawer() {
     ].filter(Boolean).join(' · ');
   }
 
-  function syncActivityHint() {
+  function activityHintText() {
     const selected = activities.find((activity) => activity.id === activityId);
     if (!activityCenter) {
-      activityHint.textContent = '请先选择中心分类，再从该中心选择活动。';
+      return '请先选择中心分类，再从该中心选择活动。';
     } else if (!activities.some((activity) => centerOf(activity) === activityCenter)) {
-      activityHint.textContent = '该中心当前没有可反馈的活动。';
+      return '该中心当前没有可反馈的活动。';
     } else if (selected?.locations?.length) {
-      activityHint.textContent = `服务地点：${selected.locations.join('、')}`;
+      return `服务地点：${selected.locations.join('、')}`;
     } else {
-      activityHint.textContent = '反馈提交后会直接发送给该活动的负责人。';
+      return '反馈提交后会直接发送给该活动的负责人。';
     }
   }
 
@@ -136,14 +135,15 @@ export function openFeedbackDrawer() {
       required: true,
       searchable: inCenter.length > 5,
       disabled: !activityCenter || !inCenter.length,
+      hint: activityHintText(),
       onInput: (event) => {
         activityId = event.target.value;
         activityField?.setError('');
-        syncActivityHint();
+        const hint = activityField?.querySelector('.field__hint');
+        if (hint) hint.textContent = activityHintText();
       },
     });
-    activityHost.replaceChildren(activityField, activityHint);
-    syncActivityHint();
+    activityHost.replaceChildren(activityField);
     if (focus) requestAnimationFrame(() => focusSelect(activityField));
   }
 
@@ -172,10 +172,6 @@ export function openFeedbackDrawer() {
       },
     });
     activityHost = h('div');
-    activityHint = h('p', {
-      class: 'feedback-compose__activity-hint t-caption',
-      attrs: { role: 'status', 'aria-live': 'polite' },
-    });
     activitySlot.replaceChildren(h('div', { class: 'feedback-compose__activity-fields' }, centerField, activityHost));
     renderActivityOptions();
   }
