@@ -1610,6 +1610,9 @@
 .select-menu__search.input{width:100%;min-width:0;font-size:16px}
 .select-menu__empty{padding:16px 12px;color:var(--text-muted);font-size:14px}
 .select-menu__option{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:44px;padding:10px 12px;border-radius:10px;font-size:14px;line-height:1.5;cursor:pointer;overflow-wrap:anywhere}
+.select-menu__option>span:first-child{flex:1 1 auto;min-width:0;overflow-wrap:anywhere}
+.select-menu__description{flex:0 1 38%;min-width:0;max-width:38%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.select-menu__popup,.select-menu__list{min-width:0;overflow-x:hidden}
 .select-menu__option[aria-selected=true]{color:var(--accent);background:var(--accent-soft);font-weight:600}
 .select-menu__option[data-highlighted=true]{outline:1px solid var(--accent);outline-offset:-1px}
 .select-menu__option[aria-disabled=true]{opacity:.45;cursor:not-allowed}

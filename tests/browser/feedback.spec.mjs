@@ -67,6 +67,16 @@ test('activity feedback requires a specific activity and records owner delivery'
   expect(hintLayout.hintTop).toBeGreaterThanOrEqual(hintLayout.selectBottom);
   expect(hintLayout.hintBottom).toBeLessThanOrEqual(hintLayout.fieldBottom + 0.5);
   await activity.click();
+  const careOption = dialog.getByRole('option', { name: /校园急救培训/ });
+  await careOption.locator('.select-menu__description').evaluate((node) => {
+    node.textContent = '综事中心 · 南京医科大学第二附属医院萨家湾院区儿科病区（门诊1号楼10楼）';
+  });
+  const optionLayout = await careOption.evaluate((node) => {
+    const label = node.querySelector('span:first-child').getBoundingClientRect();
+    return { labelWidth: label.width, clientWidth: node.clientWidth, scrollWidth: node.scrollWidth };
+  });
+  expect(optionLayout.labelWidth).toBeGreaterThan(100);
+  expect(optionLayout.scrollWidth).toBeLessThanOrEqual(optionLayout.clientWidth + 1);
   await dialog.getByRole('searchbox', { name: '搜索关联活动', exact: true }).fill('校园急救培训');
   await dialog.getByRole('option', { name: /校园急救培训/ }).click();
   await dialog.getByRole('button', { name: '提交反馈', exact: true }).click();
