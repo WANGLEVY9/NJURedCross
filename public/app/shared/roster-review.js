@@ -1,6 +1,25 @@
-/** Runtime roster state uses the existing event configuration; no extra table columns. */
+/** 审核结果已迁到独立表时，服务端随事件下发合并后的完整状态；旧数据仍在配置里。 */
 export function rosterReview(event) {
+  const attached = event?.rosterState;
+  if (attached && typeof attached === 'object') return attached;
   try { return JSON.parse(event?.['报名页配置'] || '{}').rosterReview || null; } catch { return null; }
+}
+/**
+ * 名单指纹只取阶段与修订号，不取逐行结果：结果可能有几千条，跨几百个活动算
+ * 摘要会把一次列表请求变成整表扫描。任何结果变更都会让服务端递增 revision，
+ * 因此指纹的灵敏度与取全量一致。
+ */
+export function reviewTokenDigest(review) {
+  if (!review) return null;
+  return {
+    phase: review.phase || '',
+    confirmedAt: review.confirmedAt || '',
+    closed: Boolean(review.closed),
+    immediate: Boolean(review.immediate),
+    immediateCommit: Boolean(review.immediateCommit),
+    results: review.results || 'inline',
+    revision: Number(review.revision) || 0,
+  };
 }
 const RESULT_CODES = { 已确认: 'Y', 已签到: 'Q', 未入选: 'N' };
 const CODE_RESULTS = { Y: '已确认', Q: '已签到', N: '未入选' };

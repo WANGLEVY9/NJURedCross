@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createWorkflow,WF,workflowEventApproved} from '../lib/events/workflow.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
 import {rosterReview,rosterRow,publishedRosterRow,rosterMailKey} from '../public/app/shared/roster-review.js';
+import {inlineReview,needsTableReview,reviewSections} from '../lib/events/roster-result-store.js';
 
 async function fixture(count=2){
  let seq=0;const tables=Object.fromEntries(Object.values(WF).map(t=>[t,[]]));
@@ -11,7 +12,11 @@ async function fixture(count=2){
  const e=await w.create({name:'合成名单',date:'2026-10-12',slot:'09:00-12:00',capacity:20,registrationLimit:30,serviceHours:3,location:'合成场地',work:'合成服务'},'owner');await w.approve(e._id,'reviewer');await w.publish(e._id);
  const people=Array.from({length:count},(_,i)=>({accountId:'p'+i,realName:'合成同学'+i,studentId:String(999900+i),email:String(999900+i)+'@smail.nju.edu.cn',emailVerified:true}));
  for(const p of people)await w.register(e._id,p);
- const event=()=>tables[WF.events][0],rows=()=>tables[WF.registrations],token=async()=>(await w.overview()).events[0].rosterToken;
+ // 结果已移到独立表：这里复刻读路径的合并，避免断言停留在「配置里塞着全部结果」的旧形态。
+ const event=()=>{const raw=tables[WF.events][0],meta=inlineReview(raw);
+  if(!meta||!needsTableReview(meta))return raw;
+  return {...raw,rosterState:{...meta,...reviewSections(tables[WF.rosterResults].filter(row=>row['活动ID']===raw['活动ID']))}};};
+ const rows=()=>tables[WF.registrations],token=async()=>(await w.overview()).events[0].rosterToken;
  const stage=async(ids,decision='confirm',reason='合成原因')=>w.stageRoster(e._id,ids,decision,reason,await token());
  const finalize=async()=>w.finalizeRoster(e._id,await token(),'reviewer');
  return {w,base,tables,event,rows,people,token,stage,finalize,id:e._id};
@@ -117,7 +122,7 @@ test('changed published outcomes get new mail keys, unchanged people are not not
 test('an uncertain SMTP attempt is not blindly resent; durable mail evidence resolves it',async()=>{
  const f=await fixture(1),[a]=f.rows();await f.stage([a._id]);await f.finalize();
  const update=f.base.updateRow;let sent=false,calls=0;
- f.base.updateRow=async(t,id,p)=>{if(sent&&t===WF.events){sent=false;throw Error('receipt write interrupted');}return update(t,id,p);};
+ f.base.updateRow=async(t,id,p)=>{if(sent&&t===WF.rosterResults){sent=false;throw Error('receipt write interrupted');}return update(t,id,p);};
  const send=async()=>{calls++;sent=true;return {ok:true};};
  await assert.rejects(f.w.deliverRoster(f.id,{send}),/receipt write interrupted/);assert.equal(calls,1);
  const retry=await f.w.deliverRoster(f.id,{send,retry:true});assert.equal(retry.unknown.length,1);assert.equal(calls,1);
@@ -198,18 +203,21 @@ test('resume-only finalization still recovers a previously frozen immediate resu
  await f.w.finalizeRoster(f.id,await f.token(),'owner',{resumeOnly:true});assert.equal(a.报名状态,'未入选');assert.equal(b.报名状态,'待筛选');assert.ok(!rosterReview(f.event()).closed);
 });
 
-test('legacy object results are compacted by the next write, so an old activity reclaims space',async()=>{
+test('legacy inline results move into the result table on the next write, so an old activity reclaims space',async()=>{
  const f=await fixture(4),rows=f.rows();await f.stage(rows.map(row=>row._id));await f.finalize();
- // 退回改造前的存储形态：每条 {status, reason, version}，一条约 100 字符。
- const event=f.event(),config=JSON.parse(event['报名页配置']);
- config.rosterReview.published=Object.fromEntries(Object.keys(config.rosterReview.published)
-   .map(id=>[id,{status:'已确认',reason:'',version:'x'.repeat(36)}]));
- event['报名页配置']=JSON.stringify(config);
- const before=event['报名页配置'].length;
+ // 退回改造前的存储形态：结果内联在配置里，每条 {status, reason, version} 约 100 字符。
+ const raw=f.tables[WF.events][0],config=JSON.parse(raw['报名页配置']);
+ config.rosterReview={...config.rosterReview,results:undefined,
+   published:Object.fromEntries(rows.map(row=>[row._id,{status:'已确认',reason:'',version:'x'.repeat(36)}]))};
+ raw['报名页配置']=JSON.stringify(config);
+ const before=raw['报名页配置'].length;
+ // 任何一次写操作都会先把结果搬进结果表，再把配置瘦成元信息，无需迁移脚本。
  await f.w.reopenRoster(f.id,await f.token());
- const compacted=JSON.parse(f.event()['报名页配置']).rosterReview.published;
- assert.equal(typeof compacted[rows[0]._id],'string');
- assert.ok(f.event()['报名页配置'].length<before,`压缩后应更短：${before} → ${f.event()['报名页配置'].length}`);
- // 压缩不改变已发布结果，重新确认时也不会换版本、不会重发。
- assert.equal(rosterMailKey(rows[0],compacted[rows[0]._id]),`WF-RESULT:${rows[0]['报名ID']}:yes:` + 'x'.repeat(36));
+ const after=JSON.parse(raw['报名页配置']).rosterReview;
+ assert.equal(after.results,'table');assert.equal(after.published,undefined);
+ assert.ok(raw['报名页配置'].length<before,`迁移后应更短：${before} → ${raw['报名页配置'].length}`);
+ const stored=f.tables[WF.rosterResults].filter(row=>row['结果']==='已确认');
+ assert.equal(stored.length,rows.length);assert.equal(stored[0]['版本'],'x'.repeat(36));
+ // 迁移不改变已发布结果，邮件幂等键仍是同一个，不会因此重发。
+ assert.equal(rosterMailKey(rows[0],rosterReview(f.event()).published[rows[0]._id]),`WF-RESULT:${rows[0]['报名ID']}:yes:`+'x'.repeat(36));
 });

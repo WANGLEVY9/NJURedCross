@@ -15,7 +15,7 @@ test('unified entry publishes historical-workspace rejection immediately without
  await roster.getByRole('checkbox',{name:'选择 合成测试同学',exact:true}).check({force:true});await page.getByRole('button',{name:'批量报名失败并通知',exact:true}).click();await page.getByRole('textbox',{name:'补充说明',exact:true}).fill('合成课程冲突');
  await page.getByRole('button',{name:'确认 1 人报名失败并通知',exact:true}).click();const result=page.getByRole('dialog',{name:'报名处理结果',exact:true});await expect(result).toContainText('报名失败结果已保存');await result.getByRole('button',{name:'完成',exact:true}).click();
  const own=await(await page.request.get('/api/portal/workflow/me')).json();expect(own.registrations.find(r=>r.eventId===event._id).status).toBe('未入选');
- const detail=await(await page.request.get(`/api/volunteer/workflow/events/${event._id}/detail`)).json();const current=detail.events.find(e=>e._id===event._id),review=JSON.parse(current['报名页配置']).rosterReview;expect(current['状态']).toBe('报名中');expect(review.closed).not.toBe(true);expect(review.drafts).toEqual({});
+ const detail=await(await page.request.get(`/api/volunteer/workflow/events/${event._id}/detail`)).json();const current=detail.events.find(e=>e._id===event._id),review=current.rosterState||JSON.parse(current['报名页配置']).rosterReview;expect(current['状态']).toBe('报名中');expect(review.closed).not.toBe(true);expect(Object.keys(review.drafts||{})).toHaveLength(0);
  await page.screenshot({path:info.outputPath('unified-results.png'),fullPage:true,animations:'disabled'});
 });
 
