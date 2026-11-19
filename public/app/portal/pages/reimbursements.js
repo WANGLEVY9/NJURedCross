@@ -51,7 +51,8 @@ export default async function reimbursementsPage() {
     activity.control.replaceChildren(h('option', { value: '', text: activityGrouping && !campus.control.value ? '请先选择活动校区'
       : activityGrouping && !activityCategory.control.value ? '请先选择活动类别' : visible.length ? '请选择对应活动' : '该校区、该类别近 30 天暂无活动' }),
     ...visible.map(item => h('option', { value: item.id,
-      text: `${item.name} · ${item.date || '日期未登记'}${item.id === originalActivity?.id ? '（原申请活动）' : ''}` })));
+      // 同一天可能排多个班次（献血车 10:00 / 13:00），不带时段这两条选项文字完全一样。
+      text: `${item.name} · ${item.date || '日期未登记'}${item.timeSlot ? ` ${item.timeSlot}` : ''}${item.id === originalActivity?.id ? '（原申请活动）' : ''}` })));
     activity.control.value = visible.some(item => item.id === previous) ? previous : '';
     activity.control.disabled = busy || !visible.length;
     activity.setError(null);

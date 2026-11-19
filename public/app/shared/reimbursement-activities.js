@@ -20,5 +20,6 @@ export function recentReimbursementActivities(activities, now = new Date(), { re
   const first = cutoff.toISOString().slice(0, 10);
   return activities.filter(activity => activity && /^\d{4}-\d{2}-\d{2}$/.test(activity.date || '')
     && activity.date >= first && activity.date <= today && (!requireCampus || reimbursementCampus(activity.campus)))
-    .sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name, 'zh-CN'));
+    .sort((a, b) => b.date.localeCompare(a.date) || a.name.localeCompare(b.name, 'zh-CN')
+      || String(a.timeSlot || '').localeCompare(String(b.timeSlot || '')));
 }
