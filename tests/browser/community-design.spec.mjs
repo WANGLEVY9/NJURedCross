@@ -237,14 +237,13 @@ test('community missing letters do not look like an empty inbox',async({page})=>
   await expect(page.locator('#community-warmth-delivered')).toHaveCount(0);
   await expect(page.getByRole('button',{name:'写生日祝福',exact:true})).toHaveCount(0);
 });
-test('community guests see the development page and a login return destination',async({page})=>{
+test('community opens the real plaza without a development permission gate',async({page})=>{
   await page.request.post('/api/auth/logout');
   await page.goto('/community');
-  await expect(page.getByRole('heading', {name:'内建广场',exact:true})).toBeVisible();
-  await expect(page.locator('#community-warmth-delivered')).toHaveCount(0);
-  await expect(page.getByText('请先登录后，再申请查看权限')).toBeVisible();
-  await page.getByRole('link',{name:'登录后申请查看权限',exact:true}).click();
-  await expect(page).toHaveURL(/\/login\?next=%2Fcommunity/);
+  await expect(page).toHaveURL(/\/community$/);
+  await expect(page.locator('.community-view')).toBeVisible();
+  await expect(page.locator('.development-gate')).toHaveCount(0);
+  await expect(page.getByText('申请查看权限', {exact:true})).toHaveCount(0);
 });
 test('community themes, reduced motion and return navigation remain scoped',async({page})=>{
   await page.request.post('/api/auth/login', {data:{username:'synthetic-reviewer'}});
