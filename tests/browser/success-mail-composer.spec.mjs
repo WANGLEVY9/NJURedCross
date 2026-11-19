@@ -143,7 +143,8 @@ test('composer state and viewport evidence',async({page},info)=>{
     await page.evaluate(async id=>{
       const {successMailEditor}=await import('/app/console/pages/success-mail-composer.js');
       const data=await(await fetch('/api/volunteer/workflow')).json();const event=data.events.find(e=>e._id===id);
-      const config=JSON.parse(event['报名页配置']);config.rosterReview.confirmedAt='2030-01-01T00:00:00Z';config.rosterReview.phase='draft';event['报名页配置']=JSON.stringify(config);
+      // 逐行结果已迁到独立表，完整状态随事件下发的 rosterState；配置里只剩元信息。
+      event.rosterState={...(event.rosterState||JSON.parse(event['报名页配置']).rosterReview||{}),confirmedAt:'2030-01-01T00:00:00Z',phase:'draft'};
       successMailEditor(event,async()=>true);
     },id);
     await expect(page.locator('.success-mail-drawer')).toHaveAttribute('data-state','frozen');await expect(subject(page)).toBeHidden();await expect(save(page)).toBeHidden();await expect(page.getByRole('radio')).toHaveCount(0);await shot(page,'frozen',width);
@@ -197,8 +198,9 @@ test('mail explanation and preview remain readable on narrow screens in every mo
         const {successMailEditor}=await import('/app/console/pages/success-mail-composer.js');
         const data=await(await fetch('/api/volunteer/workflow')).json();
         const event=data.events.find(event=>event._id===id),config=JSON.parse(event['报名页配置']);
-        config.rosterReview={...config.rosterReview,phase:'final',confirmedAt:'2030-01-01T00:00:00Z'};
-        event['报名页配置']=JSON.stringify(config);successMailEditor(event,async()=>true);
+        // 同上一处：冻结状态在 rosterState 里，配置只剩元信息。
+        event.rosterState={...(event.rosterState||config.rosterReview||{}),phase:'final',confirmedAt:'2030-01-01T00:00:00Z'};
+        successMailEditor(event,async()=>true);
       },id);
     }
     const instructions=page.locator('.success-mail-instructions');
