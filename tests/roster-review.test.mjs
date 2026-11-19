@@ -197,3 +197,19 @@ test('resume-only finalization still recovers a previously frozen immediate resu
  await assert.rejects(f.w.stageRoster(f.id,[a._id],'reject','合成原因',await f.token(),{immediate:true}),/interrupted/);
  await f.w.finalizeRoster(f.id,await f.token(),'owner',{resumeOnly:true});assert.equal(a.报名状态,'未入选');assert.equal(b.报名状态,'待筛选');assert.ok(!rosterReview(f.event()).closed);
 });
+
+test('legacy object results are compacted by the next write, so an old activity reclaims space',async()=>{
+ const f=await fixture(4),rows=f.rows();await f.stage(rows.map(row=>row._id));await f.finalize();
+ // 退回改造前的存储形态：每条 {status, reason, version}，一条约 100 字符。
+ const event=f.event(),config=JSON.parse(event['报名页配置']);
+ config.rosterReview.published=Object.fromEntries(Object.keys(config.rosterReview.published)
+   .map(id=>[id,{status:'已确认',reason:'',version:'x'.repeat(36)}]));
+ event['报名页配置']=JSON.stringify(config);
+ const before=event['报名页配置'].length;
+ await f.w.reopenRoster(f.id,await f.token());
+ const compacted=JSON.parse(f.event()['报名页配置']).rosterReview.published;
+ assert.equal(typeof compacted[rows[0]._id],'string');
+ assert.ok(f.event()['报名页配置'].length<before,`压缩后应更短：${before} → ${f.event()['报名页配置'].length}`);
+ // 压缩不改变已发布结果，重新确认时也不会换版本、不会重发。
+ assert.equal(rosterMailKey(rows[0],compacted[rows[0]._id]),`WF-RESULT:${rows[0]['报名ID']}:yes:` + 'x'.repeat(36));
+});
