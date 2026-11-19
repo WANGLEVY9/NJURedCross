@@ -271,15 +271,15 @@ export async function requestBlob(path, options = {}) {
       requestId=response.headers.get('x-request-id');
     });
   }catch(error){
-    outcome=status>=400?'http':status?'incomplete':error?.name==='AbortError'?'aborted':'network';
+    outcome=options.signal?.aborted?(options.signal.reason?.name==='TimeoutError'?'timeout':'aborted'):status>=400?'http':status?'incomplete':error?.name==='AbortError'?'aborted':'network';
     throw error;
   }finally{
     reportTiming({route:path,phase:'binary',method:options.method||'POST',status,requestId,clientTrace,durationMs:performance.now()-start,outcome:status>=400?'http':outcome});
   }
 }
 
-async function executeBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true } = {}, clientTrace, onResponse) {
-  const init = { method, headers: { ...headers, ...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{}) }, credentials: 'same-origin' };
+async function executeBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true, signal } = {}, clientTrace, onResponse) {
+  const init = { method, headers: { ...headers, ...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{}) }, credentials: 'same-origin', signal };
   if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);
@@ -292,14 +292,14 @@ async function executeBlob(path, { method = 'POST', body, headers = {}, retryCsr
     response = await fetch(path, init);
     onResponse(response);
   } catch (error) {
-    if (error?.name === 'AbortError') throw error;
+    if (signal?.aborted || error?.name === 'AbortError') throw error;
     throw new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' });
   }
   if (response.status === 403 && retryCsrf) {
     const payload = await response.clone().json().catch(() => null);
     if (payload?.code === 'csrf_failed') {
       const refreshed = await refreshSession().catch(() => null);
-      if (refreshed?.authenticated) return requestBlob(path, { method, body, headers, retryCsrf: false });
+      if (refreshed?.authenticated) return requestBlob(path, { method, body, headers, retryCsrf: false, signal });
     }
   }
   if (response.status === 401) setSession(null);
@@ -310,6 +310,7 @@ async function executeBlob(path, { method = 'POST', body, headers = {}, retryCsr
     });
   }
   const blob = await response.blob();
+  signal?.throwIfAborted();
   return { blob, disposition: response.headers.get('Content-Disposition') || '' };
 }
 

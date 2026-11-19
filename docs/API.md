@@ -64,6 +64,12 @@
 
 影像直传（2026-11-12）：浏览器先向 `POST /api/public/media/upload-ticket` 领票据，再把单张图片 `POST` 到返回的 `uploadUrl`（Seafile `seafhttp/upload-api`，自带短期凭据，**不带** CSRF 与 cookie，跨源，CSP 已放行 `NJUBOX_SERVER_URL`），最后 `POST /api/public/media/confirm` 由服务端复核落表。字节不再经过本站，`/api/public/media` 中转为兜底路径。缩略图走 `thumbUploadUrl`：Seafile 的上传直链按目录签发，跨目录复用不在契约内。
 
+影像预览（2026-11-19）：`GET /api/public/media/:id/preview` 仅登录上传人本人可读，
+已删除照片返回 404；返回最长边不超过 1600px、最多 512KB 的 JPEG，`private, no-store`。
+处理并发 1、最多等待 3，压缩字节缓存最多 16 张且有效期 5 分钟；每次命中前仍检查归属和删除状态。
+原图不进入预览缓存，原图下载继续使用 `/api/public/media/:id/link`。
+照片表展示读在 5 秒内合并、写后按表失效；业务修改仍读取当前证据。
+
 未登录调用写接口或 `/api/portal/me` 返回 `401` 且 `code=login_required`；缺少 CSRF 令牌返回 `403` 且 `code=csrf_failed`。
 
 活动是否对公众可见的判定：状态属于 `报名中` / `进行中` / `已结束`，且公开范围不包含 `不公开`、`仅管理员`、`内部限定`。

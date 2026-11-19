@@ -28,6 +28,7 @@ import { makeThumbnail } from '../../core/image-thumb.js';
 import { isRetryableUploadError, isMetadataOnlyFailure, uploadRetryDelay, UPLOAD_AUTO_RETRIES } from '../../core/upload-retry.js';
 import { getSessionState } from '../../core/api.js';
 import { confirmAction, requestText } from '../../ui/overlay.js';
+import { openPhotoPreview } from '../photo-preview.js';
 
 const MAX_BATCH = 12;
 /** 一张一个请求：每张远低于网关 20MB/60s 的限制，失败也能只重试那一张。 */
@@ -57,7 +58,8 @@ function filenameFromDisposition(disposition, fallback) {
   return plain ? plain[1] : fallback;
 }
 
-export default async function photosPage() {
+export default function photosPage() {
+  let disposed = false, photoPreview;
   const user = getSessionState()?.user || {};
   const state = {
     centers: [],
@@ -82,7 +84,7 @@ export default async function photosPage() {
   const headerSlot = h('div', { class: 'stack-3' });
   const controlsSlot = h('div', { class: 'stack-4' });
   const gridSlot = h('div', { class: 'stack-4' });
-  const lightboxSlot = h('div');
+  const batchSlot = h('div');
 
   /* --- upload controls --------------------------------------------------- */
 
@@ -138,6 +140,7 @@ export default async function photosPage() {
   async function loadActivities(center = '') {
     try {
       const payload = await publicApi.mediaActivities({ center });
+      if (disposed) return;
       state.activities = payload.activities || [];
       state.centers = payload.centers?.length ? payload.centers : state.centers;
       if (payload.config?.centers?.length) state.centers = payload.config.centers;
@@ -179,6 +182,7 @@ export default async function photosPage() {
   async function loadPhotos() {
     try {
       const payload = await publicApi.myPhotos({ showPicked: state.showPicked });
+      if (disposed) return false;
       state.photos = payload.photos || [];
       state.folders = payload.folders || [];
       if (payload.pickRules) state.pickRules = { ...DEFAULT_PICK_RULES, ...payload.pickRules };
@@ -191,16 +195,19 @@ export default async function photosPage() {
       // 若展开的文件夹已被清空（照片全删），回到总览。
       if (state.openFolderKey && !state.folders.some((f) => f.key === state.openFolderKey)) state.openFolderKey = '';
       renderControls();
-      renderGrid();
+      return true;
     } catch (error) {
       if (redirectIfAuthError(error)) return;
       reportError(error, '照片列表加载失败');
+      if (!disposed) gridSlot.replaceChildren(notice('照片列表加载失败，请重试。', { tone: 'error' }), button({ label: '重试', iconName: 'refresh', onClick: refresh }));
+      return false;
     }
   }
 
   async function loadMyPicks() {
     try {
       const payload = await publicApi.myPicks();
+      if (disposed) return;
       // 服务端把分状态计数放在 stats 里；顶层兜底也算一遍，防止字段变动。
       const picks = payload.picks || [];
       const count = (status) => picks.filter((p) => p.pickStatus === status).length;
@@ -218,8 +225,15 @@ export default async function photosPage() {
   }
 
   async function refresh() {
-    await Promise.all([loadPhotos(), loadMyPicks()]);
-    renderGrid();
+    gridSlot.setAttribute('aria-busy', 'true');
+    const picks = loadMyPicks();
+    const loaded = await loadPhotos();
+    if (!disposed) {
+      if (loaded) renderGrid();
+      gridSlot.removeAttribute('aria-busy');
+    }
+    await picks;
+    if (!disposed && loaded && !state.openFolderKey) renderGrid();
   }
 
   async function uploadFiles(fileList) {
@@ -352,7 +366,7 @@ export default async function photosPage() {
       notify.success(`已上传 ${created.length} 张`, `已归档到「${activity}-${center}/${activity}-照片」文件夹。`);
       // 上传后直接展开对应文件夹。
       state.openFolderKey = [center, activity].join('\u0001');
-      await loadPhotos();
+      await refresh();
     }
     if (failed.length) {
       const detail = failed.slice(0, 3).map((item) => `${item.filename}：${item.reason}`).join('；');
@@ -459,26 +473,14 @@ export default async function photosPage() {
     uploadHint.textContent = state.uploading ? `${phase} · 归档到「${centerSelect.control.value} / ${activitySelect.control.value.trim()}」` : '';
   }
 
-  async function openPhoto(photo) {
-    clear(lightboxSlot);
-    try {
-      const payload = await publicApi.mediaLink(photo.id);
-      lightboxSlot.append(h('div', {
-        class: 'photo-lightbox',
-        attrs: { role: 'dialog', 'aria-label': `查看 ${photo.filename}` },
-        on: { click: (event) => { if (event.target === event.currentTarget) clear(lightboxSlot); } },
-      },
-      h('div', { class: 'photo-lightbox__panel' },
-        h('img', { class: 'photo-lightbox__img', attrs: { src: payload.link, alt: photo.filename } }),
-        h('div', { class: 'photo-lightbox__bar' },
-          h('span', { class: 'photo-lightbox__name', text: `${photo.filename} · ${photo.center ? photo.center + ' / ' : ''}${photo.activity}` }),
-          h('span', { class: 'row-2' },
-            iconButton({ iconName: 'download', label: '下载', onClick: () => window.open(payload.link, '_blank', 'noopener') }),
-            iconButton({ iconName: 'close', label: '关闭', onClick: () => clear(lightboxSlot) }))))));
-    } catch (error) {
-      if (redirectIfAuthError(error)) return;
-      notify.warning('照片暂时无法查看', error?.message || '云盘链接获取失败。');
-    }
+  function openPhoto(photo, trigger) {
+    photoPreview?.close();
+    const thumbnail = trigger.querySelector('img');
+    photoPreview = openPhotoPreview({
+      photo,
+      thumbnail: thumbnail?.complete && thumbnail.naturalWidth ? thumbnail.currentSrc : '',
+      onDownload: () => downloadPhoto(photo),
+    });
   }
 
   async function toggleKeep(photo) {
@@ -486,7 +488,7 @@ export default async function photosPage() {
     try {
       await publicApi.mediaKeep(photo.id, next);
       photo.keepStatus = next;
-      await loadPhotos();
+      await refresh();
       notify.info(next === '留用' ? '已标记留用' : '已标记弃用', photo.filename);
     } catch (error) {
       if (redirectIfAuthError(error)) return;
@@ -496,10 +498,11 @@ export default async function photosPage() {
 
   /* --- 选择（精选 / 批量下载） ------------------------------------------- */
 
-  function toggleSelect(photo) {
+  function toggleSelect(photo, input) {
     if (state.selected.has(photo.id)) state.selected.delete(photo.id);
     else state.selected.add(photo.id);
-    renderGrid();
+    input.closest('.photocard').classList.toggle('photocard--selected', state.selected.has(photo.id));
+    batchSlot.replaceChildren(renderBatchBar());
   }
 
   function selectedPhotos() {
@@ -601,7 +604,7 @@ export default async function photosPage() {
       const payload = await publicApi.mediaBatchRename(photos.map((photo) => photo.id));
       if (payload.renamed?.length) notify.success(`已更名 ${payload.renamed.length} 张`, `示例：${payload.renamed[0].oldName} → ${payload.renamed[0].newName}`);
       if (payload.failed?.length) notify.warning('部分未更名', payload.failed.map((item) => `${item.filename}：${item.reason}`).join('；'));
-      await loadPhotos();
+      await refresh();
     } catch (error) {
       if (redirectIfAuthError(error)) return;
       notify.warning('批量更名未完成', error?.message || '请稍后重试。');
@@ -648,12 +651,19 @@ export default async function photosPage() {
       h('span', { class: 'chip chip--static' }, h('span', { text: `已选 ${count} 张` })),
       button({ label: `提交精选申请（${min}-${max} 张）`, variant: pickReady ? 'primary' : 'secondary', iconName: 'star', onClick: requestPick }),
       button({ label: '批量下载（zip）', variant: 'secondary', iconName: 'download', onClick: downloadSelected }),
-      count ? button({ label: '清空选择', variant: 'ghost', iconName: 'close', onClick: () => { state.selected.clear(); renderGrid(); } }) : null,
+      count ? button({ label: '清空选择', variant: 'ghost', iconName: 'close', onClick: () => {
+        state.selected.clear();
+        gridSlot.querySelectorAll('.photocard--selected').forEach(card => {
+          card.classList.remove('photocard--selected');
+          card.querySelector('input[type="checkbox"]').checked = false;
+        });
+        batchSlot.replaceChildren(renderBatchBar());
+      } }) : null,
       h('span', { class: 'spacer' }),
       button({
         label: state.showPicked ? '隐藏已精选' : '显示已精选',
         variant: 'ghost', iconName: state.showPicked ? 'eyeOff' : 'eye',
-        onClick: () => { state.showPicked = !state.showPicked; loadPhotos(); },
+        onClick: () => { state.showPicked = !state.showPicked; refresh(); },
       }),
       h('span', { class: 't-caption t-faint', text: pickHint }));
   }
@@ -690,7 +700,8 @@ export default async function photosPage() {
       button({ label: '批量自动更名', variant: 'secondary', iconName: 'edit', onClick: () => batchRename(folder) }));
 
     const cards = folder.photos.map((photo) => photoCard(photo));
-    gridSlot.append(toolbar, renderBatchBar(), h('div', { class: 'photogrid' }, cards));
+    batchSlot.replaceChildren(renderBatchBar());
+    gridSlot.append(toolbar, batchSlot, h('div', { class: 'photogrid' }, cards));
   }
 
   function photoCard(photo) {
@@ -704,14 +715,14 @@ export default async function photosPage() {
       h('label', { class: 'photocard__check', attrs: { title: '勾选用于精选申请 / 批量下载' } },
         h('input', {
           class: 'sr-only', attrs: { type: 'checkbox', 'aria-label': `选择 ${photo.filename}` },
-          on: { change: () => toggleSelect(photo) },
+          on: { change: event => toggleSelect(photo, event.currentTarget) },
           ...(state.selected.has(photo.id) ? { checked: '' } : {}),
         }),
         icon('check', 'ico ico--sm')),
       h('button', {
         class: 'photocard__thumb',
         attrs: { type: 'button', 'aria-label': `查看 ${photo.filename}` },
-        on: { click: () => openPhoto(photo) },
+        on: { click: event => openPhoto(photo, event.currentTarget) },
       },
       // 只拉几十 KB 的预览图，且进入视口才请求（loading=lazy）。
       // 老照片没有缩略图时会 404，此时移掉 img，露出下面的占位图标。
@@ -743,6 +754,7 @@ export default async function photosPage() {
   }
 
   function renderGrid() {
+    if (disposed) return;
     clear(gridSlot);
     if (!state.photos.length) {
       const hint = state.showPicked
@@ -790,8 +802,7 @@ export default async function photosPage() {
   const node = h('div', { class: 'view' },
     h('div', { class: 'formpage' },
       headerSlot,
-      isSignedIn() ? h('div', { class: 'stack-6' }, controlsSlot, gridSlot) : loginRequiredPanel({ what: '影像库', hint: '照片归档到你的账号下，换设备也能找回。' }),
-      lightboxSlot),
+      isSignedIn() ? h('div', { class: 'stack-6' }, controlsSlot, gridSlot) : loginRequiredPanel({ what: '影像库', hint: '照片归档到你的账号下，换设备也能找回。' })),
   );
 
   if (isSignedIn()) {
@@ -799,10 +810,11 @@ export default async function photosPage() {
     centerSelect.control.addEventListener('change', () => {
       loadActivities(centerSelect.control.value);
     });
-    await loadActivities();
-    await Promise.all([loadPhotos(), loadMyPicks()]);
-    renderGrid();
+    gridSlot.append(notice('正在加载照片列表…', { tone: 'neutral' }));
+    renderControls();
+    void loadActivities();
+    void refresh();
   }
 
-  return { title: '影像库', node };
+  return { title: '影像库', node, dispose: () => { disposed = true; photoPreview?.close(); } };
 }

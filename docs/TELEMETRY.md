@@ -4,7 +4,7 @@
 
 | 环节 | 可查证据 | 关联方式 |
 | --- | --- | --- |
-| 浏览器加载 | 会话等待、页面模块、渲染、导航、慢静态资源 | 脱敏路由、阶段、时间窗口。导航结束表示页面结构已挂载，异步数据仍看对应 API |
+| 浏览器加载 | 会话等待、页面模块、渲染、导航、慢静态资源、图片预览解码 | 脱敏路由、阶段、时间窗口。导航结束表示页面结构已挂载，异步数据仍看对应 API |
 | 浏览器请求 | JSON、二进制响应、XHR 上传、超时与中断 | 同源请求用 `clientTrace` 和返回的 `X-Request-ID`。直传云盘只上报固定类别和结果 |
 | Nginx | 请求总耗时、上游耗时、连接耗时、状态、字节数 | 有上游响应时用 `requestId`，静态资源另按类别和时间排查 |
 | 应用 | 每条 HTTP 请求、结果、用时、中断和依赖数量 | `requestId` 同时是服务端 Trace ID |
@@ -44,3 +44,11 @@ ssh njuredcross "timeout -k 2 10 journalctl --namespace=njuredcross -u njuredcro
 可选会级时长失败仍仅设置 `hoursUnavailable`，观测操作为 `member-hours`。
 各阶段使用统一依赖观测，操作名为 `member-<阶段>`，不记录账号、学号、原始异常或业务内容。
 浏览器网络面板中的响应 `code` 与响应头 `X-Request-ID` 可用于定位阶段及关联服务端观测。
+
+## 影像库预览
+
+`GET /api/public/media/:id/preview` 复用统一 HTTP、NJU Box 下载和 `content/generate` 图片处理观测。
+浏览器通过 `requestBlob` 记录 `binary` 阶段（含 `clientTrace` 与 `X-Request-ID`），
+另在固定 `/photos` 路由记录 `image` 阶段，覆盖预览传输和解码完成、失败、12 秒超时及关闭取消。
+图片阶段不包含文件名、云盘路径、原图链接、照片 ID 或账号信息。
+缩略图仅对真实 404 做负缓存，网络故障与超时保留失败语义并允许后续重试。

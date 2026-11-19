@@ -484,7 +484,7 @@ test('缩略图解析：Box 里没有这张缩略图时记负缓存，不反复�
   };
   const download = async () => {
     attempts += 1;
-    throw new Error('njubox_not_found');
+    throw Object.assign(new Error('njubox_not_found'), { code: 'njubox_not_found', statusCode: 404 });
   };
   assert.equal((await resolveThumb(ctx, { ref: 'U1' }, 'PHO-2', { download })).status, 404);
   assert.equal((await resolveThumb(ctx, { ref: 'U1' }, 'PHO-2', { download })).status, 404);

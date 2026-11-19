@@ -48,6 +48,15 @@ test('client report allowlist ignores forged secrets, validates shape and distin
  for(const body of [null,[],{}, {outcome:'timeout',durationMs:Infinity},{outcome:'timeout',durationMs:120001}])assert.equal(o.client(body),false);
  assert.equal(logs[0].source,'untrusted_client');assert.ok(!JSON.stringify(logs).includes('SECRET'));
 });
+test('photo preview image timings retain fixed phase and remove private identifiers', () => {
+ const logs=[];const observer=createObserver({sink:record=>logs.push(record)});
+ for(const outcome of ['success','http','timeout','aborted']){
+  assert.equal(observer.client({phase:'image',route:'/photos?filename=SECRET',durationMs:1200,outcome,filename:'SECRET'}),true);
+ }
+ assert.equal(logs.every(record=>record.phase==='image'&&record.route==='/photos'),true);
+ assert.equal(telemetryRoute('/api/public/media/SECRET/preview?filename=SECRET'),'/api/public/media/:id/preview');
+ assert.ok(!JSON.stringify(logs).includes('SECRET'));
+});
 test('browser reporter uses sanitized payload, suppresses recursion and caps rate',()=>{
  const sent=[];const send=(path,opts)=>{sent.push({path,body:JSON.parse(opts.body)});return Promise.resolve();};let time=60000;
  const opts={send,now:()=>time,random:()=>1};
