@@ -16,6 +16,7 @@ import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { openBlessingDrawer } from '../blessing-drawer.js';
 import { buildUnoCard } from '../uno-card.js';
+import { buildClimateCard } from '../climate-card.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel, openReceivedBlessingDetail } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS as CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS as MONTH_OPTIONS, birthdayDayOptions as dayOptions, bindBirthdayMonthDay, BIRTHDAY_CALENDAR_OPTIONS, BIRTHDAY_CALENDAR_HINT, birthdayLabel } from '../warmth-options.js';
 
@@ -312,7 +313,7 @@ export default async function warmthPage() {
           h('p', { text: program.summary }),
           h('p', { text: `会用到的信息：${program.collects.join('；')}。` }),
           h('ul', null, ...program.never.map((item) => h('li', { text: item })))));
-    }), buildUnoCard());
+    }), buildUnoCard(), buildClimateCard());
   }
 
   function buildBlessingEntry() {

@@ -15,6 +15,7 @@ import { button, field, checkbox, notice, receipt, badge, segmented, timeline, r
 import { notify, reportError } from '../../core/toast.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import { buildUnoCard } from '../uno-card.js';
+import { buildClimateCard } from '../climate-card.js';
 
 const PROGRAMS = [
   {
@@ -210,6 +211,7 @@ export default async function warmthPage() {
       ),
     ),
     buildUnoCard(),
+    buildClimateCard(),
   );
   stagger(cards);
 

@@ -1,0 +1,4 @@
+/* 气候哨兵入口卡：复用社区卡骨架，仅补本游戏的视觉点缀。 */
+.community-program--climate { --program-accent: #2f8f5b; }
+.community-art--climate { display: grid; place-items: center; background: radial-gradient(circle at 50% 40%, #e7f3eb, #cfe4d7); }
+.community-art--climate img { width: 66px; height: 84px; object-fit: contain; filter: drop-shadow(0 4px 8px rgba(32,81,58,.18)); }
