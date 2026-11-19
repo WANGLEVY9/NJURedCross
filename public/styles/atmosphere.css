@@ -27,10 +27,10 @@
 .home-paper__edge { fill:color-mix(in srgb,var(--hero-ink) 8%,var(--art-canvas)); }
 .home-paper__front { fill:var(--art-canvas); }
 /* Directory and publishing scenes expose only margins around live controls. */
-[data-art-scene="directory"] .page-art__plane { width:88px; height:100%; opacity:.65; }
+[data-art-scene="directory"] .page-art__plane { display:none; }
 [data-art-scene="directory"] .page-art__ornament { width:120px; right:32%; top:-70px; }
 [data-art-scene="editorial"] { background:var(--art-surface); }
-[data-art-scene="editorial"] .page-art__plane { width:32%; opacity:.6; }
+[data-art-scene="editorial"] .page-art__plane { display:none; }
 [data-art-scene="editorial"] .page-art__ornament { right:30%; top:-110px; }
 /* Correspondence remains warm; private and scheduling workspaces stay quiet. */
 [data-art-scene="letter"] .page-art { inset:-24px -24px -16px; }

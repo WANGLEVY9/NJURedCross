@@ -2,16 +2,10 @@ import { h, icon } from '../core/dom.js';
 import { plazaHero } from './plaza-hero.js';
 import { activityEmblem } from './activity-emblem.js';
 import { ACTIVITY_CATEGORY_OPTIONS } from '../shared/activity-taxonomy.js';
+import { EVENTS_SLIDES } from './plaza-slides.js';
 
 const HERO_COPY = { title: '把善意，化作行动', motto: '人道 · 博爱 · 奉献', description: '从校园出发，\n让每一份热情都有回应。' };
-export const EVENT_SLIDES = [
-  { image: '/assets/events-carousel/activity-01.webp', alt: '南京大学红十字会青春风采展志愿者合影', position: '50% 60%' },
-  { image: '/assets/events-carousel/activity-02.webp', alt: '红十字会成员手持会旗与项目奖牌合影', position: '50% 58%' },
-  { image: '/assets/events-carousel/activity-03.webp', alt: '红十字志愿者在教室内手持会旗合影', position: '50% 60%' },
-  { image: '/assets/events-carousel/activity-04.webp', alt: '生命的信任宣讲会南京大学篇现场合影', position: '50% 70%' },
-  { image: '/assets/events-carousel/activity-05.webp', alt: '南京大学博爱青春服务队活动合影', position: '50% 68%' },
-  { image: '/assets/events-carousel/activity-06.webp', alt: '红十字青年交流活动现场合影', position: '50% 65%' },
-];
+export const EVENT_SLIDES = EVENTS_SLIDES;
 
 export function eventsHero({ slides = EVENT_SLIDES } = {}) {
   return plazaHero({

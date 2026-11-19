@@ -72,6 +72,7 @@
 [data-plaza-hero] img[data-hero-entering] {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; object-position: var(--hero-position, center);
+  background: var(--plaza-paper, #fcf9f5);
   opacity: 0; transition: opacity var(--dur-crossfade) var(--ease-out);
 }
 [data-plaza-hero] img[data-hero-entering].is-visible { opacity: 1; }
@@ -92,8 +93,8 @@
    still win when they load — the CSS cascade order is unchanged.
    -------------------------------------------------------------------------- */
 .events-hero { position: relative; isolation: isolate; display: flex; align-items: center; min-height: 440px; overflow: hidden; }
-.events-hero__art { position: absolute; inset: 0 0 0 30%; z-index: -2; overflow: hidden; }
-.events-hero__art > img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: var(--hero-position, center); }
+.events-hero__art { position: absolute; inset: 0 5% 0 48%; z-index: -2; overflow: hidden; background: var(--plaza-paper, #fcf9f5); }
+.events-hero__art > img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: var(--hero-position, center); background: var(--plaza-paper, #fcf9f5); }
 .events-hero__copy { position: relative; z-index: 2; width: 60%; padding: 55px 50px; pointer-events: none; }
 .events-hero__copy > :is(a, button) { pointer-events: auto; }
 .events-hero__eyebrow { font-size: 14px; letter-spacing: .18em; margin: 0 0 16px; color: var(--plaza-red, #b50b30); }
@@ -106,8 +107,8 @@
 .events-hero::after { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
   background: linear-gradient(90deg, var(--plaza-paper, #fcf9f5) 0%, #fcf9f5e8 17%, #fcf9f566 29%, #fcf9f500 44%); }
 .events-hero__arrow { position: absolute; top: 49%; z-index: 3; }
-.events-hero__arrow--prev { left: 43%; }
-.events-hero__arrow--next { right: 16px; }
+.events-hero__arrow--prev { left: 44%; }
+.events-hero__arrow--next { right: 10px; }
 .events-hero__controls { position: absolute; bottom: 18px; right: 25px; z-index: 3; display: flex; align-items: center; gap: 16px; }
 .events-hero__missing { position: absolute; left: 16px; bottom: 16px; z-index: 1; }
 /* warmth.js renders the cards in .community-page, outside the centred
@@ -142,7 +143,7 @@
 @media (max-width: 640px) {
   .events-hero { min-height: 470px; align-items: flex-end; }
   .events-hero__art { inset: 0 0 36% 0; }
-  .events-hero::after { background: linear-gradient(0deg, var(--plaza-paper, #fcf9f5) 20%, #fcf9f5fa 38%, #fcf9f500 85%); }
+  .events-hero::after { background: linear-gradient(90deg, var(--plaza-paper, #fcf9f5) 0%, #fcf9f5e8 17%, #fcf9f566 29%, #fcf9f500 44%); }
   .events-hero__copy { width: 100%; padding: 185px 24px 50px; }
   .events-hero h1 { font-size: 36px; }
   .events-hero__eyebrow { font-size: 11px; margin-bottom: 10px; }
