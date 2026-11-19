@@ -48,7 +48,8 @@ test('activity write is reviewer only and version guarded; applicant list omits 
   const s = await setup();
   assert.throws(() => s.summaries.saveActivity(owner, activityBody), /权限/);
   const publicEvent = s.summaries.listActivities(owner).activities[0];
-  assert.deepEqual(Object.keys(publicEvent).sort(), ['campus', 'category', 'date', 'id', 'location', 'name']);
+  // 时段不是财务字段，申请人也要靠它区分同一天的不同班次。
+  assert.deepEqual(Object.keys(publicEvent).sort(), ['campus', 'category', 'date', 'id', 'location', 'name', 'timeSlot']);
   const grouped = await s.summaries.saveActivity(admin, { ...activityBody, revision: 1, campus: '苏州', category: '生命中心' });
   assert.equal(s.summaries.listActivities(owner).activities[0].campus, '苏州');
   assert.equal(s.summaries.listActivities(owner).activities[0].category, '生命中心');

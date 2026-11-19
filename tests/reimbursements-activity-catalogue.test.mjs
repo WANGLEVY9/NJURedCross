@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { reimbursementActivityCatalogue, retireSupersededActivities } from '../lib/reimbursements/activity-catalogue.js';
+import { reimbursementActivityCatalogue, retireSupersededActivities, activityTimeSlot } from '../lib/reimbursements/activity-catalogue.js';
 
 const approved = () => true;
 const row = (id, name, group, extra = {}) => ({ _id: id, '活动名称': name, '状态': '已结束', '活动类别': '公益活动', '组织类别': '生命中心',
@@ -40,6 +40,18 @@ test('an activity that merely left the catalogue keeps its place, so pausing reg
     date: '2026-11-20', catalogSource: true }]]);
   retireSupersededActivities(activities, live);
   assert.deepEqual([...activities.keys()], ['workflow:paused-blood']);
+});
+
+test('the shift time is taken literally so a +08:00 string is never shifted twice', () => {
+  assert.equal(activityTimeSlot('2026-11-19T10:00:00+08:00'), '10:00');
+  assert.equal(activityTimeSlot('2026-11-19T13:00:00+08:00'), '13:00');
+  assert.equal(activityTimeSlot('2026-11-19 09:30'), '09:30');
+  // 只登记了日期，或排班表用零点表示「时间待定」，都不该在下拉里显示 00:00。
+  assert.equal(activityTimeSlot('2026-11-19'), '');
+  assert.equal(activityTimeSlot('2026-11-11T00:00:00+08:00'), '');
+  assert.equal(activityTimeSlot(''), '');
+  assert.equal(activityTimeSlot(null), '');
+  assert.equal(activityTimeSlot('2026-11-19T25:70:00+08:00'), '');
 });
 
 test('same-name sessions on one day stay separate, because blood shifts share a name but not a slot', () => {
