@@ -8,10 +8,18 @@ export const coverageArguments = [
  '--test-coverage-branches=80', '--test-coverage-functions=90', 'tests/*.test.mjs',
 ];
 
+/**
+ * Node 24 can end a fully green suite with an unusable coverage report in two shapes:
+ *  - `failed to parse coverage file <path>.json: <reason>`（写了一半的 JSON）
+ *  - `coverage file is empty: <path>.json`（子进程被回收，文件 0 字节）
+ * 两者都只影响报告，不影响测试结论，因此可以原样重跑一次。
+ */
+const CORRUPT_REPORT=/Warning: Could not report code coverage[\s\S]*?(?:failed to parse coverage file[^\r\n]*\.json:|coverage file is empty[^\r\n]*\.json)/;
+
 /** Only a corrupt report after a completed, successful test suite may be retried. */
 export function corruptCoverageAfterPassingTests({code,signal,output}) {
  return code===1&&!signal&&
-  /Warning: Could not report code coverage[\s\S]*failed to parse coverage file[^\r\n]*\.json:/.test(output)&&
+  CORRUPT_REPORT.test(output)&&
   /^\s*(?:ℹ |# )?tests [1-9]\d*\s*$/m.test(output)&&
   /^\s*(?:ℹ |# )?pass [1-9]\d*\s*$/m.test(output)&&
   /^\s*(?:ℹ |# )?fail 0\s*$/m.test(output)&&
