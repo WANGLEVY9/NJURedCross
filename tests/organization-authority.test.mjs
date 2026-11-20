@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import {organizationAuthority,assertRecordAuthority} from '../lib/events/organization-authority.js';
 import {workflowRoutes} from '../lib/events/workflow-api.js';
 import {createWorkflow} from '../lib/events/workflow.js';
+import {apiFailure} from '../lib/http/errors.js';
+import {projectEventSessionAccess} from '../lib/events/event-session-access.js';
+import {visibleConsoleSections} from '../public/app/console/navigation.js';
 
 const account={accountId:'director',username:'director',role:'member',emailVerified:true,studentId:'999990001',realName:'合成主任'};
 const events=[{_id:'a',活动ID:'WF-a',组织类别:'生命中心',报名页配置:'{}'},{_id:'b',活动ID:'WF-b',组织类别:'博爱中心',报名页配置:'{}'}];
@@ -64,7 +67,7 @@ test('workflow HTTP route applies scope before mutations and filters catalogue r
 });
 
 test('console administrators can browse cross-scope information without receiving participant data or write access',async()=>{
- const admin={...account,role:'platform_admin'};const rows=events.map(row=>({...row,活动名称:row._id,工作内容:'合成活动工作',服务时长:2,通知草稿:'合成通知',负责人账号ID:'private-owner',rosterToken:'private-token',报名页配置:JSON.stringify({center:row.组织类别,region:'南京活动',approval:{reviewerIds:['private-reviewer']},coOwners:['private-co-owner']})}));
+ const admin={...account,role:'platform_admin',permissions:['events']};const rows=events.map(row=>({...row,活动名称:row._id,工作内容:'合成活动工作',服务时长:2,通知草稿:'合成通知',负责人账号ID:'private-owner',rosterToken:'private-token',报名页配置:JSON.stringify({center:row.组织类别,region:'南京活动',approval:{reviewerIds:['private-reviewer']},coOwners:['private-co-owner']})}));
  const authority=await organizationAuthority(admin,base,rows,{workspaceRoster:{complete:true,policy:'two-stage',rows:[]}});assert.equal(authority.canEnter,false);
  let writes=0;const ctx={requirePortalSession:()=>admin,getEventAuthority:async()=>authority,requireCsrf:()=>true,json:(_res,status,payload)=>({status,...payload}),getWorkflow:async()=>({...createWorkflow({listRows:()=>assert.fail('authority snapshot should supply metadata')}),catalog:async()=>({events:rows}),confirm:async()=>{writes++;}}),actor:()=>admin.accountId};
  const read=path=>workflowRoutes({method:'GET',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow'+path),ctx);
@@ -74,6 +77,38 @@ test('console administrators can browse cross-scope information without receivin
  assert.equal((await read('/events/b/detail')).status,403);
  const denied=await workflowRoutes({method:'POST',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/registrations/r/confirm'),ctx);assert.equal(denied.status,403);assert.equal(writes,0);
  const memberCtx={...ctx,getEventAuthority:async()=>({...authority,account:{...admin,role:'member'}})};const member=await workflowRoutes({method:'GET',headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow/catalog'),memberCtx);assert.equal(member.status,403);
+});
+
+test('an empty admin grant keeps shared catalogue access but cannot use stale activity roles',async()=>{
+ const admin={...account,role:'platform_admin',permissions:''};
+ const [owned]=events;
+ const rows=[{...owned,负责人账号ID:admin.accountId}];
+ const roster={complete:true,rows:[{accountId:admin.accountId,region:'nanjing',role:'director',active:true,categories:['生命中心']}]};
+ const fresh=permissions=>organizationAuthority({...admin,permissions},{query:()=>assert.fail('must not look up legacy membership')},rows,{workspaceRoster:roster});
+ const denied=await fresh(admin.permissions);
+ assert.equal(denied.canEnter,false);
+ const user=projectEventSessionAccess({user:{role:admin.role,permissions:[],consoleAccess:true}},denied).user;
+ assert.ok(visibleConsoleSections(scope=>user.permissions.includes(scope)).every(section=>!section.scope||section.sharedEntry));
+ assert.equal(user.permissions.includes('events'),false);
+ const ctx={requirePortalSession:()=>admin,getEventAuthority:async()=>denied,requireCsrf:()=>true,actor:()=>admin.accountId,
+  getWorkflow:async()=>({catalog:async()=>({events:rows}),confirm:async()=>assert.fail('denied action reached a write')}),
+  json:(_res,status,payload)=>({status,...payload})};
+ const call=(path,method='GET')=>workflowRoutes({method,headers:{}},{},new URL('https://test.invalid/api/volunteer/workflow'+path),ctx);
+ assert.equal((await call('/catalog')).events[0].readOnly,true);
+ const blocked=await call('/registrations/record/confirm','POST');
+ assert.equal(blocked.status,403);
+ assert.equal(blocked.requiredScope,'events');
+ assert.equal(blocked.requiredRole,undefined);
+ const allowed=await fresh('events');
+ assert.equal(allowed.canEnter,true);
+ allowed.assertEvent(owned._id);
+ assert.throws(()=>allowed.assertCreate({center:'博爱中心'}),error=>{
+  const failure=apiFailure(error);
+  assert.equal(failure.status,403);
+  assert.equal(failure.payload.requiredRole,'activity_creator');
+  assert.equal(failure.payload.requiredScope,undefined);
+  return true;
+ });
 });
 
 test('creation scopes preserve fresh center authority until migrated but never restore explicitly revoked accounts',async()=>{
@@ -87,7 +122,7 @@ test('creation scopes preserve fresh center authority until migrated but never r
 test('configured regional directors cannot create across regions while existing global authority remains unchanged',async()=>{
  const rows=[{accountId:'nanjing-director',region:'nanjing',role:'director',active:true,categories:['生命中心']},{accountId:'suzhou-director',region:'suzhou',role:'director',active:true,categories:['生命中心']},{accountId:'chair',region:'nanjing',role:'global',active:true,categories:['生命中心']},{accountId:'chair',region:'suzhou',role:'global',active:true,categories:['生命中心']}];
  for(const [actor,allowed,foreign]of [['nanjing-director','nanjing','suzhou'],['suzhou-director','suzhou','nanjing']]){
-  const authority=await organizationAuthority({...account,accountId:actor,role:'platform_admin'},base,[],{workspaceRoster:{complete:true,rows}});
+  const authority=await organizationAuthority({...account,accountId:actor,role:'platform_admin',permissions:['events']},base,[],{workspaceRoster:{complete:true,rows}});
   authority.assertCreate({center:'生命中心',region:allowed});assert.throws(()=>authority.assertCreate({center:'生命中心',region:foreign}),{statusCode:403});assert.ok(authority.creationScopes.every(scope=>scope.region===allowed));
  }
  const chairman=await organizationAuthority({...account,accountId:'chair',role:'super_admin'},base,[],{workspaceRoster:{complete:true,rows}});
