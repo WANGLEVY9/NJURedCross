@@ -4134,7 +4134,7 @@ function requireConsoleAccess(req, res, requiredScope = null) {
     return null;
   }
   if (!consoleRoles.has(session.role)) {
-    json(res, 403, { ok: false, code: 'console_forbidden', requiredRole: 'console_admin', message: '此操作需要管理平台管理员或超级管理员身份。' });
+    json(res, 403, { ok: false, code: 'console_forbidden', requiredRole: 'console_admin', requiredRoles: ['platform_admin', 'super_admin'], message: '此操作需要管理平台管理员或超级管理员身份。' });
     return null;
   }
   const account = accountsByUsername.get(session.username);

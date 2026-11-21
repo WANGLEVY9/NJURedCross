@@ -26,11 +26,11 @@ test('the role argument defaults to platform_admin, the least-privilege path', (
 });
 
 test('only blank administrator scopes can opt into the legacy full grant', () => {
-  for (const value of ['', null, '  ', []]) {
+  for (const value of ['', undefined, null, '  ']) {
     assert.deepEqual(normalizePermissions(value, 'platform_admin', null, { legacyEmptyAdminPermissions: false }), []);
     assert.deepEqual(normalizePermissions(value, 'platform_admin', null, { legacyEmptyAdminPermissions: true }), ALL);
   }
-  for (const value of ['none', ',', 'unknown']) {
+  for (const value of ['none', ',', '，； ; ', 'unknown', [], [null], [''], ['not-a-scope'], false, {}]) {
     assert.deepEqual(normalizePermissions(value, 'platform_admin', null, { legacyEmptyAdminPermissions: true }), []);
   }
 });

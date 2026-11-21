@@ -14,7 +14,7 @@
 | 403 返回 | 排查方式 |
 | --- | --- |
 | `permission_denied` + `requiredScope` | 核对「平台账号表」的模块列。例如缺 `events` 时，补权限范围后再检查活动角色。 |
-| `console_forbidden` + `requiredRole: console_admin` | 此接口需要管理员身份。公众端的正常使用不受影响。 |
+| `console_forbidden` | 响应的 `requiredRoles` 列出 `platform_admin` 和 `super_admin`。 |
 | `event_scope_forbidden` 或地区审批错误 + `requiredRole` | 核对该操作的活动角色、地区、类别、负责人或指定审批名单。可读目录不代表能查看参与人资料或修改活动。 |
 
 邹偲慧的 N5.1 标签保存和 N5.2 历史编辑先走上述服务端授权。历史编辑范围由 N5.2 确认；现有只读权限不变成写权限。老活动缺标签仍可读，标签也不能改变旧批准摘要。现有摘要包含「报名页配置」内容，新增配置字段时要校验历史批准值仍能比对。
