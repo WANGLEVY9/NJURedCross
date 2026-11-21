@@ -18,8 +18,8 @@ export function isSignedIn() {
 }
 
 /**
- * 按用户决定暂沿用 memberCode。现有后端在邮箱验证后即发码，不能证明正式会员资格。
- * 初步开发结束后与负责人讨论资格口径；此处和本地服务保持同一临时规则。
+ * memberCode 只表示已通过校园邮箱验证的平台成员，不单独证明线下正式会员资格。
+ * 与服务端身份投影保持同一口径，不在此处自行扩大权限。
  */
 export function hasRedCrossMembership() {
   return Boolean(getSessionState().user?.memberCode);

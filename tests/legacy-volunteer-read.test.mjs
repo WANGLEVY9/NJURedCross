@@ -9,7 +9,7 @@ import {registrationReadiness} from '../lib/events/volunteer-workflow.js';
 const source=await readFile(new URL('../server.js',import.meta.url),'utf8');
 const box={displayRead,loadAllRows:(client,table,options)=>readPagedRows(client,table,{requireComplete:true,...options})};
 vm.createContext(box);
-vm.runInContext(source.slice(source.indexOf('async function volunteerRows('),source.indexOf('function volunteerStatus(')),box);
+vm.runInContext(source.slice(source.indexOf('async function volunteerRows('),source.indexOf('async function getVolunteerOverview(')),box);
 
 test('legacy overview reads beyond 5000, preserves linked IDs and coalesces display requests',async()=>{
  clearDisplayReads();

@@ -8,7 +8,6 @@
 import { h } from '../core/dom.js';
 import { openModal } from '../ui/overlay.js';
 import { button, definitionList, field, notice, runWithLoading, badge } from '../ui/primitives.js';
-import * as fmt from '../core/format.js';
 import { publicApi, ApiError } from '../core/api.js';
 import { notify, reportError } from '../core/toast.js';
 import { shake } from '../core/motion.js';

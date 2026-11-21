@@ -5,7 +5,7 @@ import {
   finishDay, nightAction, dawn, project, nightStepInfo, checkVictory, RESILIENCE_START,
   setPartner, firstNightAction, endFirstNight, declareEvacuate,
 } from '../public/app/games/climate/engine.js';
-import { ROLES, ROLE_IDS, PLAYER_SETUP, SCRIPTS, WEATHER, INHERIT_ORDER, NIGHT_ORDER } from '../public/app/games/climate/data.js';
+import { ROLES, ROLE_IDS, PLAYER_SETUP, INHERIT_ORDER, NIGHT_ORDER } from '../public/app/games/climate/data.js';
 
 test('角色数据：24 个角色 / 四类齐全 / 每角色字段完整', () => {
   assert.equal(ROLE_IDS.length, 24);

@@ -12,7 +12,7 @@ import { createSkillsSection } from './me-skills.js';
 
 import { h, clear } from '../../core/dom.js';
 import { request, portal, publicApi, morningApi, logout, ApiError, getAccountProfile, updateAccountProfile } from '../../core/api.js';
-import { confirmAction, openModal, openDrawer } from '../../ui/overlay.js';
+import { confirmAction, openDrawer } from '../../ui/overlay.js';
 import { buildWrittenBlessingsPanel, buildReceivedBlessingsPanel } from '../warmth-panels.js';
 import { BIRTHDAY_CAMPUS_OPTIONS, BIRTHDAY_MONTH_OPTIONS, birthdayDayOptions, bindBirthdayMonthDay, BIRTHDAY_CALENDAR_OPTIONS, BIRTHDAY_CALENDAR_HINT, birthdayLabel } from '../warmth-options.js';
 import { asyncRegion } from '../../console/lib.js';

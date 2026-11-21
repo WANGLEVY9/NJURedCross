@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import { MORNING_COMMENT_TABLE, morningCommentRoutes, toMorningCommentView } from '../lib/morning/comments.js';
-import { STATE_SCHEMA } from '../lib/production-schema.js';
-import { MORNING_SCHEMA } from '../lib/morning/schema.js';
 import { MORNING_BLACKLIST_TABLE, MORNING_COMMENT_REPORT_STATUS } from '../lib/morning/shared.js';
 
 

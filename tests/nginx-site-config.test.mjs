@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { fileURLToPath } from 'node:url';
 
 const config = await readFile(new URL('../ops/nginx/njuredcross-site.conf', import.meta.url), 'utf8');
 

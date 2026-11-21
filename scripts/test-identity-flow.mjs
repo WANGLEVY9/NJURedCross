@@ -4,7 +4,7 @@ import vm from 'node:vm';
 import { readFile } from 'node:fs/promises';
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { BINDING_TABLE, identityRoutes, withIdentityAccountLock } from '../lib/identity/api.js';
-import { ACCOUNT_TABLE, CODE_TABLE, accountFromRow, canAuthenticate, credentialVersion, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, generateMemberCode, listIdentityRows } from '../lib/identity/store.js';
+import { ACCOUNT_TABLE, CODE_TABLE, accountFromRow, canAuthenticate, credentialVersion, findAccountByLogin, resolveSignInAccount, hashPassword, verifyPassword, listIdentityRows } from '../lib/identity/store.js';
 import { passwordPolicyError } from '../public/app/core/password-policy.js';
 import { safePortalNext } from '../public/app/portal/auth-flow.js';
 import { verifyPasswordAsync } from '../lib/identity/password-async.js';

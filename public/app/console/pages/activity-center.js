@@ -11,7 +11,6 @@ import {searchField} from '../../ui/search-field.js';
 import {peoplePicker} from '../../ui/people-picker.js';
 import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {activityWindow} from '../../shared/activity-window.js';
-import {activityPublicationChoice} from './activity-publication-choice.js';
 import {configureProjectPositions} from './activity-positions.js';
 import {activityCreateSteps} from './activity-create-steps.js';
 import {continueActivityCreation} from './activity-create-wizard.js';

@@ -47,7 +47,6 @@ import { morningRevisionRoutes } from './lib/morning/revisions.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
 import { createWarmthCapabilities } from './lib/community/capabilities.js';
-import { inspectMorningSchema } from './lib/morning/rollout.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
 import { updateRows, deleteRows } from './lib/http/batch-write.js';
 import { validateAttendancePhoto } from './lib/events/photo-validation.js';
@@ -70,7 +69,7 @@ import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
 import { withDisplayReads, withRequestReads, withoutReadContext, isDisplayRead, isDisplayRequest, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
 import { createReadCache } from './lib/http/read-cache.js';
-import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from './lib/cache/write-tracker.js';
+import { createWriteJournal, withWriteJournal, trackClient } from './lib/cache/write-tracker.js';
 import { createIdleGate } from './lib/background/idle-gate.js';
 import { createJobQueue } from './lib/queue/index.js';
 import { createPdfAssets } from './lib/http/pdf-assets.js';
@@ -144,7 +143,7 @@ import {
   readAgentBusinessContext,
 } from './lib/agent/business-context.js';
 import { createFileAgentTaskStore } from './lib/agent/task-store.js';
-import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor, attachmentFromRow, ATTACHMENT_STATUS, ATTACHMENT_PROVIDER_NJUBOX } from './lib/attachment/store.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor, attachmentFromRow, ATTACHMENT_STATUS, ATTACHMENT_PROVIDER_NJUBOX } from './lib/attachment/store.js';
 import { downloadBuffer as downloadBoxBuffer } from './lib/attachment/box.js';
 import { createSessionRevocations } from './lib/identity/session-revocations.js';
 import {
@@ -181,7 +180,6 @@ import { materialApplicationPlan } from './lib/materials/application-plan.js';
 import { openMailDeliveryStore } from './lib/mail/delivery-store.js';
 import { openMailRetryStore } from './lib/mail/retry-store.js';
 import {
-  hashPasswordAsync as hashPassword,
   verifyPasswordAsync as verifyPassword,
 } from './lib/identity/password-async.js';
 import { createAuditWriteHealth } from './lib/audit/write-health.js';
@@ -1001,7 +999,7 @@ async function getWorkspaceSubmissions(session,authority){
   const actor=businessAccountRef(session),drafts=await getWorkspaceDrafts(session,authority),bridge=await getWorkspaceBridge();
   return createWorkspaceSubmissions({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,drafts,authorize:workspaceDraftAuthorize(actor,authority),...bridge});
 }
-async function getWorkspaceProfileData(accountId,session,authority){
+async function getWorkspaceProfileData(accountId){
   return readWorkspaceProfileData({
     identityBase:await getIdentityBase(),
     volunteerBase:await getVolunteerBase(),
@@ -3035,12 +3033,6 @@ async function volunteerRows(client, tableName) {
   return displayRead(client, JSON.stringify(['volunteer-overview', tableName]),
     () => loadAllRows(client, tableName, { pageSize: 1000, maxRows: 100_000 }),
     30_000, [tableName]);
-}
-function volunteerStatus(value) {
-  const text = String(value || '').trim();
-  if (/通过|成功|已完成|已核对|已解决/.test(text)) return 'success';
-  if (/拒绝|失败|未通过|问题/.test(text)) return 'danger';
-  return 'warning';
 }
 async function getVolunteerOverview(client, { notificationsOnly = false } = {}) {
   const [registrations, checkins, approvals, profiles, hours] = await Promise.all([
@@ -5980,7 +5972,7 @@ if (url.pathname.startsWith('/api/public/')) {
 
     const qrMatch = url.pathname.match(/^\/api\/materials\/inventory\/([^/]+)\/qr$/);
     if (qrMatch && req.method === 'GET') {
-      const [inventory, configs] = await Promise.all([listAllRows(client, inventoryTable), listAllRows(client, '物资配置表')]);
+      const inventory = await listAllRows(client, inventoryTable);
       const row = inventory.find((item) => item._id === decodeURIComponent(qrMatch[1]));
       if (!row) return json(res, 404, { ok: false, message: 'Inventory item not found' });
       const svg = await QRCode.toString(materialCode(row), { type: 'svg', errorCorrectionLevel: 'M', margin: 1, color: { dark: '#520d2e', light: '#fffdfb' } });

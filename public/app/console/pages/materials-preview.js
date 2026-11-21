@@ -10,7 +10,7 @@ import { consoleApi, ApiError } from '../../core/api.js';
 import { shake, prefersReducedMotion } from '../../core/motion.js';
 import { openDrawer, confirmAction } from '../../ui/overlay.js';
 import { dataTable } from '../../ui/table.js';
-import { asyncRegion, region, reloadAction } from '../lib.js';
+import { asyncRegion, reloadAction } from '../lib.js';
 import {
   pageHead, metric, metricRow, badge, button, field, notice, receipt, impactPreview,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, statusIndicator,
