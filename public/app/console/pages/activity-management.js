@@ -88,7 +88,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   if(savedState)Object.assign(filters,savedState.filters,{campus:[...savedState.filters.campus]});
   const selected=new Set(),body=h('div',{class:'activity-roster',data:{editing:String(editing)}}),records=h('div',{class:'activity-roster-records'}),selection=h('div',{class:'activity-roster-selection'});
   const rows=registrations.map(r=>({...rosterRow(event,r),participant:registrationParticipant(r,directory.find(p=>p.accountId===r['账号ID'])||{})}));
-  const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','岗位 / 日期','校区','急救证','核心成员','报名结果 / 邮件','操作'],key:'registration-'+event._id});
+  const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','岗位 / 日期','校区','急救证','核心成员','报名结果 / 邮件','操作'],key:'registration-'+event._id,defaultHidden:['部门']});
   const positions=createPositionLabels({event,events,registrations});
   if(!savedState&&!rows.some(r=>r['报名状态']==='待筛选'))filters.status='';
   const eligible=r=>editing&&canDecideRegistration(r);

@@ -1,13 +1,17 @@
 import assert from 'node:assert/strict';
 import { CONSOLE_PERMISSION_SCOPES, normalizePermissions, hasPermission, isAccountActive, scopeForConsolePath } from '../lib/permissions.js';
 
-assert.deepEqual(normalizePermissions('', 'platform_admin'), CONSOLE_PERMISSION_SCOPES);
+const strict = { legacyEmptyAdminPermissions: false };
+const legacy = { legacyEmptyAdminPermissions: true };
+assert.deepEqual(normalizePermissions('', 'platform_admin', null, strict), []);
+assert.deepEqual(normalizePermissions('', 'platform_admin', null, legacy), CONSOLE_PERMISSION_SCOPES);
 assert.deepEqual(normalizePermissions('materials，events materials unknown', 'platform_admin'), ['materials', 'events']);
 assert.deepEqual(normalizePermissions('materials', 'member'), []);
 assert.deepEqual(normalizePermissions('event_typo', 'platform_admin'), []);
 assert.deepEqual(normalizePermissions(['unknown'], 'platform_admin'), []);
 assert.equal(hasPermission({ role: 'platform_admin', permissions: ['unknown'] }, 'accounts'), false);
-assert.deepEqual(normalizePermissions([' ', ''], 'platform_admin'), CONSOLE_PERMISSION_SCOPES);
+assert.deepEqual(normalizePermissions([' ', ''], 'platform_admin', null, strict), []);
+assert.deepEqual(normalizePermissions('none', 'platform_admin', null, legacy), []);
 assert.equal(hasPermission({ role: 'platform_admin', permissions: ['materials'] }, 'materials'), true);
 assert.equal(hasPermission({ role: 'platform_admin', permissions: ['materials'] }, 'events'), false);
 assert.equal(isAccountActive({ status: '启用' }), true);
@@ -28,4 +32,4 @@ assert.deepEqual(normalizePermissions(['unknown'], 'super_admin'), CONSOLE_PERMI
 assert.equal(hasPermission({role:'super_admin',permissions:[]},'accounts'),true);
 assert.equal(hasPermission({role:'super_admin',permissions:['events']},'settings'),true);
 assert.deepEqual(normalizePermissions('', 'unknown_role'), []);
-console.log('PASS 权限词表、账号状态与 API 路由映射: 26/26');
+console.log('PASS 权限默认值、兼容开关、账号状态与 API 路由映射');

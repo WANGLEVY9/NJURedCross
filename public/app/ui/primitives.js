@@ -451,23 +451,26 @@ export function toggle({ label, checked = false, onChange = null } = {}) {
     : control;
 }
 
-export function segmented({ items, value, onChange, ariaLabel = '视图切换', describedBy = null, role = 'tablist' } = {}) {
+export function segmented({ items, value, onChange, ariaLabel = '视图切换', describedBy = null, role = 'tablist', layout } = {}) {
   // 「选择一个选项」用 radiogroup/radio（无对应 tabpanel 时不要用 tablist/tab）
   const isRadioGroup = role === 'radiogroup';
-  const thumb = h('span', { class: 'segmented__thumb' });
+  const equal = layout === 'equal';
+  const thumb = h('span', { class: equal ? 'filter-segments__indicator' : 'segmented__thumb', aria:{hidden:'true'} });
   const buttons = items.map((item) =>
     h('button', {
       type: 'button',
       role: isRadioGroup ? 'radio' : 'tab',
-      text: item.label,
       data: { value: item.value },
-      aria: isRadioGroup ? { checked: String(item.value === value) } : { selected: String(item.value === value) },
+      aria: isRadioGroup ? { checked: String(item.value === value), ...(equal?{label:item.label}:{}) } : { selected: String(item.value === value) },
       attrs: { tabindex: String(item.value === value ? 0 : -1) },
-      on: { click: () => onChange?.(item.value) },
-    }),
+      on: { click: () => {if(equal)setValue(item.value);onChange?.(item.value);} },
+    }, item.compactLabel
+      ?[h('span',{class:'filter-segments__full-label',text:item.label}),h('span',{class:'filter-segments__compact-label',text:item.compactLabel,aria:{hidden:'true'}})]
+      :item.label),
   );
   const node = h('div', {
-    class: 'segmented',
+    class: equal ? 'filter-segments' : 'segmented',
+    ...(equal ? {vars:{'--choices':items.length}} : {}),
     attrs: { role, 'aria-label': ariaLabel, ...(describedBy ? { 'aria-describedby': describedBy } : {}) },
   }, thumb, ...buttons);
   if (!buttons.some((candidate) => candidate.getAttribute('tabindex') === '0')) {
@@ -477,9 +480,11 @@ export function segmented({ items, value, onChange, ariaLabel = '视图切换', 
   const position = () => {
     const active = buttons.find((b) => b.getAttribute('tabindex') === '0') || buttons[0];
     if (!active) return;
+    if(equal){setVars(node,{'--choice':buttons.indexOf(active)});return;}
     setVars(thumb, { '--thumb-x': `${active.offsetLeft - 2}px`, '--thumb-w': `${active.offsetWidth}px` });
   };
   const setValue = (next, { focus = false } = {}) => {
+    if(equal&&!items.some(item=>item.value===next))next=items[0]?.value;
     buttons.forEach((b) => {
       const selected = b.dataset.value === next;
       if (isRadioGroup) b.setAttribute('aria-checked', String(selected));
@@ -492,13 +497,16 @@ export function segmented({ items, value, onChange, ariaLabel = '视图切换', 
   node.reposition = position;
   requestAnimationFrame(position);
   node.setValue = setValue;
+  if(equal){setValue(value);node.addEventListener('pointerdown',()=>node.classList.remove('filter-segments--keyboard'));}
   node.addEventListener('keydown', (event) => {
-    if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'].includes(event.key)) return;
+    if (!['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp','Home','End'].includes(event.key)) return;
     event.preventDefault();
     const current = Math.max(0, buttons.findIndex((b) => b.getAttribute('tabindex') === '0'));
     const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1;
-    const next = buttons[(current + delta + buttons.length) % buttons.length];
+    const index=event.key==='Home'?0:event.key==='End'?buttons.length-1:(current + delta + buttons.length) % buttons.length;
+    const next = buttons[index];
     if (!next) return;
+    if(equal)node.classList.add('filter-segments--keyboard');
     next.click();
     setValue(next.dataset.value, { focus: true });
   });

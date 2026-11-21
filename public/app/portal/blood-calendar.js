@@ -1,7 +1,6 @@
 import {bloodSlotState} from './blood-status.js';
 import {h,clear,icon} from '../core/dom.js';
-import {button} from '../ui/primitives.js';
-import {filterSegments} from '../ui/filter-segments.js';
+import {button,segmented} from '../ui/primitives.js';
 import {BLOOD_POINTS,bloodSlotCompare} from '../shared/blood-points.js';
 import {openBloodWeekPicker} from './blood-week-picker.js';
 import {timeSlot} from '../core/format.js';
@@ -21,12 +20,12 @@ export function bloodCalendar(events,registrations,onSelect,initialId='',state={
  const wrapper=h('section',{class:'blood-calendar','aria-label':recurring?'组宣部值班周日历':scheduled?'排班活动周日历':'献血车周日历'});
  wrapper.classList.toggle('blood-calendar--duty',recurring);wrapper.classList.toggle('blood-calendar--schedule',scheduled);
  wrapper.dataset.density=state.density==='compact'?'compact':'comfortable';
- const density=filterSegments({ariaLabel:'日历显示密度',items:[{value:'comfortable',label:'舒展'},{value:'compact',label:'紧凑'}],value:wrapper.dataset.density,onChange:value=>{state.density=value;wrapper.dataset.density=value;}});
+ const density=segmented({role:'radiogroup',layout:'equal',ariaLabel:'日历显示密度',items:[{value:'comfortable',label:'舒展'},{value:'compact',label:'紧凑'}],value:wrapper.dataset.density,onChange:value=>{state.density=value;wrapper.dataset.density=value;}});
  const summary=h('p',{class:'blood-calendar__summary',role:'status',aria:{live:'polite',atomic:'true'}});
  const reset=button({label:'重置筛选',variant:'ghost',size:'sm',onClick:()=>{point='';available=false;filter.setValue('');availability.setValue('all');draw(true);(showPointFilter?filter:availability).querySelector('button').focus();}});
- const availability=filterSegments({ariaLabel:'名额筛选',items:[{value:'all',label:'全部班次'},{value:'available',label:'仅看有名额'}],value:available?'available':'all',onChange:value=>{available=value==='available';draw(true);}});
+ const availability=segmented({role:'radiogroup',layout:'equal',ariaLabel:'名额筛选',items:[{value:'all',label:'全部班次'},{value:'available',label:'仅看有名额'}],value:available?'available':'all',onChange:value=>{available=value==='available';draw(true);}});
  const points=[...new Set([...(scheduled?[]:BLOOD_POINTS),...events.map(e=>e.location).filter(Boolean)])];
- const filter=filterSegments({ariaLabel:scheduled?'岗位筛选':'点位筛选',items:[{value:'',label:scheduled?'全部岗位':'全部点位'},...points.map(value=>({value,label:value,compactLabel:value.replace(/^(新街口|仙林|浦口)/,'$1\n')}))],value:point,onChange:value=>{point=value;draw(true);}});
+ const filter=segmented({role:'radiogroup',layout:'equal',ariaLabel:scheduled?'岗位筛选':'点位筛选',items:[{value:'',label:scheduled?'全部岗位':'全部点位'},...points.map(value=>({value,label:value,compactLabel:value.replace(/^(新街口|仙林|浦口)/,'$1\n')}))],value:point,onChange:value=>{point=value;draw(true);}});
  const showPointFilter=points.length>1;if(!showPointFilter||point&&!points.includes(point))point='';
  const filterGroup=(label,control)=>h('div',{class:'blood-calendar__filter-group'},h('p',{class:'field__label',text:label}),control);
  const emptyHint=h('p',{class:'blood-calendar__empty-hint',hidden:true});

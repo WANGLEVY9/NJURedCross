@@ -1,6 +1,5 @@
 import {h,icon} from '../core/dom.js';
-import {filterSegments} from '../ui/filter-segments.js';
-import {badge} from '../ui/primitives.js';
+import {badge,segmented} from '../ui/primitives.js';
 import {timeSlot} from '../core/format.js';
 
 /** Availability is supplied by the server; selection never decides eligibility. */
@@ -8,7 +7,7 @@ export function ordinarySessions(events,registrations,onSelect,selectedId){
  const dates=[...new Set(events.map(e=>e.date))].sort();
  let date=events.find(e=>e.id===selectedId)?.date||dates[0];
  const venues=h('div',{class:'ordinary-sessions__venues'});
- const navigation=filterSegments({items:dates.map(d=>({value:d,label:`${d.slice(5).replace('-','月')}日`})),value:date,ariaLabel:'选择服务日期',onChange:value=>{
+ const navigation=segmented({role:'radiogroup',layout:'equal',items:dates.map(d=>({value:d,label:`${d.slice(5).replace('-','月')}日`})),value:date,ariaLabel:'选择服务日期',onChange:value=>{
   date=value;
   // Keep the detail in the visible date, without stealing keyboard focus.
   const next=events.find(e=>e.date===date&&e.id===selectedId)||events.find(e=>e.date===date);

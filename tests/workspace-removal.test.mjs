@@ -24,6 +24,41 @@ function fixture(state='报名中',extra={}){
  return {service,data,event,roster,rosterReads:()=>rosterReads,writes:()=>writes,lose:()=>{lost=true;}};
 }
 const body=(state,mode)=>({token:state.token,requestId:'synthetic-remove-request',reason:'合成取消原因',...(mode?{mode}:{})});
+test('completed activity goes to the recycle bin and back without touching participation',async()=>{
+ const f=fixture('已结束',{finalHours:{status:'exported'}}),before=structuredClone(f.data);
+ const state=await f.service.workspaceRemoval('parent','director');
+ assert.equal(state.canRecycle,true);
+ assert.equal(state.canRemove,false);
+ const request=body(state,'recycle');
+ f.lose();
+ await assert.rejects(f.service.removeWorkspace('parent',request,'director'),/lost response/);
+ assert.equal(f.event['状态'],'已删除');
+ assert.equal((await f.service.removeWorkspace('parent',request,'director')).purged,null);
+ assert.equal(f.writes(),1);
+ const {token,canRestore}=await f.service.workspaceRestoration('parent','director');
+ assert.equal(canRestore,true);
+ await assert.rejects(f.service.restoreWorkspace('parent',{token,requestId:'restore-from-recycle'},'other'),{statusCode:403});
+ const restore={token,requestId:'restore-from-recycle'};
+ assert.equal((await f.service.restoreWorkspace('parent',restore,'director')).phase,'已结束');
+ await f.service.restoreWorkspace('parent',restore,'director');
+ assert.equal(f.event['状态'],'已结束');
+ assert.equal(f.writes(),2);
+ assert.equal(workflowEventApproved(f.event),true);
+ for(const key of ['registrations','checkins','ledger'])assert.deepEqual(f.data[key],before[key]);
+});
+
+test('recycling an early-ended activity preserves its original end receipt',async()=>{
+ const f=fixture(),state=await f.service.workspaceRemoval('parent','director');
+ await f.service.removeWorkspace('parent',body(state,'end'),'director');
+ const original=JSON.parse(f.event['报名页配置']).workspaceRemoval;
+ const recycle=await f.service.workspaceRemoval('parent','director');
+ assert.equal(recycle.canRecycle,true);
+ await f.service.removeWorkspace('parent',{...body(recycle,'recycle'),requestId:'move-early-ended-to-recycle'},'director');
+ const {token}=await f.service.workspaceRestoration('parent','director');
+ await f.service.restoreWorkspace('parent',{token,requestId:'restore-early-ended'},'director');
+ assert.equal(f.event['状态'],'已归档');
+ assert.deepEqual(JSON.parse(f.event['报名页配置']).workspaceRemoval,original);
+});
 test('regional owner can cancel a published activity even with registrations and its participation is purged once',async()=>{
  const f=fixture(),state=await f.service.workspaceRemoval('parent','director');assert.equal(state.action,'delete');assert.equal(state.canRemove,true);
  assert.deepEqual(state.purgeCounts,{registrations:1,checkins:1,ledger:1});

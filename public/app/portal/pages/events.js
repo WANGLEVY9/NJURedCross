@@ -1,6 +1,6 @@
 import { eventRow } from '../activity-row.js';
 import { prepareEventsFonts } from '../events-fonts.js';
-import { filterSegments } from '../../ui/filter-segments.js';
+import { segmented } from '../../ui/primitives.js';
 import { eventsHero, eventsCategories, eventsGuide } from '../events-showcase.js';
 /* ==========================================================================
    portal/pages/events.js
@@ -43,7 +43,8 @@ export default async function eventsPage(context) {
     apply();
   });
 
-  const statusControl = filterSegments({
+  const statusControl = segmented({
+    role:'radiogroup',layout:'equal',
     items: [
       { value: '', label: '全部' },
       { value: '报名中', label: '报名中' },
@@ -59,7 +60,8 @@ export default async function eventsPage(context) {
     ariaLabel: '按状态筛选',
   });
 
-  const regionControl = filterSegments({
+  const regionControl = segmented({
+    role:'radiogroup',layout:'equal',
     items: EVENT_CATEGORIES.filter(item => item.value !== 'blood').map(item => ({ ...item, compactLabel: { nanjing: '南京', suzhou: '苏州' }[item.value] })),
     value: state.region,
     ariaLabel: '按地区筛选',

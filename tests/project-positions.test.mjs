@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkflow,WF,workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
+import {createWorkflow,WF,WORKFLOW_SCHEMA,workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {ORDINARY_GROUP_TABLE} from '../lib/events/ordinary-groups.js';
 import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
 import {projectPositions,assertProjectPositions} from '../lib/events/project-positions.js';
+import {activityGroupId} from '../public/app/shared/activity-projects.js';
 
 const config=e=>JSON.parse(e['报名页配置']);
 test('optional position hours survive approval, publication and retry; omitted fields inherit',async()=>{
@@ -223,16 +224,38 @@ test('interrupted schedule and cancellation leave group closed and resume safely
  assert.ok(f.tables[WF.events].every(e=>workflowEventApproved(e)&&e['状态']==='可发布'&&!config(e).publishAt));
 });
 
-async function fixture(options={},parentHours={}){
+async function fixture(options={},parentHours={},groupColumn=false){
  let seq=0,failAt=0;
  const tables=Object.fromEntries([...Object.values(WF),ORDINARY_GROUP_TABLE].map(t=>[t,[]]));
- const base={async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(tables[t].slice(s,s+n));},async getMetadata(){return {tables:[]};},async appendRow(t,row){if(t===WF.events&&failAt&&--failAt===0)throw Error('synthetic interrupted write');const r={...row,_id:`row-${++seq}`};tables[t].push(r);return {_id:r._id};},async updateRow(t,id,patch){Object.assign(tables[t].find(r=>r._id===id),patch);}};
+ const writes=[];
+ const base={async listRows(t,_v,_o,_c,s=0,n=500){return structuredClone(tables[t].slice(s,s+n));},async getMetadata(){return {tables:groupColumn?[{name:WF.events,columns:WORKFLOW_SCHEMA[0].columns.map(name=>({name,type:'text'}))}]:[]};},async appendRow(t,row){if(t===WF.events&&failAt&&--failAt===0)throw Error('synthetic interrupted write');const r={...row,_id:`row-${++seq}`};tables[t].push(r);writes.push([t,r._id]);return {_id:r._id};},async updateRow(t,id,patch){writes.push([t,id]);Object.assign(tables[t].find(r=>r._id===id),patch);}};
  const w=createWorkflow(base,options);
  const parent=await w.create({name:'合成跨日项目',center:'生命中心',bookingMode:'grouped',window:{start:'2030-10-29T08:00:00',end:'2030-10-30T18:00:00'},capacity:30,serviceHours:2,trainingHours:0,travelHours:0,...parentHours,location:'合成校区',work:'合成服务'},'owner');
  const positions=[{start:'2030-10-29T08:30:01',end:'2030-10-29T10:30:01',location:'合成地点甲',name:'引导',capacity:10,campus:'鼓楼'},{start:'2030-10-30T10:00:00',end:'2030-10-30T12:00:00',location:'合成地点乙',name:'登记',capacity:20,campus:'仙林'}];
  const payload=()=>({token:workflowApprovalHash(tables[WF.events][0]),positions,deadline:'2030-10-28T00:00:00'});
- return {tables,w,parent,positions,payload,interrupt:()=>{failAt=2;}};
+ return {tables,w,parent,positions,payload,writes,interrupt:()=>{failAt=2;}};
 }
+test('position edits preserve each persisted ID and write only changed jobs across three saves',async()=>{
+ const f=await fixture({}, {}, true);
+ await f.w.approve(f.parent._id,'reviewer');
+ const initial=await f.w.configurePositions(f.parent._id,f.payload(),'owner');
+ const [first,second]=initial.events;
+ const legacy={...first,_id:'history',活动ID:'older-job',状态:'已归档'};
+ f.tables[WF.events].push(legacy);
+ const ids=initial.events.map(e=>e['活动ID']);
+ for(const name of ['引导甲','引导乙','引导丙']){
+  f.writes.length=0;
+  const body=f.payload();
+  body.positions=body.positions.map((p,i)=>({...p,positionId:ids[i],...(i?{}:{name})}));
+  const saved=await f.w.configurePositions(f.parent._id,body,'owner');
+  assert.deepEqual(saved.events.map(e=>e['活动ID']),ids);
+  assert.deepEqual(f.writes.filter(([table,id])=>table===WF.events&&id!==f.parent._id),[[WF.events,first._id]]);
+  assert.equal(f.tables[WF.events].find(e=>e._id===second._id)['活动组ID'],initial.groupId);
+ }
+ assert.equal(f.tables[WF.events].find(e=>e._id===f.parent._id)['活动组ID'],initial.groupId);
+ assert.equal(legacy['状态'],'已归档');
+ await f.w.publish(f.parent._id);
+});
 test('background seat batches yield to approval and refresh authoritative evidence',async()=>{
  const started=Promise.withResolvers(),release=Promise.withResolvers();let batches=0;
  const f=await fixture({places:{async reconcile(events,_registrations,options){
@@ -255,11 +278,15 @@ test('ordinary detail reuses fresh authority rows without reading blood source',
 });
 test('grouped project requires approval then positions and publishes only complete children',async()=>{
  const f=await fixture();
+ const before=activityGroupId((await f.w.catalog()).events.find(row=>row._id===f.parent._id));
  await f.w.approve(f.parent._id,'reviewer');
  await assert.rejects(f.w.publish(f.parent._id),{statusCode:409});
  await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],capacity:100001}]},'owner'),{statusCode:400});
  await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions:[{...f.positions[0],end:'2030-10-31T01:00:00'}]},'owner'),{statusCode:400});
  const result=await f.w.configurePositions(f.parent._id,f.payload(),'owner');assert.equal(result.events.length,2);
+ const grouped=(await f.w.detail(f.parent._id)).events;
+ assert.equal(grouped.length,3);
+ assert.deepEqual([...new Set(grouped.map(activityGroupId))],[before]);
  assert.ok(result.events.every(workflowEventApproved));
  assert.deepEqual(projectWorkflowEvents((await f.w.publicRead()).events,[]),[]);
  await assert.rejects(f.w.publish(result.events[0]._id),{statusCode:409});
