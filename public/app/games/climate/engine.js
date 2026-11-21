@@ -264,7 +264,8 @@ export function flipWeather(s) {
   const w = s.weather.deck.shift();
   s.weather.current = w;
   s.weather.discard.push(w);
-  s.dayState.noNominate = w === 'coldwave' && s.weather.nextDayNoNominate;
+  // 「寒潮次日禁提名」读的是昨日留下的标记，不能要求今日又是寒潮（同一张牌不会连续出现）。
+  s.dayState.noNominate = Boolean(s.weather.nextDayNoNominate);
   s.weather.nextDayNoNominate = w === 'coldwave';
   note(s, 'weather', `第 ${s.day} 天天气：${WEATHER[w].name}${WEATHER[w].type === 'extreme' ? '（极端日）' : ''}。`);
   return s;
@@ -437,7 +438,7 @@ export function finishDay(s) {
   const preacher = P(s, s.dayState.preacherId);
   if (s.dayState.preachFired && preacher) {
     const r = s.dayState.result;
-    const needPreach = ceil(2 * aliveCount(s) / 3);
+    const needPreach = ceil(2 * aliveCount(s), 3);
     if (r?.top >= needPreach) {
       temp = Math.min(RESILIENCE_MAX, temp + 1);
       note(s, 'preach', `宣讲达成 ${r.top}/${needPreach}：韧性 +1。`);
@@ -814,8 +815,8 @@ export function dawn(s) {
     preachReady: null, preachFired: s.night.preachReady ? false : true, votes: {}, voteRound: 1, result: null,
     postponed: [], noNominate: false,
   };
-  // 寒潮次日禁提名
-  s.dayState.noNominate = s.weather.nextDayNoNominate && s.weather.current === 'coldwave';
+  // 寒潮次日禁提名：只认昨日留下的标记；翻天气时会按当日牌重算一次。
+  s.dayState.noNominate = Boolean(s.weather.nextDayNoNominate);
   note(s, 'phase', `第 ${s.day} 天开始，请翻天气。`);
   return s;
 }
