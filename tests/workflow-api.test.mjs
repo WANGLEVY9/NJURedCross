@@ -5,6 +5,22 @@ import {workflowRoutes} from '../lib/events/workflow-api.js';
 function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',studentId:'999990001',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',certificate:'否',phone:'13800000000',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
 
+test('activity statistics requires dedicated presidium authority and derives region on the server',async()=>{
+ const c=ctx(),url=new URL('http://localhost/api/volunteer/workflow/activity-statistics?region=nanjing&tag=未分类');
+ let evidence={canEnter:true,statisticsRegions:[]};
+ c.getEventAuthority=async()=>evidence;
+ c.getWorkflow=async()=>({statistics:async options=>options});
+ const denied=await workflowRoutes(req(),null,url,c);
+ assert.equal(denied.status,403);
+ assert.equal(denied.body.requiredRole,'activity_presidium');
+ evidence={...evidence,missingEventsScope:true};
+ const missing=await workflowRoutes(req(),null,url,c);
+ assert.equal(missing.body.requiredScope,'events');
+ evidence={canEnter:true,statisticsRegions:['suzhou']};
+ const allowed=await workflowRoutes(req(),null,url,c);
+ assert.deepEqual(allowed.body.result,{regions:['suzhou'],tag:'未分类'});
+});
+
 test('a historical registration with no current activity keeps the member view usable and closes attendance',async()=>{
  const c=ctx(),original=c.getWorkflow;
  const workflow=createWorkflow({});
