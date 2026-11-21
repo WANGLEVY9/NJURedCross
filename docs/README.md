@@ -6,11 +6,13 @@
 
 - [运行与复现](GETTING_STARTED.md)：离线测试、界面预览、完整业务环境。
 - [代码架构](ARCHITECTURE.md)：模块、依赖、数据与权限边界。
+- [安全巡检](SECURITY_INSPECTION.md)：危险代码门禁、依赖公告与人工审查边界。
 - [正式数据连接](PRODUCTION_DATA.md)：活动、献血车与独立存储表的现行说明。
 - [页面与 API](API.md)：主要接口与会话/权限边界。
 - [前端设计系统](FRONTEND_DESIGN.md)：组件、动效和数据图表约定。
 - [活动报名设计](ACTIVITY_BOOKING_DESIGN.md)：报名与周历的场景规范。
 - [首页主视觉](HOME_SHOWCASE.md)：五专题轮播与品牌光场。
+- [页面截图](SCREENSHOTS.md)：线上实况视图与本地合成截图的来源、边界和复现方法。
 - [首页 P01 / P02](HOME_EDITORIAL_P01_P02.md)：分层纸艺主视觉、服务栏目与参与说明。
 - [活动目录 P03](DISCOVERY_LAYOUT_P03.md)：稀疏数据布局、页脚空白根因与验收测量。
 - [页面艺术 P00](PAGE_ART_DIRECTION_P00.md)：分栏页面艺术系统的设计比较与后续轮次。
@@ -18,7 +20,6 @@
 - [任务与技能](TASKS_AND_SKILLS.md)：任务发布（技能要求）/ 申领管理员审核 / 技能认证（下拉 + 软件多选）的表结构与接口契约。
 - [审核工作流运维手册](REVIEW_WORKFLOW_MANUAL.md)：多级审核链、退回规则、发布门禁、宣传展示半自动导入与 FAQ。
 - [开发约定](DEVELOPMENT.md)：模块命名、代码风格与变更流程。
-- [安全巡检](SECURITY_INSPECTION.md)：危险代码门禁、依赖公告与人工审查边界。
 
 **验证与运维**
 
