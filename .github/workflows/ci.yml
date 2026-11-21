@@ -40,6 +40,8 @@ jobs:
         run: npm run check
       - name: Check named ESM imports
         run: npm run check:links
+      - name: Source security inspection
+        run: npm run check:security
       - name: Telemetry quality checks
         run: |
           node scripts/check-telemetry-boundaries.mjs

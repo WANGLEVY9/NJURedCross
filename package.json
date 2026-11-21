@@ -9,6 +9,7 @@
     "dev": "node --watch --env-file=.env server.js",
     "check": "node scripts/check-project.mjs",
     "check:links": "node scripts/check-esm-links.mjs",
+    "check:security": "node scripts/check-security.mjs",
     "smoke:public": "node scripts/smoke-public.mjs",
     "smoke:auth": "node scripts/smoke-auth.mjs",
     "smoke:data-boundary": "node scripts/smoke-data-boundary.mjs",

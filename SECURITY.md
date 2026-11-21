@@ -22,4 +22,6 @@
 
 CI 覆盖权限、身份、HTTP 边界、依赖公告与发布安全。生产验收包括 TLS、会话与权限、邮件/数据服务、受保护照片存储、备份恢复和发布哈希，统一见 [OPERATIONS](docs/OPERATIONS.md)。账号角色与模块授权见 [架构](docs/ARCHITECTURE.md)。
 
+每次推送与每日巡检还会运行 `npm run check:security`，扫描源码中重新出现的原始 HTML 写入、动态代码执行、可执行协议外链与疑似真实凭据字面量。巡检规则见 [安全巡检](docs/SECURITY_INSPECTION.md)；它不能替代代码审查，但任何新增命中都会阻断发布。依赖公告使用 `npm audit --omit=dev --audit-level=high`，生产依赖当前为零公告；开发依赖的 moderate 公告不进入运行时发布包。
+
 凭据使用未跟踪的 `.env`，身份与业务 Base 分开配置，生产邮件走 SMTP。开发和合成回归使用隔离环境；志愿工作流写入遵循指定测试 UUID 门禁及 [数据连接约定](docs/PRODUCTION_DATA.md)。

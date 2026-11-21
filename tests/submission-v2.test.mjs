@@ -683,3 +683,38 @@ test('showcase manual：标题 + 链接即可入库，来源标记为手动补�
   assert.equal(captured.at(-1).status, 400);
   assert.equal(captured.at(-1).payload.code, 'showcase_title_missing');
 });
+
+test('showcase manual and public feed never expose executable links', async () => {
+  const { consoleShowcaseRoutes, showcaseRoutes } = await import('../lib/attachment/showcase.js');
+  const rows = [{
+    _id: 'unsafe',
+    条目ID: 'unsafe',
+    标题: '不可信链接',
+    链接: 'javascript:alert(1)',
+    来源: '手动导入',
+  }];
+  const captured = [];
+  const ctx = {
+    session: { username: 'admin' },
+    json: (res, status, payload) => { captured.push({ status, payload }); return payload; },
+    readJson: async req => req.__body ?? {},
+    getBase: async () => ({ listRows: async () => rows.map(row => ({ ...row })) }),
+    enforceLimit: () => {},
+    recordAudit: async () => {},
+    tables: { showcase: '宣传展示表' },
+    config: { ...BOX_CONFIG },
+  };
+  const manualUrl = new URL('http://l/api/console/showcase/manual');
+  await consoleShowcaseRoutes(
+    makeReq({ method: 'POST', url: manualUrl, json: { link: 'javascript:alert(1)', title: '危险链接', category: '今日节日' } }),
+    {}, manualUrl, ctx,
+  );
+  assert.equal(captured.at(-1).status, 400);
+  assert.equal(captured.at(-1).payload.code, 'showcase_link_invalid');
+
+  const feedUrl = new URL('http://l/api/public/showcase');
+  await showcaseRoutes(makeReq({ method: 'GET', url: feedUrl }), {}, feedUrl, ctx);
+  const feed = captured.at(-1).payload;
+  const unsafe = JSON.stringify(feed).includes('javascript:');
+  assert.equal(unsafe, false);
+});
