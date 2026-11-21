@@ -19,6 +19,28 @@ import {withRequestBudget} from '../lib/http/request-budget.js';
 import {planLegacyWorkspaceRecovery,extractLegacyWorkspaceEdit} from '../lib/events/workspace-legacy-recovery.js';
 import {workspaceEditDigest} from '../lib/events/workspace-live-edit.js';
 
+test('recycling a completed multi-job project hides the whole group from activity statistics until restoration',async t=>{
+ const f=await fixture(t),event=await publishFixture(f);
+ const rows=f.tables[WF.events];
+ for(const row of rows)row['状态']='已结束';
+ f.tables[WF.registrations].push({_id:'registration',活动ID:rows[1]['活动ID'],报名状态:'已签到'});
+ f.tables[WF.checkins].push({_id:'checkin',活动ID:rows[1]['活动ID'],报名行ID:'registration'});
+ f.tables[WF.ledger].push({_id:'ledger',活动ID:rows[1]['活动ID'],报名行ID:'registration',状态:'已批准'});
+ const evidence=[WF.registrations,WF.checkins,WF.ledger].map(table=>structuredClone(f.tables[table]));
+ const before=await f.workflow.activityOverview(),snapshot=await f.workflow.workspaceRemoval(event._id,'sz-chair');
+ assert.equal(snapshot.canRecycle,true);
+ await f.workflow.removeWorkspace(event._id,{mode:'recycle',reason:'',requestId:'move-project-to-trash',token:snapshot.token},'sz-chair');
+ assert.equal((await f.workflow.catalog()).events.filter(row=>row['状态']==='已删除').length,rows.length);
+ assert.ok((await f.workflow.calendar()).events.every(row=>row['活动ID']!==event['活动ID']));
+ const after=await f.workflow.activityOverview();
+ assert.equal(after.events,before.events-rows.length);assert.equal(after.registrations,before.registrations-1);
+ const restore=await f.workflow.workspaceRestoration(event._id,'sz-chair');
+ await f.workflow.restoreWorkspace(event._id,{requestId:'restore-recycled-project',token:restore.token},'sz-chair');
+ assert.equal((await f.workflow.catalog()).events.filter(row=>row['状态']==='已结束').length,rows.length);
+ assert.deepEqual(await f.workflow.activityOverview(),before);
+ assert.deepEqual([WF.registrations,WF.checkins,WF.ledger].map(table=>f.tables[table]),evidence);
+});
+
 test('legacy recovery reconstructs only the signed completed edit, preserving all job and booking identities',async t=>{
  const f=await fixture(t),event=await publishFixture(f),previous=structuredClone(event),source=await f.bridge.content(event._id);
  const body={expectedVersion:source.version,token:source.token,content:{...source.content,name:'恢复的合成活动'}};
