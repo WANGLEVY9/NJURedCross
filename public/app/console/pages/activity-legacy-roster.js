@@ -18,7 +18,7 @@ export function legacyRosterPanel({event,events=[],registrations=[],directory=[]
  const selectable=row=>state.selectionMode==='leave'?pendingLeave(row):canApprove(row);
  if(!(state.selected instanceof Set))state.selected=new Set();
  const profiles=Array.isArray(directory)?directory:directory.participants||[];
- const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','日期 / 班次','报名 / 请假','操作'],key:'registration-'+event._id});
+ const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','日期 / 班次','报名 / 请假','操作'],key:'registration-'+event._id,defaultHidden:['部门']});
  const positions=createPositionLabels({event,events,registrations});
  const rowContext=row=>{
   const value=context(row),source=events.find(item=>item['活动ID']===value.session)||event,settings=config(source);

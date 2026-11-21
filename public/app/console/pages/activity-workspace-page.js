@@ -13,7 +13,9 @@ import {activityRegistrationWorkspace} from './activity-registration-workspace.j
 import {h,icon} from '../../core/dom.js';
 import {request,getSessionState} from '../../core/api.js';
 import {setLeaveGuard,patchQuery,navigate,buildPath} from '../../core/router.js';
-import {pageHead,button,field,notice,emptyState,skeletonLine} from '../../ui/primitives.js';
+import {configureWorkspaceRoles} from './activity-role-settings.js';
+import {activityStatisticsPage} from './activity-statistics.js';
+import {pageHead,button,field,notice,emptyState,skeletonLine,segmented} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
 import {workspaceCategories,WORKSPACE_STAGES,workspaceStage} from '../../shared/activity-workspace.js';
@@ -52,6 +54,7 @@ function warmLegacyWorkspace(){
 
 /** Rebuilt activity management. Every phase operates inside the selected project pane. */
 export default async function activityWorkspacePage(context){
+  if(context.query.get('statistics')==='1')return activityStatisticsPage(context);
   const recycling=context.query.get('history')==='trash';
   let drafts=[],events=[],selected=context.query.get('draft')||context.query.get('event')||'',editor=null,disposed=false,loadSequence=0,detailSequence=0,canSubmit=false,canCreate=true,creationScopes=null;
   const occupancy=new Map();
@@ -62,7 +65,7 @@ export default async function activityWorkspacePage(context){
   let directoryState=directoryStates.get(directoryKey);
   function rememberDirectory(){
     if(!mobile.matches||selected)return;
-    directoryState={search:search.control.value,stage:stage.control.value,region:region.control.value,category:category.control.value,scrollTop:node.scrollTop,focusId:directoryState?.focusId};
+    directoryState={search:search.control.value,stage:stageValue,region:region.control.value,category:category.control.value,scrollTop:node.scrollTop,focusId:directoryState?.focusId};
     directoryStates.set(directoryKey,directoryState);
   }
   function syncLayout(){node.dataset.mobileView=selected?'detail':'list';}
@@ -87,7 +90,11 @@ export default async function activityWorkspacePage(context){
   const currentActor=getSessionState().user?.accountId||getSessionState().user?.username;
   let searchDebounce=0;
   const search=field({label:'搜索活动',type:'search',placeholder:'搜索活动名称',onInput:()=>{clearTimeout(searchDebounce);searchDebounce=setTimeout(renderList,150);}});
-  const stage=field({label:'阶段',options:[{value:'',label:'全部'},...WORKSPACE_STAGES],onInput:renderList});
+  let stageValue='';
+  const stage=segmented({role:'radiogroup',ariaLabel:'活动阶段筛选',
+    items:[{value:'',label:'全部'},...WORKSPACE_STAGES.map(value=>({value,label:value}))],value:stageValue,
+    onChange:value=>{setStage(value);renderList();}});
+  const setStage=value=>{stageValue=value||'';stage.setValue(stageValue);};
   const region=field({label:'地区',options:[{value:'',label:'全部'},{value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}],onInput:()=>{syncCategories();renderList();}});
   const category=field({label:'类别',options:[{value:'',label:'全部类别'},...workspaceCategories('')],onInput:renderList});
   const leave=async()=>{
@@ -133,7 +140,7 @@ export default async function activityWorkspacePage(context){
     return directoryRows=[...drafts.filter(d=>!(d.stage==='草稿'&&!d.activityId&&!d.submissionStatus&&isManagedDutyContent(d.content))&&!activityIds.has(d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,statusLabel:d.stage,region:d.content.region,category:canonicalActivityCategory(d.content.category),date:d.content.date,endDate:d.content.endDate,draft:d})),...projectRows];
   }
   function renderList(){
-    const rows=records().filter(r=>(context.query.get('history')==='1'?r.stage==='已结束':r.stage!=='已结束'||stage.control.value==='已结束')&&(!search.control.value||r.name?.includes(search.control.value))&&(!stage.control.value||r.stage===stage.control.value)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
+    const rows=records().filter(r=>(context.query.get('history')==='1'?r.stage==='已结束':r.stage!=='已结束'||stageValue==='已结束')&&(!search.control.value||r.name?.includes(search.control.value))&&(!stageValue||r.stage===stageValue)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
     count.textContent=`${rows.length} 项`;
     const cards=rows.map(row=>{
       const sessionCount=row.sessionCount??1;
@@ -244,7 +251,7 @@ export default async function activityWorkspacePage(context){
         confirmPreview:async(id,body)=>(await request(`${root}/${id}/confirm-preview`,{method:'POST',body})).result,
         submit:async(id,body)=>(await request(`${root}/${id}/submit`,{method:'POST',body})).result,
         // load() 已经把选中的草稿映射成正式活动并渲染，这里不再重复重建面板。
-        onSubmitted:async()=>{stage.control.value='待审批';await load();notify.success('已提交审批');},
+        onSubmitted:async()=>{setStage('待审批');await load();notify.success('已提交审批');},
       });pane.append(editor.node);
       if(row.draft.submissionStatus==='pending'&&(row.draft.access?.canReconcile??canSubmit)){
         const reconcile=button({label:'核对提交结果',onClick:async()=>{if(reconcile.disabled)return;reconcile.disabled=true;try{await request(`${root}/${row.id}/reconcile`,{method:'POST',body:{}});await load();}catch(error){reportError(error,'提交结果仍待核对');}finally{reconcile.disabled=false;}}});
@@ -253,7 +260,7 @@ export default async function activityWorkspacePage(context){
           const restore=button({label:'恢复为可编辑草稿',onClick:async()=>{
             if(restore.disabled||!await confirmAction({title:'恢复为可编辑草稿？',description:'系统将再次核对提交结果。未生成正式活动时，保留填写内容和原提交记录，恢复编辑、删除及重新提交；已生成时打开对应活动。',confirmLabel:'确认恢复'}))return;
             restore.disabled=true;reconcile.disabled=true;
-            try{const {result}=await request(`${root}/${row.id}/restore`,{method:'POST',body:{expectedVersion:row.draft.version}});if(!result.restored)stage.control.value='待审批';await load();notify.success(result.restored?'已恢复为可编辑草稿':'已找到原活动，提交状态已核对');}
+            try{const {result}=await request(`${root}/${row.id}/restore`,{method:'POST',body:{expectedVersion:row.draft.version}});if(!result.restored)setStage('待审批');await load();notify.success(result.restored?'已恢复为可编辑草稿':'已找到原活动，提交状态已核对');}
             catch(error){reportError(error,'恢复未完成，原记录已保留');}finally{restore.disabled=false;reconcile.disabled=false;}
           }});editor.node.querySelector('.activity-draft-toolbar').append(restore);
         }
@@ -272,7 +279,7 @@ export default async function activityWorkspacePage(context){
           mutate:(action,body)=>request(`${base}/${action}`,{method:'POST',body}),
           loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,
           loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,
-          onChanged:async()=>{stage.control.value='';await load();},
+          onChanged:async()=>{setStage('');await load();},
         });pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'活动信息加载失败',{tone:'warning'}));});
     }else if(row.stage==='报名中'&&config(row.event).approval?.mode==='workspace-regional'&&!scheduledSession(row.event)){
@@ -368,7 +375,7 @@ export default async function activityWorkspacePage(context){
       if(busy||!await leave())return;busy=true;copyButton.disabled=true;
       pending||={requestId:crypto.randomUUID(),expectedVersion:row.draft?drafts.find(d=>d.id===row.id).version:String(events.find(e=>e._id===row.id)?.['申请版本']||row.event['申请版本']||'')};
       try{const result=(await request(row.draft?`${root}/${row.id}/copy`:`${root}/from-event/${encodeURIComponent(row.id)}/copy`,{method:'POST',body:pending})).result;if(disposed)return;
-        drafts=[result,...drafts.filter(d=>d.id!==result.id)];selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;notify.success('已复制为新草稿');
+        drafts=[result,...drafts.filter(d=>d.id!==result.id)];selected=result.id;setStage('草稿');search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;notify.success('已复制为新草稿');
       }catch(error){if(!error.status||error.status>=500)notify.warning('复制结果待核对','再次操作将核对原复制请求。');else{pending=null;reportError(error,'复制未完成');}}
       finally{busy=false;copyButton.disabled=false;}
     }});
@@ -383,7 +390,7 @@ export default async function activityWorkspacePage(context){
           saving=true;busy=true;confirm.disabled=true;
           try{
             await request(`/api/volunteer/workflow/events/${encodeURIComponent(row.id)}/running-reopen`,{method:'PATCH',body:{reason:reason.control.value.trim()}});
-            saving=false;await modal.close();stage.control.value='进行中';await load();notify.success('已重新打开初审，请核对发生变化的人员后重新预览提交');
+            saving=false;await modal.close();setStage('进行中');await load();notify.success('已重新打开初审，请核对发生变化的人员后重新预览提交');
           }catch(error){reportError(error,'退回初审未完成，请刷新核对');}
           finally{saving=false;busy=false;confirm.disabled=false;}
         }});
@@ -490,7 +497,7 @@ export default async function activityWorkspacePage(context){
    */
   function resolveSelection(){
     const all=records();
-    const available=all.filter(row=>context.query.get('history')==='1'?row.stage==='已结束':row.stage!=='已结束'||stage.control.value==='已结束');
+    const available=all.filter(row=>context.query.get('history')==='1'?row.stage==='已结束':row.stage!=='已结束'||stageValue==='已结束');
     if(!selected&&!mobile.matches)selected=available[0]?.id||'';
     const linkedDraft=drafts.find(d=>d.id===selected),linkedEvent=events.find(e=>e['活动ID']===linkedDraft?.activityId);
     if(linkedEvent)selected=linkedEvent._id;
@@ -523,7 +530,7 @@ export default async function activityWorkspacePage(context){
     kind.control.disabled=true;area.control.addEventListener('change',()=>{kind.control.disabled=!area.control.value;kind.control.replaceChildren(h('option',{value:'',text:'请选择'}),...workspaceCategories(area.control.value).filter(value=>!creationScopes||creationScopes.some(scope=>scope.region===area.control.value&&scope.category===value)).map(value=>h('option',{value,text:value})));kind.control.value='';});
     const createButton=button({label:'开始填写',variant:'primary',onClick:async()=>{
       if(busy||!name.control.reportValidity()||!area.control.reportValidity()||!kind.control.reportValidity()||!await leave())return;if(isManagedDutyContent({name:name.control.value,category:kind.control.value})){notify.warning('请在管理员中心开启省红会组宣部值班，无需新建草稿');return;}busy=true;createButton.disabled=true;
-      try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value,...(kind.control.value==='排班专项'?{bookingMode:'grouped',special:{v:1,type:'schedule',dates:[],places:[],cutoffMinutes:1440}}:{})}}})).result;busy=false;await modal.close();if(disposed)return;drafts=[result,...drafts];selected=result.id;stage.control.value='草稿';search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
+      try{const result=(await request(root,{method:'POST',body:{requestId,content:{name:name.control.value,region:area.control.value,category:kind.control.value,...(kind.control.value==='排班专项'?{bookingMode:'grouped',special:{v:1,type:'schedule',dates:[],places:[],cutoffMinutes:1440}}:{})}}})).result;busy=false;await modal.close();if(disposed)return;drafts=[result,...drafts];selected=result.id;setStage('草稿');search.control.value='';region.control.value='';syncCategories();category.control.value='';directoryCollapsed=false;workspace.classList.remove('is-directory-collapsed');renderList();renderDetail();list.scrollTop=0;}
       catch(error){if(!error.status||error.status>=500){name.control.disabled=area.control.disabled=kind.control.disabled=true;createButton.textContent='核对创建结果';notify.warning('创建结果待核对','再次操作会使用原请求标识核对，不会另建草稿。');}else reportError(error,'创建未完成');}
       finally{busy=false;createButton.disabled=false;sourceButton.disabled=name.control.disabled;}
     }});
@@ -531,7 +538,7 @@ export default async function activityWorkspacePage(context){
     const sourceButton=button({label:'来源活动纳入',variant:'secondary',onClick:async()=>{
       if(busy||name.control.disabled||!await leave())return;
       busy=true;sourceButton.disabled=true;
-      try{const {openSourceIntake}=await import('./activity-source-intake.js');busy=false;await modal.close();await openSourceIntake({events,onAdopted:async result=>{selected=result._id;stage.control.value='';await load();}});}
+      try{const {openSourceIntake}=await import('./activity-source-intake.js');busy=false;await modal.close();await openSourceIntake({events,onAdopted:async result=>{selected=result._id;setStage('');await load();}});}
       catch(error){reportError(error,'来源活动暂时无法打开');}
       finally{busy=false;sourceButton.disabled=name.control.disabled;}
     }});
@@ -539,14 +546,22 @@ export default async function activityWorkspacePage(context){
     modal=openModal({title:'新建活动',body:h('div',{class:'stack-3'},name,names,area,kind),dismissible:false,footer:[sourceButton,button({label:'取消',onClick:()=>{if(!busy)void modal.close();}}),createButton]});
     modal.setCloseGuard(()=>!busy);
   }
-  const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:recycling?'活动回收站':'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},recycling?null:stage,region,category),list),pane);
+  const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:recycling?'活动回收站':'活动列表'}),count),search,recycling?null:h('div',{class:'activity-status-scroll'},stage),h('div',{class:'activity-v2-filters'},region,category),list),pane);
   const createButton=button({label:'新建活动',variant:'primary',onClick:create});
   createButton.disabled=true;
   const tools=h('details',{class:'activity-page-tools'},h('summary',{text:'管理工具'}),h('div',{},
    button({label:'服务记录核对',href:'/console/volunteers',variant:'ghost'})));
   tools.open=!mobile.matches;
-  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:recycling?'返回历史活动':'回收站',href:buildPath(context.path,{history:recycling?'1':'trash'}),variant:'secondary'}),...(recycling?[]:[tools,createButton]),button({label:'刷新',onClick:async()=>{if(await leave())await load({fresh:true});}})]}),message,workspace);
-  if(mobile.matches&&directoryState){search.control.value=directoryState.search;stage.control.value=directoryState.stage;region.control.value=directoryState.region;syncCategories();category.control.value=directoryState.category;}
+  const roleSettings=getSessionState().user?.role==='super_admin'
+    ?button({label:'权限配置',variant:'secondary',onClick:async()=>{if(await leave())await configureWorkspaceRoles(()=>load({fresh:true}));}})
+    :null;
+  const statisticsLink=button({label:'分类统计',href:buildPath(context.path,{statistics:'1'}),variant:'secondary'});
+  statisticsLink.hidden=true;
+  if(!recycling)void request('/api/volunteer/workflow/management-tools').then(({capabilities})=>{
+    if(!disposed)statisticsLink.hidden=capabilities?.activityStatistics!==true;
+  }).catch(()=>{});
+  const node=h('div',{class:'view wspad activity-v2'},pageHead({title:'活动管理',actions:[button({label:recycling?'返回历史活动':'回收站',href:buildPath(context.path,{history:recycling?'1':'trash'}),variant:'secondary'}),...(recycling?[]:[tools,roleSettings,statisticsLink,createButton].filter(Boolean)),button({label:'刷新',onClick:async()=>{if(await leave())await load({fresh:true});}})]}),message,workspace);
+  if(mobile.matches&&directoryState){search.control.value=directoryState.search;setStage(directoryState.stage);region.control.value=directoryState.region;syncCategories();category.control.value=directoryState.category;}
   syncLayout();mobile.addEventListener('change',resizeLayout);
   list.append(...Array.from({length:3},()=>h('div',{class:'activity-v2-card activity-v2-card--skeleton','aria-hidden':'true'},h('strong',{class:'sk sk--line sk-w-70'}),h('span',{class:'sk sk--line sk-w-40'}))));
   void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{rememberDirectory();disposed=true;loadSequence++;clearTimeout(searchDebounce);editor?.dispose();release();mobile.removeEventListener('change',resizeLayout);window.removeEventListener('beforeunload',beforeUnload);}};
