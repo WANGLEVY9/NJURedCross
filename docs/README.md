@@ -37,6 +37,7 @@
 - [页面加载与数据刷新](PAGE_LOADING_PERFORMANCE.md)：缓存范围与刷新时效。
 - [读缓存与后台队列](CACHE_AND_QUEUE.md)：按表失效、持久化任务队列与未采用的方案。
 - [工程性能审查](../reports/ENGINEERING_PERFORMANCE_AUDIT_2026-11-22.md)：2026-11-22 的开发完整性、写队列、分页读取与优化顺序。
+- [大型公开服务平台综合评审](../reports/PUBLIC_SERVICE_PLATFORM_REVIEW_2026-11-22.md)：前后端、安全、性能、可用性与运维的专家评估及改造路线。
 - [二级报销审核](REIMBURSEMENT_WORKFLOW_API.md)：本地两级审核、权限、退回和用户端对接约定。
 
 **管理端与设计**

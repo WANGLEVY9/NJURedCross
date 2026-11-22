@@ -1,5 +1,4 @@
 import {request,requestBlob} from '../../core/api.js';
-import {registrationExportRow} from '../../shared/registration-export.js';
 import {leaveReviewActions,leaveStatus,canReviewLeave,batchLeaveButton} from './activity-leave-review.js';
 import {rosterColumns} from '../roster-columns.js';
 import {activityInformationPreview} from './activity-information-preview.js';
@@ -16,7 +15,7 @@ export function activityRegistrationWorkspace({adminEditInformation,event,data,a
  const todo=h('aside',{class:'activity-pending-tasks',role:'region','aria-label':'待办事项','aria-live':'polite',hidden:true});
  const root=h('div',{class:'activity-registration-workspace'}),content=h('div',{class:'activity-registration-content'});
  let activePosition='',batchMode=false;
- const columns=rosterColumns({columns:['序号','选择','姓名','学号','邮箱','部门','校区','岗位与时间','报名状态','操作'],key:'registration-'+event._id});
+ const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','校区','岗位与时间','报名状态','操作'],key:'registration-'+event._id});
  const tableHead=h('tr'),batchCount=h('span',{class:'t-caption','aria-live':'polite'});
  const positionTabs=h('div',{class:'activity-registration-positions',role:'tablist','aria-label':'活动岗位'});
  function positions(){return snapshot.events.filter(e=>{try{return JSON.parse(e['报名页配置']||'{}').bookingMode!=='grouped';}catch{return false;}});}
@@ -88,13 +87,13 @@ export function activityRegistrationWorkspace({adminEditInformation,event,data,a
    if(r['报名状态']==='未入选'&&r['处理说明'])decision.append(h('small',{class:'t-caption',text:r['处理说明']}));
    const leave=leaveReviewActions(r,{enabled:manager()&&canReviewLeave(e||current())&&!busy&&!uncertain,decide:decideLeave,refresh:fresh});if(leave)actions.append(leave);
    if(!batchMode&&eligible(r))for(const [kind,label] of [['confirm','报名成功'],['reject','报名失败']]){const b=button({label,size:'sm',onClick:()=>submit([r],kind)});locked(b,busy||uncertain);actions.append(b);}
-   return h('tr',{},h('td',{'data-roster-column':'序号',text:String(index+1)}),...(batchMode?[h('td',{'data-roster-column':'选择'},check)]:[]),...['姓名','学号','邮箱','部门','校区'].map(key=>h('td',{'data-roster-column':key,text:(key==='部门'?departmentOf(r):registrationExportRow(r,e)[key]??r[key])||'—'})),h('td',{'data-roster-column':'岗位与时间',text:[e?.['岗位']||r['岗位'],r['报名日期']||e?.['报名日期'],r['报名时段']||e?.['报名时段']].filter(Boolean).join(' · ')||'—'}),h('td',{'data-roster-column':'报名状态'},decision),h('td',{'data-roster-column':'操作'},actions));
+   return h('tr',{},h('td',{'data-roster-column':'序号',text:String(index+1)}),...(batchMode?[h('td',{'data-roster-column':'选择'},check)]:[]),...['姓名','学号','部门','校区'].map(key=>h('td',{'data-roster-column':key,text:(key==='部门'?departmentOf(r):r[key])||'—'})),h('td',{'data-roster-column':'岗位与时间',text:[e?.['岗位']||r['岗位'],r['报名日期']||e?.['报名日期'],r['报名时段']||e?.['报名时段']].filter(Boolean).join(' · ')||'—'}),h('td',{'data-roster-column':'报名状态'},decision),h('td',{'data-roster-column':'操作'},actions));
   }));
-  if(!rows.length)records.append(h('tr',{},h('td',{colspan:batchMode?10:9,'data-roster-group':'true',text:'暂无符合条件的报名'})));
+  if(!rows.length)records.append(h('tr',{},h('td',{colspan:batchMode?9:8,'data-roster-group':'true',text:'暂无符合条件的报名'})));
   const choices=rows.filter(eligible),allChecked=choices.length>0&&choices.every(row=>selected.has(row._id));
   const allCheck=h('input',{type:'checkbox','aria-label':'选择本页报名',checked:allChecked,disabled:busy||uncertain||!choices.length,on:{change:ev=>{for(const row of choices)if(ev.target.checked)selected.add(row._id);else selected.delete(row._id);render();}}});
   allCheck.indeterminate=!allChecked&&choices.some(row=>selected.has(row._id));
-  tableHead.replaceChildren(h('th',{scope:'col','data-roster-column':'序号',text:'序号'}),...(batchMode?[h('th',{scope:'col','data-roster-column':'选择'},allCheck)]:[]),...['姓名','学号','邮箱','部门','校区','岗位与时间','报名状态','操作'].map(text=>h('th',{scope:'col','data-roster-column':text,text})));
+  tableHead.replaceChildren(h('th',{scope:'col','data-roster-column':'序号',text:'序号'}),...(batchMode?[h('th',{scope:'col','data-roster-column':'选择'},allCheck)]:[]),...['姓名','学号','部门','校区','岗位与时间','报名状态','操作'].map(text=>h('th',{scope:'col','data-roster-column':text,text})));
   columns.apply(tableHead.closest('table'));
   locked(renotify,busy||uncertain||!manager());
   batchToggle.textContent=batchMode?'退出批量操作':'批量操作';locked(batchToggle,busy||uncertain||!manager());success.hidden=!batchMode;failure.hidden=!batchMode;batchCount.hidden=!batchMode;batchCount.textContent=`已选择 ${selected.size} 人`;
