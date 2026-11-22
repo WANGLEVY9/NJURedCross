@@ -20,6 +20,7 @@ import { sessionChoices } from '../session-choices.js';
 import { eventCard } from './home.js';
 import { isSignedIn, loginHref, redirectIfAuthError } from '../auth-gate.js';
 import {closedActivityPage,isClosedActivity} from '../closed-activity.js';
+import {withPersonalActivity} from '../activity-personal-card.js';
 
 
 
@@ -254,7 +255,7 @@ export default async function eventDetailPage(context) {
     const payload = await publicApi.event(context.params.eventId);
     const event = payload.event;
     if(event.registryType){const {specialRegistryPage}=await import('../special-registry-page.js');return specialRegistryPage(event);}
-    if (isClosedActivity(event)&&!event.scheduled) return closedActivityPage(event);
+    if (isClosedActivity(event)&&!event.scheduled) return withPersonalActivity(closedActivityPage(event),event);
     if (event.workflowId) {
       const { default: workflowEventsPage } = await import('./workflow-events.js');
       return workflowEventsPage({ ...context, query: new URLSearchParams({ event: event.workflowId }) });
