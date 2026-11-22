@@ -30,7 +30,8 @@ export function manualHoursDialog({key,positions,token,submit,loadLatest,onSaved
  const manualName=field({label:'姓名',required:true,value:draft?.name||'',maxlength:80});
  const manualStudent=field({label:'学号',required:true,value:draft?.studentId||'',maxlength:32});
  const manualDepartment=field({label:'院系',required:true,value:draft?.department||'',maxlength:120});
- const manualIdentity=h('div',{class:'activity-draft-grid',hidden:Boolean(searchPeople)},manualName.node,manualStudent.node,manualDepartment.node);
+ // field() 返回的就是可挂载的节点本身（带 .control / .setError），没有 .node 子属性。
+ const manualIdentity=h('div',{class:'activity-draft-grid',hidden:Boolean(searchPeople)},manualName,manualStudent,manualDepartment);
  function paintPicked(){
   if(!searchPeople){pickedBox.replaceChildren(h('span',{text:'当前环境未接入人员目录，请手工填写姓名、学号与院系。'}));resultsBox.replaceChildren();return;}
   pickedBox.replaceChildren(h('span',{text:picked?`已选：${picked.name} · ${picked.studentId} · ${picked.department||'院系未填'}`:'只能选择已注册平台的成员；未注册的人搜不到，也就无法补录。'}));
@@ -110,7 +111,7 @@ export function manualHoursDialog({key,positions,token,submit,loadLatest,onSaved
   notice('补录人员会同步到活动报名总表，并保留人工核验依据；主席团确认后才计入导出表。',{tone:'neutral'}),
   feedback,
   searchPeople?h('div',{class:'stack-2'},h('div',{class:'t-caption',text:'补录人员（必选）'}),searchInput,pickedBox,resultsBox):null,
-  manualIdentity,email.node,
+  manualIdentity,email,
   position,detailsHost,reason,
   h('label',{},checked,' 已核对实际服务及补录依据'));
  resetDetails();paintPicked();body.addEventListener('input',()=>{dirty=true;remember();});body.addEventListener('change',()=>{dirty=true;remember();});
