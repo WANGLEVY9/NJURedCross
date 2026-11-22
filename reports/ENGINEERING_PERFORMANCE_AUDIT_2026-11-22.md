@@ -152,6 +152,16 @@
 - GitHub Actions Secrets 已更新：`DEPLOY_SSH_KEY`、`DEPLOY_HOST`、`DEPLOY_KNOWN_HOSTS`；私钥只存在本机和 GitHub 加密 Secret，不进入源码或日志。
 - 服务器 `authorized_keys` 保留原 CI 公钥，并给新公钥加上与旧公钥一致的 `restrict,command="/usr/bin/python3 /usr/local/sbin/njuredcross-ci-deploy.py"` 限制。`NJRC-MANIFEST-V1` 握手返回 980 个文件清单，证明受限部署入口可用；普通 SSH 诊断使用同一 alias 完成只读检查。
 
+收尾时补上一把独立的受限只读诊断密钥 `~/.ssh/njuredcross_readonly_diag_ed25519`，指纹 `SHA256:ZlbZqRg9MQiQhzIWXFX6QzFOz9ZdBH3E3/7Gq89uKPI`，本机 alias 为 `njuredcross-diag`。服务器通过 `restrict,command="/usr/local/sbin/njuredcross-readonly-diagnostics.sh"` 强制绑定只读脚本；首次安装的选项未加引号导致 sshd 把路径空格后的公钥拆成额外 token，直连返回 `Permission denied (publickey)`，已通过云助手规范化为带引号的唯一行。此后 `ssh njuredcross-diag` 直连成功，输出发布记录、三个服务状态和脱敏遥测；`njuredcross-prod` 的部署密钥握手仍返回 980 个运行文件哈希。两把密钥职责分离，没有放宽部署密钥为任意 shell。
+
+### 第五轮：CI、发布与部署后日志闭环
+
+`89a23f5602ab920fb9190ecbe5de0fcf09aa494c` 的 GitHub Actions run `44990677555` 最终为 `completed success`；`Quality gate`、`Deploy main to production`、`Public production smoke (non-blocking)` 均成功。部署任务使用新受限密钥完成 `NJRC-MANIFEST-V1` 握手与发布；artifact `production-deployment-receipt` 回执为 `deployedCommit=89a23f56...`、`verifiedFiles=980`、`changedFiles=0`、`removedFiles=0`、`localHealth=true`、`publicHealth=true`。本次是 CI 配置变更，所以运行文件没有差异、无需重启。
+
+服务器 `release.json` 直接读到 `commit=89a23f5602ab920fb9190ecbe5de0fcf09aa494c`、`deployedAt=2026-11-22T05:53:28.548693+00:00`、`verifiedFiles=980`，`njuredcross.service`、`nginx`、`njuredcross-deploy-bridge.service` 均为 `active`；服务器内请求 `https://www.njuredcross.cn/events` 返回 `200`、耗时 `0.075447s`，本机公网采样也返回 `200`、总耗时 `1.734794s`。部署后 2 小时有界样本接受 27650–28016 条，未触达 100000 上限；最新 runtime CPU 为 5.01–16.69%，事件循环 p95 为 20.76–21.18ms，没有持续饱和。
+
+该窗口最值得继续定位的仍是少数长尾：`dependency queue /:other` 中保留一条 21307.83ms 的队列任务记录，`dependency background /:other` p95 3047.59ms、max 4599.53ms；活动详情 `GET /api/volunteer/workflow/events/:id/detail` 的 HTTP p95 为 5911.73ms，浏览器同名链路 p95 5935ms；通知总览 `GET /api/notifications/overview` 的 HTTP p50 2154.94ms、p95 2435.77ms，浏览器 p95 2455ms；签到 `POST /api/portal/workflow/registrations/:id/attendance` 的 HTTP 3640.88ms，关联 `njubox/headers` p95 2223.39ms。这些都是部署后混合有界样本，结论仍是：常态排队已明显改善，下一轮优先缩小锁内活动读取范围、错峰/分片后台重活、按 `requestId/traceId` 关联单个长尾，并单独排查活动详情、通知总览与签到附件链路的外部 I/O。
+
 部署回执：`3cfc609419a18e50364f08e9f7753eac74942c78`，980 个运行文件；`njuredcross.service`、`nginx`、`njuredcross-deploy-bridge.service` 均为 `active`。
 
 2026-11-22 最近 24 小时 `journalctl --namespace=njuredcross -u njuredcross -n 30000 -o cat` 有界样本，accept 29440 条，未触达 100000 上限。runtime 最新 CPU 1.74%、RSS 约 304 MiB、事件循环 p95 20.63ms；窗口内 runtime 记录显示事件循环最大 1714.42ms、CPU 最大 37.79%，仍有偶发阻塞但未持续饱和。
@@ -172,8 +182,8 @@ HTTP 样本 7644 条，状态 >=400 共 338 条、aborted 13 条；这些是混�
 
 结论：写队列分区与阶段观测已经消除了持续排队这一首要瓶颈；下一轮应把优化重心放在锁内活动读（减少重复整表读、按活动缩小证据集）和后台 `hours-sync/reconcile/deliver`（错峰、分片、独立预算与限流），并对 `queue/run` 21.3s 和事件循环 1.7s 最大值按 `requestId/traceId` 做时间窗口关联。不要为了缩短这些数值放宽权限、名额或审批一致性校验。
 
-尚未完成：按生产样本验证分区后 `queue/wait` p95 是否下降；把外部 I/O 真正移出一致性临界区；通知总览的逐片降级响应；超大模块拆分；偶发事件循环最大延迟的时间窗口定位。这些都需要新的生产观测或明确的业务迁移设计，不以代码推送代替验收。
+生产样本已确认分区后 `queue/wait` p95 从 2026-11-19 有界样本的 8632.83ms 降到 0.17ms，持续排队不再是首要瓶颈。尚未完成：把外部 I/O 真正移出一致性临界区；通知总览的逐片降级响应；超大模块拆分；偶发事件循环最大延迟与 21.3s 队列任务的时间窗口定位。这些都需要新的生产观测或明确的业务迁移设计，不以代码推送代替验收。
 
 ## 本轮验证边界
 
-本轮开始时 `main` 与 `origin/main` 一致、工作区干净；完成后仅新增本报告和文档导航条目，`git diff --check` 通过。检查覆盖源码、既有报告、缓存/队列设计、写锁、分页读取、前端资源与后台任务。没有执行新的生产压测、没有访问真实业务表、没有改运行代码。后续任何优化都应先定义可观测指标、合成故障回归和回滚点，再按仓库约定验证 CI、发布回执与线上页面。
+本轮开始时 `main` 与 `origin/main` 一致、工作区干净；收尾仅更新操作文档、脚本说明和本报告，`git diff --check` 通过。检查覆盖源码、既有报告、缓存/队列设计、写锁、分页读取、前端资源与后台任务。生产侧只执行有界只读日志采样与受限密钥配置，没有执行新的生产压测、没有访问真实业务表、没有改运行代码。后续任何优化都应先定义可观测指标、合成故障回归和回滚点，再按仓库约定验证 CI、发布回执与线上页面。

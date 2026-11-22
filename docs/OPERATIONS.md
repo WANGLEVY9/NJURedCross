@@ -123,6 +123,20 @@ main，并在 Actions 部署失败或延迟时调用同一个发布接收器。�
 
 部署后检查 systemd、HTTPS 页面、运行文件哈希和 .env 未变化。失败恢复已替换文件、依赖和服务，部署状态不前移。此代码回滚不涉及数据库，也不撤销外部业务操作。照片、私有 Base 和环境配置始终独立保留。修改服务器接收器或轮换部署密钥时，需要由 Owner 显式维护外部安装文件和 Secrets。
 
+### 2026-11-22 生产连接恢复
+
+新生产服务器为 `47.116.184.159`，实例 `i-uf6356uwag85yyjpejk0`。本机保留旧
+`njuredcross` 别名指向旧 IP；新主机配置两个独立别名，均严格校验 `known_hosts`：
+
+| 本机别名 | 私钥 | 用途 |
+| --- | --- | --- |
+| `njuredcross-prod` / `njuredcross-new` | `~/.ssh/njuredcross_deploy_diag_ed25519` | GitHub Actions 使用的受限部署密钥；服务器仅允许执行 `/usr/local/sbin/njuredcross-ci-deploy.py` |
+| `njuredcross-diag` | `~/.ssh/njuredcross_readonly_diag_ed25519` | 受限只读诊断密钥；服务器仅允许执行 `/usr/local/sbin/njuredcross-readonly-diagnostics.sh` |
+
+部署密钥通过 `printf 'NJRC-MANIFEST-V1\n' | ssh njuredcross-prod` 返回全部运行文件哈希；CI 部署回执中的 `verifiedFiles` 与该清单一致。诊断密钥直接执行 `ssh njuredcross-diag`，输出 `release.json` 关键字段、systemd 状态、脱敏遥测聚合和 Nginx timing 尾部；不提供 shell、端口转发或文件传输，也不读取账号、Cookie、请求正文或业务表。两把密钥的 `authorized_keys` 行都必须使用带引号的 `command="..."`，否则选项中的空格会被解析成额外 token。
+
+私钥只保存在本机与 GitHub Actions 加密 Secrets，公钥指纹不视为机密；不要输出私钥正文。需要重新配置服务器入口时，使用已登录的阿里云 ECS 云助手对实例执行一次性只读安装脚本，不新增开放端口或安全组规则。
+
 本地验证接收器：`python3 -m unittest discover -s tests -p '*_test.py'`。查看发布状态：GitHub Actions 的部署任务，以及服务器上的 `release.json`。
 
 ## 连接重置与加载超时

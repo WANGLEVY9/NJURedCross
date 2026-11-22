@@ -25,6 +25,8 @@
 
 `npm run inspect:production-performance` 调用 `scripts/inspect-production-performance.sh`，只在应用服务器上读取 `release.json`、systemd 状态、脱敏后的 `journalctl` 遥测和现有 Nginx timing 日志，不修改服务、业务表、配置或凭据。脚本把 `summarize-telemetry.mjs` 按 `service + operation` 聚合，可分别核对 `queue/wait`、`activity-read`、`activity-external-write`、`activity-mutation`、`background/run` 与 `background/skipped`。参数依次是 `--since` 字符串和最大日志行数，默认 `2 hours ago` 与 `30000`。这是有界样本，不代表完整请求率或 SLA。
 
+恢复新生产服务器的直连后，也可直接从本机执行 `ssh njuredcross-diag` 取得相同的有界只读诊断输出；该密钥由 `authorized_keys` 强制绑定到服务器上的只读脚本，不能执行任意 shell。部署密钥别名 `njuredcross-prod` 只用于 `NJRC-MANIFEST-V1` 与发布接收器，不用于日常日志巡检。别名和密钥职责见 [部署、回滚与运行维护](../docs/OPERATIONS.md)。
+
 ## main 十分钟兜底同步
 
 `main_sync.py` 由服务器的 `njuredcross-main-sync.timer` 每十分钟调用一次。
