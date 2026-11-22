@@ -139,6 +139,39 @@
 - 因此本轮没有取得新版生产 `queue/wait` 分位数，不能声称写队列分区的生产收益已经被日志确认。已把核对方法固化到 `scripts/summarize-telemetry.mjs` 与 `scripts/inspect-production-performance.sh`：前者按 `service + operation` 拆分 queue/background 阶段，后者是只读采样脚本，可在服务器入口恢复后用 `npm run inspect:production-performance -- "2 hours ago" 30000` 一次输出发布回执、systemd 状态、脱敏遥测汇总和 Nginx timing 尾部。
 - 新增 telemetry 汇总回归，确保 `wait`、`activity-read`、`activity-external-write` 等固定阶段不会被合并成单一 `queue` 指标。采样脚本只使用白名单字段，输出不含账号、Cookie、正文、文件名或查询参数。
 
+### 第四轮：直连恢复与生产耗时日志确认
+
+通过历史会话确认：旧环境使用 `ssh njuredcross`（旧 IP）直连；新服务器迁移后，曾通过已登录阿里云控制台的 ECS 云助手执行只读命令。当前外部 Chrome 的阿里云 SSO 在首次打开时短暂跳登录，但重新建立浏览器会话后恢复了 `WANGLEVY9 主账号` 控制台。浏览器插件版本目录缺失导致运行时初次报错，已在用户插件缓存目录建立指向现有版本的本地兼容软链，仅修复本机工具路径，不改服务器或仓库运行代码。
+
+在 `https://ecs.console.aliyun.com/cloud-assistant/region/cn-shanghai/server` 对实例 `i-uf6356uwag85yyjpejk0`（公网 `47.116.184.159`、云助手 2.2.4.1097、状态正常）执行一条云助手命令，ExitCode 0、耗时 2 秒。命令幂等安装新的 `restrict,command` 部署/诊断公钥，并读取发布回执、systemd 状态与脱敏日志；没有重启服务、改安全组、写业务表或输出私钥。
+
+本机配置：
+
+- 新密钥：`~/.ssh/njuredcross_deploy_diag_ed25519`，公钥指纹 `SHA256:g13Rtt84woZRtxMIL899bLv9NQfVRXfYdC6nU+S8adk`。
+- 新 SSH alias：`njuredcross-new` / `njuredcross-prod`，指向 `47.116.184.159`，保留旧 `njuredcross` alias 不动；主机指纹仍按 `known_hosts` 严格校验。
+- GitHub Actions Secrets 已更新：`DEPLOY_SSH_KEY`、`DEPLOY_HOST`、`DEPLOY_KNOWN_HOSTS`；私钥只存在本机和 GitHub 加密 Secret，不进入源码或日志。
+- 服务器 `authorized_keys` 保留原 CI 公钥，并给新公钥加上与旧公钥一致的 `restrict,command="/usr/bin/python3 /usr/local/sbin/njuredcross-ci-deploy.py"` 限制。`NJRC-MANIFEST-V1` 握手返回 980 个文件清单，证明受限部署入口可用；普通 SSH 诊断使用同一 alias 完成只读检查。
+
+部署回执：`3cfc609419a18e50364f08e9f7753eac74942c78`，980 个运行文件；`njuredcross.service`、`nginx`、`njuredcross-deploy-bridge.service` 均为 `active`。
+
+2026-11-22 最近 24 小时 `journalctl --namespace=njuredcross -u njuredcross -n 30000 -o cat` 有界样本，accept 29440 条，未触达 100000 上限。runtime 最新 CPU 1.74%、RSS 约 304 MiB、事件循环 p95 20.63ms；窗口内 runtime 记录显示事件循环最大 1714.42ms、CPU 最大 37.79%，仍有偶发阻塞但未持续饱和。
+
+| 阶段 | 样本数 | p50 | p95 | max | 判断 |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `queue/wait` | 422 | 0.03ms | 0.17ms | 3421.71ms | 相比 2026-11-19 有界样本 p95 8632.83ms，排队已不再是常态瓶颈；max 仍说明少数请求碰到全局 barrier 或外部写锁 |
+| `queue/activity-mutation` | 110 | 1020.44ms | 3502.57ms | 4225.68ms | 临界区总耗时仍偏高，主要来自读与校验 |
+| `queue/activity-read` | 2557 | 279.94ms | 1894.62ms | 3878.03ms | 锁内跨表读取是写操作的主要耗时来源 |
+| `queue/activity-external-write` | 86 | 16.98ms | 42.01ms | 374.34ms | 外部写单次很快，不是主要瓶颈 |
+| `background/hours-sync` | 149 | 2465.83ms | 3928.55ms | 4599.53ms | 后台同步重活周期性占用上游与事件循环 |
+| `background/reconcile` | 146 | 2316.44ms | 3618ms | 4394.36ms | 后台对账重活周期性占用上游 |
+| `background/deliver` | 149 | 1461.39ms | 2752.95ms | 3846.7ms | 投递/通知重活与前台读争用上游 |
+| `background/run` | 578 | 0.14ms | 2.73ms | 21307.83ms | 本轮新增观测；max 21.3s 指向待单独关联的队列任务 |
+| `background/skipped` | 97 | 0.02ms | 0.05ms | 0.06ms | 让路机制有生效记录 |
+
+HTTP 样本 7644 条，状态 >=400 共 338 条、aborted 13 条；这些是混合样本，不能当作完整用户错误率。最慢的成功 HTTP 包括两个 `POST /api/public/:id`（3851.47ms / 3757.19ms）、签到 `POST /api/portal/workflow/registrations/:id/attendance`（3640.88ms）和一个控制台 `PATCH /api/console/:id/:id`（3181.51ms）。签到样本关联到 `njubox/headers` p95 2223.39ms，说明外部附件链路仍会拖长个别请求；浏览器 resource 记录也有 1851–3664ms 的静态资源传输样本，不能把全部长等待归因于应用 CPU。
+
+结论：写队列分区与阶段观测已经消除了持续排队这一首要瓶颈；下一轮应把优化重心放在锁内活动读（减少重复整表读、按活动缩小证据集）和后台 `hours-sync/reconcile/deliver`（错峰、分片、独立预算与限流），并对 `queue/run` 21.3s 和事件循环 1.7s 最大值按 `requestId/traceId` 做时间窗口关联。不要为了缩短这些数值放宽权限、名额或审批一致性校验。
+
 尚未完成：按生产样本验证分区后 `queue/wait` p95 是否下降；把外部 I/O 真正移出一致性临界区；通知总览的逐片降级响应；超大模块拆分；偶发事件循环最大延迟的时间窗口定位。这些都需要新的生产观测或明确的业务迁移设计，不以代码推送代替验收。
 
 ## 本轮验证边界
