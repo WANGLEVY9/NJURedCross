@@ -132,6 +132,13 @@
 - 修正 `tests/box-download.test.mjs` 在全量并发下的时间敏感等待：用第二次 reader 获取信号替代固定 5ms sleep，保留取消流、超时和 reader 释放断言。
 - 本轮尝试读取生产日志时，浏览器/云助手运行时指向的插件文件已不存在；没有新增凭据、改安全组或重启服务。因此 `queue/wait` p95 是否下降仍未取得新版生产样本，继续列为待验收。
 
+### 第三轮落地与直连证据边界
+
+- 本机逐个校验了四个现有 SSH 身份：`root@47.116.184.159` 的 ED25519 主机指纹与既有记录一致，但四把本机密钥均返回 `Permission denied (publickey)`；历史会话只保留了已移除的临时密钥线索，没有可复用的永久直连身份。
+- 浏览器/云助手入口当前指向的插件路径 `26.1117.41037/scripts/browser-service.mjs` 不存在，标准运行时无法建立连接；未新增密钥、未改安全组、未重启服务、未读取或输出私钥内容。
+- 因此本轮没有取得新版生产 `queue/wait` 分位数，不能声称写队列分区的生产收益已经被日志确认。已把核对方法固化到 `scripts/summarize-telemetry.mjs` 与 `scripts/inspect-production-performance.sh`：前者按 `service + operation` 拆分 queue/background 阶段，后者是只读采样脚本，可在服务器入口恢复后用 `npm run inspect:production-performance -- "2 hours ago" 30000` 一次输出发布回执、systemd 状态、脱敏遥测汇总和 Nginx timing 尾部。
+- 新增 telemetry 汇总回归，确保 `wait`、`activity-read`、`activity-external-write` 等固定阶段不会被合并成单一 `queue` 指标。采样脚本只使用白名单字段，输出不含账号、Cookie、正文、文件名或查询参数。
+
 尚未完成：按生产样本验证分区后 `queue/wait` p95 是否下降；把外部 I/O 真正移出一致性临界区；通知总览的逐片降级响应；超大模块拆分；偶发事件循环最大延迟的时间窗口定位。这些都需要新的生产观测或明确的业务迁移设计，不以代码推送代替验收。
 
 ## 本轮验证边界

@@ -23,6 +23,8 @@
 
 其他 smoke 使用 `BASE_URL`，默认端口不统一，见 [测试指南](../docs/TESTING.md)。默认账号口令是历史夹具，不能用于生产。
 
+`npm run inspect:production-performance` 调用 `scripts/inspect-production-performance.sh`，只在应用服务器上读取 `release.json`、systemd 状态、脱敏后的 `journalctl` 遥测和现有 Nginx timing 日志，不修改服务、业务表、配置或凭据。脚本把 `summarize-telemetry.mjs` 按 `service + operation` 聚合，可分别核对 `queue/wait`、`activity-read`、`activity-external-write`、`activity-mutation`、`background/run` 与 `background/skipped`。参数依次是 `--since` 字符串和最大日志行数，默认 `2 hours ago` 与 `30000`。这是有界样本，不代表完整请求率或 SLA。
+
 ## main 十分钟兜底同步
 
 `main_sync.py` 由服务器的 `njuredcross-main-sync.timer` 每十分钟调用一次。
