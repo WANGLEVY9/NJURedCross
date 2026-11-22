@@ -8,7 +8,7 @@ export function serviceDuration(start, end) {
   const hours = (HALF_HOURS.indexOf(end) - HALF_HOURS.indexOf(start)) / 2;
   return hours > 0 ? hours : null;
 }
-function scheduledRegistrationLine(publishAt) {
+export function noticeRegistrationTime(publishAt) {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}:\d{2})(?::(\d{2}))?(?:\+08:00)?$/.exec(publishAt || '');
   if (!match) return '';
   // Validate the calendar components without depending on the browser's timezone.
@@ -16,7 +16,11 @@ function scheduledRegistrationLine(publishAt) {
   const date = new Date(`${timestamp}Z`);
   if (!Number.isFinite(date.getTime()) || date.toISOString().slice(0,19) !== timestamp) return '';
   const time = match[4] + (match[5] && match[5] !== '00' ? `:${match[5]}` : '');
-  return `【报名开始】${Number(match[2])}月${Number(match[3])}日 ${time} 开始报名（北京时间）`;
+  return `${Number(match[2])}月${Number(match[3])}日 ${time}`;
+}
+function scheduledRegistrationLine(publishAt) {
+  const time=noticeRegistrationTime(publishAt);
+  return time?`【报名开始】${time} 开始报名（北京时间）`:'';
 }
 export function syncNoticeSchedule(text, publishAt) {
   const source = String(text || ''), newline = source.includes('\r\n') ? '\r\n' : '\n';

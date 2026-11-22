@@ -1,5 +1,6 @@
 import { activityWindow, shanghaiInstant } from './activity-window.js';
-import { ACTIVITY_CATEGORY_OPTIONS, canonicalActivityCategory } from './activity-taxonomy.js';
+import { ACTIVITY_CATEGORY_OPTIONS, canonicalActivityCategory, activityRegion } from './activity-taxonomy.js';
+import {noticeRegistrationTime} from './activity-management.js';
 import {flexibleCapacity} from './activity-capacity.js';
 import {normalizeSpecialDraft,normalizeSpecialActivity,scheduleType,registryDisplayStatus,isManagedDutyContent} from './special-activity.js';
 
@@ -127,7 +128,7 @@ export function workspacePermissions(event,evidence) {
   const draft=event.stage==='草稿';
   return {view:Boolean(valid&&(chair||owner)),edit:Boolean(owner&&draft||chair&&['草稿','待审批','报名中'].includes(event.stage)),review:Boolean(chair&&event.stage==='待审批'),recordHours:Boolean(owner&&event.stage==='进行中'),reviewHours:Boolean(chair&&event.stage==='时长审核')};
 }
-export function workspaceNotice(input,{legacy=false,previous=false}={}) {
+function historicalWorkspaceNotice(input,{legacy=false,previous=false}={}) {
   const d=normalizeWorkspaceDraft(input),text=v=>v||'待补充';
   const dash=legacy?'—':'-',hours=p=>[`服务${text(p.serviceHours)}小时`,...(Number(p.trainingHours)>0?[`培训${p.trainingHours}小时`]:[]),...(Number(p.travelHours)>0?[`交通${p.travelHours}小时`]:[])].join('，');
   const old=legacy||previous,label=old?'工作内容':'活动内容';
@@ -147,4 +148,24 @@ export function workspaceNotice(input,{legacy=false,previous=false}={}) {
   }else lines.push(`【${label}】${text(d.work)}`,`【活动时间】${text(d.date)} ${text(d.start)}${dash}${d.endDate&&d.endDate!==d.date?d.endDate+' ':''}${text(d.end)}`,`【活动地点】${text(d.location)}`,`【招募人数】${text(d.capacity)}人`,...(legacy?[`【志愿时长】${hours(d)}。`]:[]));
   lines.push(`【报名截止】${text(d.deadline).replace('T',' ')}`,d.bookingMode==='grouped'?'【报名方式】请在平台活动页面选择相应岗位并提交报名。':'【报名方式】请在平台活动页面填写并提交报名。',...(!old?['https://njuredcross.cn/events']:[]),'【结果通知】报名审核结果将通过邮件通知，请留意查收；后续安排以活动通知为准。');return lines.join('\n');
 }
-export const isWorkspaceNoticeAuto=content=>!content.notice||content.notice===workspaceNotice(content)||content.notice===workspaceNotice(content,{legacy:true})||content.notice===workspaceNotice(content,{previous:true});
+export function workspaceNotice(input,options={}) {
+  // Keep the original three renderers for exact recognition of saved notices.
+  const d=normalizeWorkspaceDraft(input);
+  if(options.legacy||options.previous)return historicalWorkspaceNotice(d,options);
+  const text=v=>v||'待补充',lines=[`${activityRegion(d)==='suzhou'?'南苏红会':'南大红会'} ${d.name}`];
+  if(d.special){
+    const original=historicalWorkspaceNotice(d).split('\n');original[0]=lines[0];return original.join('\n');
+  }
+  lines.push('【活动内容】');
+  if(d.description)lines.push(d.description);
+  if(d.bookingMode==='grouped'){
+    for(const [i,p] of d.positions.entries()){
+      if(i)lines.push('');
+      lines.push(`${d.positions.length>1?`${i+1}. `:''}${text(p.name)}`,`活动内容：${text(p.work)}`,`活动时间：${text(p.date)} ${text(p.start)}-${text(p.end)}`,`活动地点：${text(p.location)}`,`招募人数：${text(p.capacity)}人`);
+    }
+  }else lines.push(text(d.work),`【活动时间】${text(d.date)} ${text(d.start)}-${d.endDate&&d.endDate!==d.date?d.endDate+' ':''}${text(d.end)}`,`【活动地点】${text(d.location)}`,`【招募人数】${text(d.capacity)}人`);
+  const time=noticeRegistrationTime(d.deadline);
+  lines.push(`【报名截止】${time?`${time}（北京时间）`:'待补充'}`,d.bookingMode==='grouped'?'【报名方式】请在平台活动页面选择相应岗位并提交报名。':'【报名方式】请在平台活动页面填写并提交报名。','https://njuredcross.cn/events','【结果通知】报名审核结果将通过邮件通知，请留意查收；后续安排以活动通知为准。');
+  return lines.join('\n');
+}
+export const isWorkspaceNoticeAuto=content=>!content.notice||content.notice===workspaceNotice(content)||[{}, {legacy:true}, {previous:true}].some(options=>content.notice===historicalWorkspaceNotice(content,options));
