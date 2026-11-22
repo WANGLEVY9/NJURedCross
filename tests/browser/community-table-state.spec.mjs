@@ -3,6 +3,9 @@ import { test, expect } from '@playwright/test';
 async function mount(page, version, query = '') {
   await page.route('**/api/**', (route) => route.abort());
 
+  await page.route('**/api/community/matching-preview', (route) =>
+    route.fulfill({ json: { ok: true, message: '合成匹配预览', candidateCount: 0, byProgram: [], pairs: [] } }));
+
   await page.route('**/api/community/interests', (route) =>
     route.fulfill({
       json: {
@@ -101,6 +104,15 @@ async function mount(page, version, query = '') {
 }
 
 for (const version of ['legacy', 'birthday']) {
+  test(`${version}: retired participation links open participants and matching remains available`, async ({ page }) => {
+    await mount(page, version, '?tab=pilot&program=birthday');
+    await expect(page).toHaveURL(/\?tab=interests&program=birthday$/);
+    const tabRole = version === 'legacy' ? 'tab' : 'radio';
+    await expect(page.getByRole(tabRole, { name: '我的参与' })).toHaveCount(0);
+    await page.getByRole(tabRole, { name: '匹配预览', exact: true }).click();
+    await expect(page.getByText('合成匹配预览', { exact: true })).toBeVisible();
+  });
+
   test(`${version}: search and sorting survive a page reload`, async ({ page }) => {
     await mount(page, version);
     const key = version === 'legacy' ? 'nickname' : 'realName';

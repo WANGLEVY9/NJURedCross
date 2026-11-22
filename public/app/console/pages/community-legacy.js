@@ -15,7 +15,7 @@ import { protectDrawerDraft } from '../../ui/drawer-draft.js';
 import { patchQuery } from '../../core/router.js';
 import { tableStateOptions } from '../table-state.js';
 import {
-  pageHead, metricRow, badge, button, field, checkbox, notice,
+  pageHead, metricRow, badge, button, field, notice,
   emptyState, segmented, skeletonMetrics, skeletonRows, statusFor, definitionList,
   copyableCode, runWithLoading, timeline, statusIndicator,
 } from '../../ui/primitives.js';
@@ -163,86 +163,12 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
   }
 }
 
-function openJoinDrawer({ onDone }) {
-  let submitting = false;
-  let program = 'birthday';
-  let frequency = 'weekly';
-
-  const programControl = segmented({
-    items: [
-      { value: 'birthday', label: '生日祝福' },
-      { value: 'morning', label: '早安晚安' },
-    ],
-    value: program,
-    ariaLabel: '项目',
-    onChange: (value) => {
-      program = value;
-      programControl.setValue(value);
-    },
-  });
-  const frequencyControl = segmented({
-    items: [
-      { value: 'weekly', label: '按周期接收' },
-      { value: 'once', label: '只参加一次' },
-    ],
-    value: frequency,
-    ariaLabel: '接收频率',
-    onChange: (value) => {
-      frequency = value;
-      frequencyControl.setValue(value);
-    },
-  });
-
-  const consent = checkbox({
-    name: 'consent',
-    label: '我自愿参加，并确认可以随时退出',
-    description: '选择要参与的计划。',
-  });
-
-  const submitButton = button({ label: '记录参加意愿', variant: 'primary', iconName: 'check', onClick: () => submit() });
-
-  const drawer = openDrawer({
-    eyebrow: '温暖连接 · 管理员试点',
-    title: '加入项目',
-    description: '保存后可在参与记录中查看。',
-    width: 460,
-    body: [
-      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '项目' }), programControl),
-      h('div', { class: 'field' }, h('p', { class: 'field__label', text: '接收频率' }), frequencyControl),
-      consent,
-    ],
-    footer: [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton],
-  });
-
-  const draftProtection = protectDrawerDraft(drawer, {
-    readExtraState: () => ({ program, frequency }),
-    isBusy: () => submitting,
-  });
-
-  async function submit() {
-    if (submitting) return;
-    if (!consent.control.checked) {
-      shake(consent);
-      notify.warning('需要明确同意', '请先确认自愿参加与随时退出的规则。');
-      return;
-    }
-    submitting = true;
-    try {
-      const payload = await runWithLoading(submitButton, () => consoleApi.community.consent({ program, frequency, contentMode: 'reviewed', consent: true }));
-      draftProtection.release();
-      notify.success('已记录参加意愿', payload.message);
-      drawer.close();
-      onDone?.();
-    } catch (error) {
-        reportError(error, '未能记录参加意愿');
-    } finally {
-      submitting = false;
-    }
-  }
-}
-
 export default async function communityPage(context, shell) {
   let tab = context.query.get('tab') || 'interests';
+  if (tab === 'pilot') {
+    tab = 'interests';
+    patchQuery({ tab });
+  }
   const bodySlot = h('div', { class: 'stack-6' });
   let communityTargetHandled = false;
   let disposed = false;
@@ -294,7 +220,6 @@ export default async function communityPage(context, shell) {
       { value: 'interests', label: '参加登记' },
       { value: 'submissions', label: '投稿池审核' },
       { value: 'matching', label: '匹配预览' },
-      { value: 'pilot', label: '我的参与' },
     ],
     value: tab,
     ariaLabel: '温暖连接视图',
@@ -489,73 +414,9 @@ export default async function communityPage(context, shell) {
     ],
   });
 
-  const pilotRegion = asyncRegion({
-    lazy: true,
-    skeleton: skeletonRows(3),
-    errorTitle: '试点状态无法加载',
-    load: options => consoleApi.community.overview(options),
-    render: (payload, { reload }) => [
-      metricRow(
-        [
-          metric({ label: '当前有效同意', value: payload.stats.active, unit: '条', animate: false }),
-          metric({ label: '我参与的项目', value: payload.stats.currentUserActive, unit: '个', animate: false }),
-        ],
-        { columns: 2 },
-      ),
-      payload.current.length
-        ? h(
-            'div',
-            { class: 'stack-3' },
-            ...payload.current.map((entry) =>
-              h(
-                'div',
-                { class: 'row-3 pilot-row' },
-                icon(entry.program === 'birthday' ? 'sparkle' : 'handshake', 'ico ico--lg'),
-                h(
-                  'div',
-                  { class: 'stack-1 spacer' },
-                  h('b', { class: 't-secondary t-strong', text: PROGRAM_LABEL[entry.program] || entry.program }),
-                  h('p', { class: 't-caption', text: `${FREQUENCY_LABEL[entry.frequency] || entry.frequency} · 更新于 ${fmt.relative(entry.updatedAt)}` }),
-                ),
-                statusIndicator('已加入', { tone: 'success' }),
-                button({
-                  label: '退出项目',
-                  variant: 'danger',
-                  size: 'sm',
-                  iconName: 'close',
-                  onClick: async () => {
-                    const confirmed = await confirmAction({
-                      title: `退出${PROGRAM_LABEL[entry.program]}？`,
-                      description: '退出后不会再进入匹配与发送队列。你随时可以重新加入。',
-                      confirmLabel: '退出项目',
-                      tone: 'danger',
-                    });
-                    if (!confirmed) return;
-                    try {
-                      await consoleApi.community.withdraw(entry.program);
-                      notify.success('已退出项目');
-                      reload();
-                    } catch (error) {
-                      reportError(error, '退出未完成');
-                    }
-                  },
-                }),
-              ),
-            ),
-          )
-        : emptyState({
-            iconName: 'heart',
-            title: '你还没有参加任何温暖连接项目',
-            description: '管理员也可以作为普通参与者加入试点，用来验证同意、审核与退出流程是否顺畅。',
-            actions: [button({ label: '加入项目', variant: 'primary', iconName: 'plus', onClick: () => openJoinDrawer({ onDone: reload }) })],
-          }),
-      payload.current.length ? button({ label: '加入另一个项目', variant: 'secondary', iconName: 'plus', onClick: () => openJoinDrawer({ onDone: reload }) }) : null,
-    ],
-  });
-
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'submissions' ? submissionsRegion : tab === 'matching' ? matchingRegion : tab === 'pilot' ? pilotRegion : interestsRegion;
+    const current = tab === 'submissions' ? submissionsRegion : tab === 'matching' ? matchingRegion : interestsRegion;
     current.ensureLoaded();
     bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')), current);
     requestAnimationFrame(() => tabControl.reposition?.());
