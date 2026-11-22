@@ -1,15 +1,16 @@
 import {test,expect} from '@playwright/test';
 
 test('leave range selection and select-all submit thirty decisions with empty explanation',async({page})=>{
- await page.goto('/login');
  const requests=[];
  await page.route('**/api/volunteer/workflow/registrations/batch',async route=>{
   const body=route.request().postDataJSON();requests.push(body);
   await route.fulfill({json:{ok:true,results:body.ids.map(id=>({id,ok:true}))}});
  });
- // The login page opens a first-visit reminder; clear that overlay before
- // mounting the standalone batch component into the test page.
- await page.evaluate(()=>{document.getElementById('overlay-root')?.replaceChildren();sessionStorage.setItem('njurc:registration-reminder:v1','shown');});
+ // Keep the preview origin for module imports, but suppress the login page's
+ // asynchronous first-visit reminder so its scrim cannot intercept clicks.
+ await page.addInitScript(()=>{sessionStorage.setItem('njurc:registration-reminder:v1','shown');});
+ await page.goto('/login');
+ await page.evaluate(()=>{document.getElementById('overlay-root')?.replaceChildren();});
  await page.evaluate(async()=>{
   const {batchLeaveButton}=await import('/app/console/pages/activity-leave-review.js');
   const rows=Array.from({length:30},(_,i)=>({_id:`leave-${i}`,活动ID:'synthetic',姓名:`合成${i}`,学号:`999${i}`,请假状态:'待审批',报名状态:'已确认',请假原因:'合成原因'}));
