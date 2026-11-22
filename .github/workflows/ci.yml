@@ -123,6 +123,10 @@ jobs:
           exit 1
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
+        # Browser tests already report failures through the test command. An
+        # artifact upload timeout is CI infrastructure noise, not a product
+        # regression; keep the warning visible without blocking deployment.
+        continue-on-error: true
         with:
           name: browser-${{ matrix.project }}-${{ matrix.shard }}-evidence
           path: |
