@@ -6473,9 +6473,8 @@ if (url.pathname.startsWith('/api/public/')) {
       // 「刷新待办」显式带 ?fresh=1 时仍然直读权威源。
       const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username));
       const load = () => getNotificationsOverview(client, permissions, session);
-      if (url.searchParams.has('fresh')) return json(res, 200, await load());
       const cacheKey = `notifications:${session.username}:${permissions.join(',')}`;
-      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, []));
+      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, [], { refresh: url.searchParams.has('fresh') }));
     }
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
       const consents = await readCommunityConsents(client);
@@ -6883,9 +6882,8 @@ if (url.pathname.startsWith('/api/public/')) {
       // 「刷新待办」显式带 ?fresh=1 时仍然直读权威源。
       const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username));
       const load = () => getNotificationsOverview(client, permissions, session);
-      if (url.searchParams.has('fresh')) return json(res, 200, await load());
       const cacheKey = `notifications:${session.username}:${permissions.join(',')}`;
-      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, []));
+      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, [], { refresh: url.searchParams.has('fresh') }));
     }
     // 「我的参与」：与公众端同一套登记模型（温暖连接参加表），不再读旧 consent 结构
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
