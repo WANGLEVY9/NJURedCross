@@ -47,12 +47,12 @@ test('position hints count pending leave independently of roster filters and lin
 
 test('review refresh clears only the resolved position hint, including the single-position case',async({page})=>{
  await mount(page);
- await page.getByRole('row').filter({hasText:'待审批同学'}).getByRole('button',{name:'批准请假',exact:true}).click();
+ await page.getByRole('row').filter({hasText:'待审批同学'}).getByRole('button',{name:'审核通过',exact:true}).click();
  await page.getByRole('dialog',{name:'批准请假',exact:true}).getByRole('button',{name:'确认批准请假',exact:true}).click();
  await expect(page.getByRole('tab',{name:'鼓楼服务岗',exact:true})).toBeVisible();await expect(page.locator('.activity-registration-leave-hint')).toBeHidden();await expect(page.getByRole('tab',{name:'鼓楼摄影岗，2 条请假待审批',exact:true})).toBeVisible();
  await expect(page.getByRole('row').filter({hasText:'待审批同学'}).locator('.badge--success')).toHaveText('请假已批准');
  await mount(page,true);await expect(page.getByRole('tab',{name:'鼓楼服务岗，1 条请假待审批',exact:true})).toBeVisible();
- await page.getByRole('row').filter({hasText:'待审批同学'}).getByRole('button',{name:'驳回请假',exact:true}).click();
+ await page.getByRole('row').filter({hasText:'待审批同学'}).getByRole('button',{name:'不通过',exact:true}).click();
  const modal=page.getByRole('dialog',{name:'驳回请假',exact:true});await modal.getByRole('textbox',{name:/处理说明/}).fill('合成处理说明');await modal.getByRole('button',{name:'确认驳回请假',exact:true}).click();
  await expect(page.getByRole('tablist',{name:'活动岗位'})).toBeHidden();await expect(page.locator('.activity-registration-leave-hint')).toBeHidden();await expect(page.getByRole('row').filter({hasText:'待审批同学'}).locator('.badge--error')).toHaveText('请假已驳回');await expect(page.getByRole('row').filter({hasText:'待审批同学'}).locator('.activity-registration-decision')).not.toContainText('待判定');
 });

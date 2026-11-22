@@ -1,4 +1,4 @@
-import {leaveReviewActions,leaveStatus,canReviewLeave} from './activity-leave-review.js';
+import {leaveReviewActions,leaveStatus,canReviewLeave,batchLeaveButton} from './activity-leave-review.js';
 import {h} from '../../core/dom.js';
 import {button,field,definitionList,notice} from '../../ui/primitives.js';
 import {openModal} from '../../ui/overlay.js';
@@ -120,5 +120,6 @@ const reopenReviewButton=button({label:'重新打开初审',onClick:()=>{
 }});
 if(event.approvalAccess?.canManageRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(reopenReviewButton);
  const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},todo,h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},attention.node,tabs,leaves,blocked,h('div',{class:'activity-registration-filters'},filter,summary),batch.node,h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
+ const leaveBatch=batchLeaveButton({getRows:()=>busy||event.approvalAccess?.canManageRegistration!==true||!canReviewLeave(event)?[]:snapshot.registrations.filter(r=>snapshot.events.some(e=>e['活动ID']===r['活动ID'])),refresh:fresh,onBusy:value=>{busy=value;if(!disposed)render();}});node.querySelector('.activity-registration-content').prepend(leaveBatch);
  render();return {node,dispose:()=>{disposed=true;liveEditor?.dispose();batch.dispose();},hasUnsaved:()=>liveEditor?.hasUnsaved()||batch.hasUnsaved()||false,isSaving:()=>busy||liveEditor?.isSaving()||batch.isSaving()||false,applyReview(next){if(disposed||busy||liveEditor||batch.hasUnsaved()||next===undefined)return;state=next;render();}};
 }

@@ -1,5 +1,5 @@
 import {request} from '../../core/api.js';
-import {leaveReviewActions,leaveStatus,canReviewLeave} from './activity-leave-review.js';
+import {leaveReviewActions,leaveStatus,canReviewLeave,batchLeaveButton} from './activity-leave-review.js';
 import {rosterColumns} from '../roster-columns.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {h} from '../../core/dom.js';
@@ -159,7 +159,8 @@ export function activityRegistrationWorkspace({adminEditInformation,event,data,a
  const batchToggle=button({label:'批量操作',onClick:()=>{if(busy||uncertain||!manager())return;batchMode=!batchMode;selected.clear();render();}});
  search.control.addEventListener('input',()=>{selected.clear();render();});
  for(const control of [status.control,order.control,campus,department])control.addEventListener('change',()=>{selected.clear();render();});
- content.append(todo,positionTabs,leaveHint,h('div',{class:'activity-registration-filters'},search,status,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,renotify,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
+ const leaveBatch=batchLeaveButton({getRows:()=>busy||uncertain||!manager()?[]:snapshot.registrations.filter(r=>parent(r)&&canReviewLeave(parent(r))),refresh:fresh,onBusy:value=>{busy=value;if(!disposed)render();}});
+ content.append(todo,positionTabs,leaveHint,leaveBatch,h('div',{class:'activity-registration-filters'},search,status,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,renotify,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
  root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,actionsNode),h('p',{class:'t-caption',text:'如需修改入群信息、注意事项等通知内容，请点击右上角“通知信息编辑”。修改仅影响后续发送的邮件，已发送或已进入发送队列的邮件保持原内容。'}),content);render();void readMailStatuses();
  return {node:root,dispose:()=>{disposed=true;mailSequence++;liveEdit?.dispose();},hasUnsaved:()=>liveEdit?.hasUnsaved()||false,isSaving:()=>busy||liveEdit?.isSaving()||false};
 }

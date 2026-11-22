@@ -584,7 +584,7 @@ export default async function activityCenter(context,shell){
  async function batchLeave(e,approved){
   const state=legacyRosterState(e),rows=scopedRows(data.registrations,e).filter(row=>state.selected.has(row._id)&&matchesLegacyRoster(row,state)&&row['请假状态']==='待审批'&&['待筛选','已确认'].includes(row['报名状态']));
   if(!rows.length||rows.length>100){notify.warning('请选择1～100条当前筛选内待审批的请假');return;}
-  const reason=field({label:'处理说明',required:true,multiline:true,maxlength:500});let busy=false,drawer,guard;
+  const reason=field({label:'处理说明（选填）',multiline:true,maxlength:500});let busy=false,drawer,guard;
   const save=button({label:'确认处理',variant:'primary',onClick:async()=>{
    if(busy||!reason.control.reportValidity())return;
    busy=true;setFormControlsLocked(drawer.body,true);

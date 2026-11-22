@@ -35,10 +35,10 @@ const kind='running';
     if(kind==='registration')await expect(page.getByRole('combobox',{name:'报名状态',exact:true})).toContainText('请假待审批');
     await expect(page.getByRole('row').filter({hasText:'合成课程冲突甲'})).toBeVisible();await expect(page.getByRole('row').filter({hasText:'其他项目'})).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
-    await page.getByRole('row').filter({hasText:'合成课程冲突甲'}).getByRole('button',{name:'批准请假',exact:true}).click();
+    await page.getByRole('row').filter({hasText:'合成课程冲突甲'}).getByRole('button',{name:'审核通过',exact:true}).click();
     await page.getByRole('dialog',{name:'批准请假',exact:true}).getByRole('button',{name:'确认批准请假',exact:true}).click();
     await expect(second.locator('.activity-position-leave-count')).toHaveText('1');
-    await page.getByRole('row').filter({hasText:'合成课程冲突乙'}).getByRole('button',{name:'驳回请假',exact:true}).click();
+    await page.getByRole('row').filter({hasText:'合成课程冲突乙'}).getByRole('button',{name:'不通过',exact:true}).click();
     const dialog=page.getByRole('dialog',{name:'驳回请假',exact:true});await dialog.getByRole('textbox',{name:/处理说明/}).fill('合成排班核对后驳回');
     await dialog.getByRole('button',{name:'确认驳回请假',exact:true}).click();
     await expect(second.locator('.activity-position-leave-count')).toHaveCount(0);await expect(second).not.toHaveClass(/has-pending-leave/);await expect(attention).toBeHidden();
@@ -50,13 +50,13 @@ const kind='running';
     const tabs=page.getByRole('tablist',{name:'活动岗位'});await expect(tabs).toBeVisible();await expect(tabs.getByRole('tab')).toHaveCount(1);
     await expect(tabs.locator('.activity-position-leave-count')).toHaveText('2');
     await expect(page.getByRole('button',{name:'查看待审批请假',exact:true})).toBeHidden();
-    await expect(page.getByRole('button',{name:'批准请假',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'驳回请假',exact:true})).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'审核通过',exact:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'不通过',exact:true})).toHaveCount(0);
     expect(await page.evaluate(()=>window.leaveAttentionTest.decisions)).toEqual([]);
   });
 
   test(`${kind} failed decisions retain the pending indicator`,async({page})=>{
     await mount(page,kind,{fail:true});await page.getByRole('button',{name:'查看待审批请假',exact:true}).click();
-    await page.getByRole('row').filter({hasText:'合成课程冲突甲'}).getByRole('button',{name:'批准请假',exact:true}).click();
+    await page.getByRole('row').filter({hasText:'合成课程冲突甲'}).getByRole('button',{name:'审核通过',exact:true}).click();
     const dialog=page.getByRole('dialog',{name:'批准请假',exact:true});await dialog.getByRole('button',{name:'确认批准请假',exact:true}).click();
     await expect(dialog).toBeVisible();await expect(page.locator('.activity-position-leave-count')).toHaveText('2');
     await expect(page.getByRole('complementary',{name:'请假待办提示'})).toContainText('有 2 条请假待审批');
