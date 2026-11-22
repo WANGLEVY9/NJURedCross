@@ -446,7 +446,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
 export function publicationReadiness(event,config) {
   const plan=config.positionDraft||config.positionPlan,positions=plan?.positions||[];
   const grouped=config.bookingMode==='grouped';
-  const positionsReady=!grouped||(positions.length>0&&Boolean(activityWindow(plan.deadline,config.window?.start))&&positions.every(p=>p.name?.trim()&&p.location?.trim()&&['鼓楼','仙林','浦口','苏州'].includes(p.campus)&&Number.isInteger(Number(p.capacity))&&Number(p.capacity)>0&&positionWithinActivity(p,config.window)));
+  const positionsReady=!grouped||(positions.length>0&&Boolean(activityWindow(plan.deadline,config.window?.end))&&positions.every(p=>p.name?.trim()&&p.location?.trim()&&['鼓楼','仙林','浦口','苏州'].includes(p.campus)&&Number.isInteger(Number(p.capacity))&&Number(p.capacity)>0&&positionWithinActivity(p,config.window)));
   const scheduled=event['状态']==='报名中'&&Date.parse(config.publishAt)>Date.now();
   // Group configuration can close registration while older parent records stay
   // 报名中. Re-publication is idempotent; the API rechecks approval and all children.

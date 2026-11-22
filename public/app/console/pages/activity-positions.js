@@ -13,7 +13,7 @@ export function configureProjectPositions(event,onSaved,{onContinue,onBack,steps
  const list=h('div',{class:'position-editor__list'}),items=[];
  let drawer,busy=false,guard;
  const local=value=>value?.slice(0,19)||'';
- const deadline=enhanceDateTimeField(field({label:'统一报名截止（北京时间）',name:'deadline',type:'datetime-local',step:1,required:true,value:local(plan?.deadline),max:local(c.window?.start)}));
+ const deadline=enhanceDateTimeField(field({label:'统一报名截止（北京时间）',name:'deadline',type:'datetime-local',step:1,required:true,value:local(plan?.deadline),max:local(c.window?.end)}));
  const summary=h('strong',{'aria-live':'polite'}),warning=h('p',{class:'position-editor__error',role:'status','aria-live':'polite',hidden:true}),error=h('p',{class:'position-editor__error',role:'alert',hidden:true});
  const hourFields=['serviceHours','trainingHours','travelHours'];
  const readItem=item=>Object.fromEntries(item.inputs.filter(f=>!hourFields.includes(f.control.name)||f.control.value!=='').map(f=>[f.control.name,f.control.value]));

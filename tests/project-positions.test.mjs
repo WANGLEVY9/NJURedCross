@@ -342,7 +342,7 @@ test('interrupted position generation resumes without duplicate rows or opening 
 });
 
 
-test('whole-day grouped projects use the earliest position for cutoff and publication',async()=>{
+test('whole-day grouped projects allow cutoff after positions start but keep early publication',async()=>{
  const f=await fixture({now:()=>Date.parse('2026-11-12T12:00:00+08:00')},{window:{start:'2026-11-15T00:00:00+08:00',end:'2026-11-15T23:59:00+08:00'}});
  const positions=f.positions.map(p=>({...p,start:'2026-11-15T16:00:00+08:00',end:'2026-11-15T17:30:00+08:00',flexibleCapacity:1}));
  await f.w.configurePositions(f.parent._id,{...f.payload(),positions,deadline:'2026-11-15T14:00:00+08:00'},'owner');
@@ -352,8 +352,11 @@ test('whole-day grouped projects use the earliest position for cutoff and public
  assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'开放');
  await f.w.publish(f.parent._id,{publishAt:null});
  assert.equal(f.tables[WF.events][0]['状态'],'报名中');
- const before=structuredClone(f.tables);
  for(const deadline of ['2026-11-15T16:00:00+08:00','2026-11-15T17:00:00+08:00']){
+  await f.w.configurePositions(f.parent._id,{...f.payload(),positions,deadline},'owner');
+ }
+ const before=structuredClone(f.tables);
+ for(const deadline of ['2026-11-15T23:59:00+08:00','2026-11-16T00:00:00+08:00']){
   await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions,deadline},'owner'),{statusCode:400});
   assert.deepEqual(f.tables,before);
  }

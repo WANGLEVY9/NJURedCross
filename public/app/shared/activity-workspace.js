@@ -105,6 +105,8 @@ export function workspaceDraftErrors(input) {
     if(Number(row.capacity)+flexibleCapacity(row.flexibleCapacity)>100000)errors.push(`${label}含弹性名额的报名上限超过限制`);
     if(hoursError(row.serviceHours)||Number(row.serviceHours)<=0||hoursError(row.trainingHours,true)||hoursError(row.travelHours,true))errors.push(`${label}时长无效`);
   };
+  const activityEnd=shanghaiInstant(`${d.endDate}T${d.bookingMode==='grouped'?'23:59':d.end}`);
+  if(deadline&&activityEnd&&deadline.timestamp>=activityEnd.timestamp)errors.push('???????????');
   if(d.bookingMode==='unified')check(d,'活动',d.date,d.endDate);
   if(d.bookingMode==='grouped'){
     if(!d.positions.length)errors.push('请添加岗位');
