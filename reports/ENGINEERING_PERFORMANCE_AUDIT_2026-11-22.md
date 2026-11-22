@@ -210,6 +210,15 @@ HTTP 样本 7644 条，状态 >=400 共 338 条、aborted 13 条；这些是混�
 
 本轮没有改动邮件投递、审批、名额或时长一致性代码；`displayRead` 已有进程级缓存与请求级单飞，通知总览重复 handler 不再另叠加一层缓存。后续业务优化必须先补对应的合成回归，再用同一个 `traceId` 关联工具核对前后 `http.durationMs`、`exclusiveSpans` 与 `queue/run` 批大小。
 
+### 第七轮：收敛重复读取与并发刷新
+
+按第六轮的 trace 归因，选择两处不触碰业务语义、且已有合成回归覆盖的热点落地：
+
+1. 通知总览的 `?fresh=1` 原先完全绕过 `displayRead`，多个管理员并发点击“刷新待办”会各自并行聚合 7 个来源。现在 `displayRead` 新增 `refresh` 选项，复用 `createTaggedCache` 已有的同 key 在途单飞：`fresh=1` 仍强制回源、不返回旧快照，但同一权限键的并发刷新只回源一次；刷新成功后，后续普通展示读读到新值。回归 `display-reads.test.mjs` 同时验证强制回源、合并在途加载和新值可见。
+2. `registration-notifications.js` 的 `reconcile` 原先在串行任务开始时读一次通知任务表，入队后又 `rows()` 全表读一次。改为复用同一串行轮次内已经维护的 `existing` 快照；`attempt()` 的状态补丁仍作用于同一对象，投递前对请假决策、收件人、尝试次数、下次尝试和已发送状态逐条校验不变。回归把每次 `reconcile` 的权威表读取次数从 2 降为 1，并保留“第二次 reconcile 仍重新读权威源”的断言；通知相关 46 项测试全部通过。
+
+21 秒 `queue/run` trace 的依赖分布为 495 次 `seatable/read`、75 次 `seatable/write`、25 次 `queue/activity-read`、11 次 `queue/wait`、10 次 `smtp/send`，大量 15–20ms 小请求串行累积。上述改动减少的是两处明确的重复/并发上游读取，不等于把整批改造成并发投递；`deliverRoster` 每次仍按活动读取权威快照以保证重试时状态最新，SeaTable `listRows` 也没有可安全复用的状态过滤视图，因此没有引入按状态过滤或全局提高队列并发。部署后用同一 `traceId` 关联工具核对 `queue/run` 的依赖数量、`http /api/notifications/overview` 的 `exclusiveSpans` 以及 `seatable/read` 热点，再决定下一批是否拆分任务预算。
+
 ## 本轮验证边界
 
 本轮开始时 `main` 与 `origin/main` 一致、工作区干净；收尾仅更新操作文档、脚本说明和本报告，`git diff --check` 通过。检查覆盖源码、既有报告、缓存/队列设计、写锁、分页读取、前端资源与后台任务。生产侧只执行有界只读日志采样与受限密钥配置，没有执行新的生产压测、没有访问真实业务表、没有改运行代码。后续任何优化都应先定义可观测指标、合成故障回归和回滚点，再按仓库约定验证 CI、发布回执与线上页面。

@@ -31,6 +31,20 @@ test('invalidated in-flight display results cannot populate the new generation',
   assert.equal(await withDisplayReads(() => displayRead(base, 'rows', () => 'wrong')), 'new');
 });
 
+test('fresh display reads force revalidation but coalesce concurrent refreshes', async () => {
+  clearDisplayReads(); const base = {}; let value = 'before'; let calls = 0; let release;
+  const load = () => new Promise(resolve => { calls += 1; release = () => resolve(value); });
+  assert.equal(await withDisplayReads(() => displayRead(base, 'notifications', () => 'before', 15_000, [])), 'before');
+  value = 'after';
+  const first = withDisplayReads(() => displayRead(base, 'notifications', load, 15_000, [], { refresh: true }));
+  const second = withDisplayReads(() => displayRead(base, 'notifications', load, 15_000, [], { refresh: true }));
+  await Promise.resolve();
+  assert.equal(calls, 1);
+  release();
+  assert.deepEqual(await Promise.all([first, second]), ['after', 'after']);
+  assert.equal(await withDisplayReads(() => displayRead(base, 'notifications', () => 'wrong', 15_000, [])), 'after');
+});
+
 test('1000-row pages retain every row and reduce large-table round trips', async () => {
   const {readFile} = await import('node:fs/promises'); const vm = await import('node:vm');
   const source = await readFile(new URL('../server.js',import.meta.url),'utf8');
