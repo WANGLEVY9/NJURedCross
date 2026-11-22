@@ -10,6 +10,7 @@
   min-height: 100dvh;
 }
 .portal__outlet { display: block; min-width: 0; min-height: calc(100svh - 76px); }
+.portal__page-loading { width: min(100% - 32px, 1208px); margin: 0 auto; padding-block: 16px; }
 
 /* 资料提示条（2026-10-27）：这个容器原来没有任何样式，notice 里的「重新读取资料」
    按钮会挂在提示框外面、贴着视口左边缘，看起来像被截断的生按钮。

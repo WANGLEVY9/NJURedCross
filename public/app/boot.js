@@ -90,10 +90,17 @@
     // settles), so a broken route bundle degrades instead of hanging the page.
     return Promise.all(pending).then(() => [...requestedRoutes]);
   };
-  // Register before stylesReady() runs, so /events can wait for events-plaza.
+  // Register the current route before stylesReady checks the first frame.
   void ensureRouteStyles();
 
-  const requiredStyles = (surface) => ['tokens', 'base', 'components', 'mobile', 'themes', surface === 'console' ? 'admin' : 'portal', ...(location.pathname === '/events' || location.pathname.startsWith('/events/') ? ['events-plaza'] : [])];
+  const requiredStyles = (surface) => {
+    const required = ['tokens', 'base', 'components', 'mobile', 'themes', surface === 'console' ? 'admin' : 'portal'];
+    if (surface === 'portal') {
+      if (location.pathname === '/') required.push('home-experience');
+      if (location.pathname === '/events' || location.pathname.startsWith('/events/')) required.push('events-plaza');
+    }
+    return required;
+  };
   const ensureSurfaceBundle = (surface) => {
     const entry = manifest?.[surface];
     if (!entry) return;
@@ -108,7 +115,7 @@
   };
   const stylesReady = (surface) => {
     ensureSurfaceBundle(surface);
-    // 活动广场的整体排版依赖自己的样式表；其余页面样式仍为可选增强。
+    // 首页和活动广场的首屏布局依赖各自的样式表。
     const required = requiredStyles(surface);
     const loaded = Promise.all(required.map((name) => {
       const pending = styles.get(`/styles/${name}.css`);

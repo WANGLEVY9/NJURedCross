@@ -12,7 +12,7 @@ import { h, icon, qsa, clear } from '../core/dom.js';
 import { swapView } from '../core/motion.js';
 import { navigate } from '../core/router.js';
 import { registerCommands } from '../ui/palette.js';
-import { button, notice } from '../ui/primitives.js';
+import { button, notice, skeletonBlock } from '../ui/primitives.js';
 import { getSessionState, onSessionChange, getAccountProfile, prefetchRead } from '../core/api.js';
 import { openFeedbackDrawer } from './feedback-drawer.js';
 
@@ -53,7 +53,11 @@ export function createShell() {
   const refreshProfileNow=()=>{if(document.hidden)return;const stamp=Date.now();if(stamp-profileRefreshAt<800)return;profileRefreshAt=stamp;void refreshProfileReminder({fresh:true});};
   window.addEventListener('focus',refreshProfileNow);
   document.addEventListener('visibilitychange',refreshProfileNow);
-  const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } });
+  const loadingPage = h('div', { class: 'portal__page-loading stack-4' },
+    h('p', { class: 'sr-only', role: 'status', text: '正在准备页面…' }),
+    skeletonBlock('clamp(180px, 34vw, 420px)'),
+    skeletonBlock('88px'));
+  const outlet = h('main', { class: 'portal__outlet', id: 'main', attrs: { role: 'main' } }, loadingPage);
 
   const dock = h('nav', { class: 'mobile-dock', aria: { label: '广场导航' } },
     ...NAV.map((item) => h('a', {
@@ -248,6 +252,10 @@ export function createShell() {
     },
     async showPage(result) {
       attachPageArt(result.node);
+      if (outlet.firstElementChild === loadingPage) {
+        outlet.replaceChildren(result.node);
+        return;
+      }
       await swapView(outlet, result.node);
     },
     endNavigation() {},

@@ -37,17 +37,8 @@ function applySurface(surface) {
   applyTheme(surface);
 }
 
-async function ensureShell(surface, target = null) {
+async function ensureShell(surface) {
   if (activeSurface === surface && shells[surface]) return shells[surface];
-
-  // 同一文档内不能切换 surface：admin 与 portal 两套样式包只加载、不卸载，
-  // 旧包（栅格、装饰三角、body 背景）会污染新页面，表现为整页无样式与漂移。
-  // 跨端一律整页跳转，让浏览器重新建立样式与 shell 上下文。
-  // 必须跳到路由的目标地址：此时 history 可能尚未指向新路径。
-  if (activeSurface && activeSurface !== surface) {
-    location.assign(target || `${location.pathname}${location.search}${location.hash}`);
-    return new Promise(() => {});
-  }
 
   clearCommands();
   applySurface(surface);
@@ -228,6 +219,13 @@ let currentDispose = null;
 const publicFirstPaint = path => ['/', '/events', '/about', '/status', '/showcase'].includes(path) || path.startsWith('/events/');
 
 async function renderer({ context, handler, token }) {
+  // Cross-surface navigation starts a fresh document. Keep the current shell
+  // intact while it loads, including its styles and density.
+  if (activeSurface && activeSurface !== handler.surface) {
+    const query = context.query.toString();
+    location.assign(`${context.path}${query ? `?${query}` : ''}`);
+    return;
+  }
   // SPA navigations do not fetch a new shell, so bring in the route's own
   // enhancement styles before its page module renders.
   window.njurcBoot?.ensureRouteStyles(context.path);
@@ -243,7 +241,7 @@ async function renderer({ context, handler, token }) {
     const loadPage = developing && !hasConsoleAccess() && getSessionState().user?.localPreview !== true
       ? () => import('./portal/pages/development-gate.js') : handler.load;
     const pageModule = timeBrowserPhase(context.path,'module',loadPage).then(module => ({ module }), error => ({ error }));
-    shell = await ensureShell(handler.surface, `${context.path}${context.query.toString() ? `?${context.query}` : ''}`);
+    shell = await ensureShell(handler.surface);
     if (!token()) return;
     shell.beginNavigation(context);
     const loaded = await pageModule;
