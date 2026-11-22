@@ -99,14 +99,13 @@ export function workspaceDraftErrors(input) {
   const deadline=shanghaiInstant(d.deadline);if(!deadline)errors.push('报名截止时间无效');
   const check=(row,label,startDate,endDate)=>{
     if(!validTime(row.start)||!validTime(row.end)||!activityWindow(`${startDate}T${row.start}`,`${endDate}T${row.end}`))errors.push(`${label}起止时间无效`);
-    if(deadline&&validTime(row.start)&&Date.parse(`${startDate}T${row.start}:00+08:00`)<=deadline.timestamp)errors.push(`${label}须在报名截止后开始`);
     for(const [key,name]of [['location','地点'],['work','工作内容']])if(!row[key])errors.push(`请填写${label}${name}`);
     if(!/^\d+$/.test(row.capacity)||!Number.isSafeInteger(Number(row.capacity))||Number(row.capacity)<1||Number(row.capacity)>100000)errors.push(`${label}人数无效`);
     if(Number(row.capacity)+flexibleCapacity(row.flexibleCapacity)>100000)errors.push(`${label}含弹性名额的报名上限超过限制`);
     if(hoursError(row.serviceHours)||Number(row.serviceHours)<=0||hoursError(row.trainingHours,true)||hoursError(row.travelHours,true))errors.push(`${label}时长无效`);
   };
   const activityEnd=shanghaiInstant(`${d.endDate}T${d.bookingMode==='grouped'?'23:59':d.end}`);
-  if(deadline&&activityEnd&&deadline.timestamp>=activityEnd.timestamp)errors.push('???????????');
+  if(deadline&&activityEnd&&deadline.timestamp>=activityEnd.timestamp)errors.push('报名截止须早于活动结束');
   if(d.bookingMode==='unified')check(d,'活动',d.date,d.endDate);
   if(d.bookingMode==='grouped'){
     if(!d.positions.length)errors.push('请添加岗位');
