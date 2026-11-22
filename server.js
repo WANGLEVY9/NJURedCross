@@ -5307,6 +5307,7 @@ const identityCtx = {
     sessionTtlSeconds,
     // Strong binding: student self-registration only accepts campus mail.
     smailDomains: ['smail.nju.edu.cn', 'nju.edu.cn'],
+    staffEmailDomains:(process.env.REGISTRATION_STAFF_EMAIL_DOMAINS||'').split(',').map(value=>value.trim()).filter(Boolean),
     publicEmailDomains,
     publicWriteLimit,
     root,
