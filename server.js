@@ -3889,7 +3889,10 @@ async function getMaterialsOverview(client, { notificationsOnly = false } = {}) 
 }
 
 function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()); }
-const withEventMutation = createMutationQueue();
+/** Partition independent activity writes; ambiguous or multi-activity operations keep the global barrier. */
+const withEventMutation = createMutationQueue({
+  keyOf: scope => scope?.eventKey ?? '*',
+});
 const withOutreachReview = createMutationQueue();
 const materialLocks = new Map();
 async function withMaterialLock(assetCode, task) {
@@ -5543,9 +5546,14 @@ async function api(req, res, url) {
     /^\/api\/events(?:\/|$)/.test(url.pathname)
     || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname)
   );
+  const eventMatch = url.pathname.match(/^\/api\/events\/([^/]+)(?:\/|$)/)
+    || url.pathname.match(/^\/api\/public\/events\/([^/]+)\/registrations$/);
+  const eventKey = eventMatch
+    ? (() => { try { return decodeURIComponent(eventMatch[1]); } catch { return null; } })()
+    : null;
 
   const dispatch = () => eventWrite
-    ? withEventMutation(() => dispatchApi(req, res, url))
+    ? withEventMutation(() => dispatchApi(req, res, url), { eventKey })
     : dispatchApi(req, res, url);
 
   // Identity owns per-mailbox/per-student mutation locks. Never wait behind

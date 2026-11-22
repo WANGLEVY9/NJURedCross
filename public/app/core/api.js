@@ -143,7 +143,26 @@ const activityCatalogReads = createPublicReadCache({ttlMs:30_000,maxAgeMs:120_00
 const isManagementProjection=path=>/^\/api\/volunteer\/workflow(?:\/(?:catalog|workspace|overview-activity|sources|directory|approval-routing|workspace-drafts(?:\/capabilities)?|events\/[^/]+\/(?:detail|workspace-content|running-review|final-hours|information)))?(?:\?.*)?$/.test(path);
 const isOutreachOverview=path=>path==='/api/outreach/overview';
 const isNotificationProjection=path=>path.split('?')[0]==='/api/notifications/overview';
+const writeTags=path=>{
+ const clean=String(path).split('?')[0];
+ if(clean==='/api/auth/login'||clean==='/api/auth/logout'||clean.startsWith('/api/auth/account'))return [];
+ if(clean.startsWith('/api/materials/')||clean.startsWith('/api/reimbursements/')||clean==='/api/public/materials/borrow')return ['materials'];
+ if(clean.startsWith('/api/events/')||clean.startsWith('/api/volunteer/workflow/')||clean.startsWith('/api/public/events/')||clean.startsWith('/api/portal/workflow/'))return ['events'];
+ if(clean.startsWith('/api/outreach/')||clean.startsWith('/api/public/submissions')||clean.startsWith('/api/public/attachments/')||clean.startsWith('/api/public/media')||clean.startsWith('/api/public/tasks/')||clean.startsWith('/api/console/showcase')||clean.startsWith('/api/console/media'))return ['outreach'];
+ if(clean.startsWith('/api/community/')||clean.startsWith('/api/morning/')||clean.startsWith('/api/public/warmth'))return ['community'];
+ return [];
+};
 function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key)||isNotificationProjection(key)||isOutreachOverview(key))inflightGets.delete(key);}
+function invalidateWriteReads(tags){
+ if(!tags.length){invalidatePublicReads();invalidateManagementReads();return;}
+ publicReads.invalidate(tags);
+ managementReads.invalidate(tags);
+ activityCatalogReads.invalidate(tags);
+ // In-flight GETs are rare and may have started before the write; keeping the
+ // historical conservative clear avoids a late response repopulating a stale
+ // projection while still avoiding a full cache clear for normal writes.
+ for(const key of inflightGets.keys())if(tags.length&&isPublicProjection(key))inflightGets.delete(key);
+}
 async function timedRead(path,options){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(new DOMException('Read deadline exceeded','TimeoutError')),12_000);
@@ -173,9 +192,9 @@ function invalidatePublicReads(){publicReads.clear();for(const key of inflightGe
 export async function request(path, options = {}) {
   const method = options.method || 'GET';
   if (method !== 'GET') {
-    invalidatePublicReads();
-    invalidateManagementReads();
-    return performRequest(path, options).finally(()=>{invalidatePublicReads();invalidateManagementReads();});
+    const tags=writeTags(path);
+    invalidateWriteReads(tags);
+    return performRequest(path, options).finally(()=>{invalidateWriteReads(tags);});
   }
   // Abortable reads retain their caller's own cancellation rather than sharing.
   if(options.signal)return timedRead(path,options);
