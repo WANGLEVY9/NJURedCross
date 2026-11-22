@@ -19,7 +19,7 @@
 
 ## 已验证有效的设计
 
-- **权限与隐私边界**：匿名访问 `/api/portal/me`、`/api/notifications/overview`、`/api/volunteer/workflow`、`/api/health` 均返回 `401` 且不返回业务数据；公开 `/api/public/events` 返回 200。服务端会话包含角色、过期、CSRF、撤销列表和凭据版本校验；写操作独立校验 CSRF，客户端提交的角色/账号不参与权限裁决。见 [server.js](/Users/laurantwang/Documents/ChatGPT/NJURedCross%20Project/server.js)、[lib/http/response.js](/Users/laurantwang/Documents/ChatGPT/NJURedCross%20Project/lib/http/response.js)、[docs/API.md](/Users/laurantwang/Documents/ChatGPT/NJURedCross%20Project/docs/API.md)。
+- **权限与隐私边界**：匿名访问 `/api/portal/me`、`/api/notifications/overview`、`/api/volunteer/workflow`、`/api/health` 均返回 `401` 且不返回业务数据；公开 `/api/public/events` 返回 200。服务端会话包含角色、过期、CSRF、撤销列表和凭据版本校验；写操作独立校验 CSRF，客户端提交的角色/账号不参与权限裁决。见 [server.js](../server.js)、[lib/http/response.js](../lib/http/response.js)、[docs/API.md](../docs/API.md)。
 - **统一响应策略**：线上 `/events` 实测带 CSP、`Referrer-Policy: no-referrer`、`X-Content-Type-Options`、`X-Frame-Options`、`Permissions-Policy`、`Cache-Control: no-store`；反代补 HSTS，TLS 终止与上传体大小/超时有明确配置。CSP 对 `connect-src` 只额外放行配置的 Box 直传源，避免硬编码多个第三方域。
 - **错误与超时语义**：`apiFailure` 区分只读请求、写入结果不确定、上游 401/403 与限流；`withRequestBudget` 对普通请求 30 秒、上传 180 秒，超时明确提示“写入结果可能需要核对”，不诱导盲目重试。
 - **读缓存边界**：`displayRead` 只在展示读上下文命中缓存，鉴权、写入、身份库读取直连权威源；写后按表失效，缓存只保存行投影，不保存会话、权限结论或响应体。浏览器只缓存匿名公共投影，私有资料禁用公共压缩白名单。
