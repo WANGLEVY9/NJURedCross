@@ -3292,16 +3292,22 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
    ]);
 
   // Failed sources must not be presented as an empty notification queue.
-  for (const result of [
-    materialsResult,
-    eventsResult,
-    outreachResult,
-    volunteerResult,
-    communityResult,
-    publicSubmissionResult,
-    warmthResult,
-  ]) {
-    if (result.status === 'rejected') throw result.reason;
+  // Aggregate a sanitized failure instead of forwarding upstream error text,
+  // which can contain table names, request payloads or SDK response bodies.
+  const failedSources = [
+    ['materials', materialsResult],
+    ['events', eventsResult],
+    ['outreach', outreachResult],
+    ['volunteer', volunteerResult],
+    ['community', communityResult],
+    ['publicSubmissions', publicSubmissionResult],
+    ['warmth', warmthResult],
+  ].filter(([, result]) => result.status === 'rejected').map(([name]) => name);
+  if (failedSources.length) {
+    throw Object.assign(new Error('部分待办来源暂时无法读取，请稍后刷新。'), {
+      statusCode: 503,
+      code: 'notification_sources_unavailable',
+    });
   }
 
   const items = [];
