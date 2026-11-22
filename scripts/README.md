@@ -29,6 +29,8 @@
 
 `npm run correlate:telemetry-traces -- 1000 20` 进一步按 `traceId/spanId/parentSpanId` 还原最慢链路的区间、并发重叠、关键路径和独占耗时热点；参数依次为最小链路耗时（毫秒）和返回条数。配合 `scripts/read-telemetry-trace.mjs <UUID>` 可从聚合结果钻取单条链路。字段含义与排障顺序见 [链路观测与保留策略](../docs/TELEMETRY.md)。
 
+该工具是本地运维工具，不在生产发布包内；输入必须是原始结构化遥测行（例如 `journalctl ... -o cat` 或有界日志导出）。`ssh njuredcross-diag` 输出的是发布记录、服务状态和聚合摘要，只用于核验与定位时间窗口，不直接作为关联工具输入。
+
 ## main 十分钟兜底同步
 
 `main_sync.py` 由服务器的 `njuredcross-main-sync.timer` 每十分钟调用一次。

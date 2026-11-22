@@ -188,7 +188,7 @@ HTTP 样本 7644 条，状态 >=400 共 338 条、aborted 13 条；这些是混�
 
 ### 第六轮：按 `traceId` 关联长尾
 
-新增 `scripts/telemetry-trace-analysis.js`、`scripts/analyze-telemetry-traces.mjs` 与 `npm run correlate:telemetry-traces`，并让 `scripts/read-telemetry-trace.mjs <UUID>` 同时输出链路摘要与精简时序。分析器以 `time - durationMs` 还原区间，用 `spanId/parentSpanId` 还原父子关系，按区间并集计算 `coveredMs/overlapMs/uncoveredMs/longestChainMs` 与每个 span 的独占耗时；浏览器记录只用于解释客户端等待，不进入服务端关键路径。`scripts/inspect-production-performance.sh` 和 `ssh njuredcross-diag` 的只读巡检输出现在包含这一段。
+新增 `scripts/telemetry-trace-analysis.js`、`scripts/analyze-telemetry-traces.mjs` 与 `npm run correlate:telemetry-traces`，并让 `scripts/read-telemetry-trace.mjs <UUID>` 同时输出链路摘要与精简时序。分析器以 `time - durationMs` 还原区间，用 `spanId/parentSpanId` 还原父子关系，按区间并集计算 `coveredMs/overlapMs/uncoveredMs/longestChainMs` 与每个 span 的独占耗时；浏览器记录只用于解释客户端等待，不进入服务端关键路径。`scripts/inspect-production-performance.sh` 在完整仓库检出中追加关联结果，在生产运行树上明确跳过；发布包按设计只包含 `server.js`、`lib/*.js`、`public/*`，`ssh njuredcross-diag` 仍只返回发布记录、服务状态与聚合摘要。
 
 对同一批 30000 行生产遥测以 `minMs=1000` 聚合，共得到 544 条慢链路。阶段热点按独占耗时总和排序为 `seatable/read` 790776.82ms（1189 次）、`background/hours-sync` 65505.84ms（89 次）、`queue/activity-read` 34397.12ms（90 次）、`seatable/write` 31873.5ms（101 次）、`content/member-projection` 23566.42ms（21 次）、`queue/activity-mutation` 11728.14ms（27 次）。`seatable/read` 单次最大 2244.62ms；`hotspots` 是该阶段在所有慢链路前三个独占 span 的合计，不代表全量请求率或全量 CPU 时间。
 
