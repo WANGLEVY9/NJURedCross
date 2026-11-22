@@ -24,7 +24,7 @@ test('historical workspace shows leave inside the result and replaces decisions 
  const detail=await(await page.request.get(`/api/volunteer/workflow/events/${event._id}/detail`)).json(),registration=detail.registrations.find(r=>r['报名ID']===booking.code),current=detail.events.find(e=>e._id===event._id);expect((await page.request.post(`/api/volunteer/workflow/events/${event._id}/batch-decide`,{headers,data:{ids:[registration._id],decision:'confirm',token:current.rosterToken,immediate:true}})).ok()).toBe(true);
  expect((await page.request.post(`/api/portal/workflow/registrations/${booking.code}/leave`,{headers,data:{reason:'合成请假原因'}})).ok()).toBe(true);
  await page.goto(`/console/events?event=${event._id}`);const row=page.getByRole('row').filter({hasText:'合成请假原因'});await expect(row).toContainText('请假待审批');await expect(row.getByRole('button',{name:'批准录取',exact:true})).toHaveCount(0);
- await row.getByRole('button',{name:'批准请假',exact:true}).click();await page.getByRole('dialog',{name:'批准请假',exact:true}).getByRole('button',{name:'确认批准请假',exact:true}).click();await expect(row).toContainText('请假已批准');
+ await row.getByRole('button',{name:'审核通过',exact:true}).click();await page.getByRole('dialog',{name:'批准请假',exact:true}).getByRole('button',{name:'确认批准请假',exact:true}).click();await expect(row).toContainText('请假已批准');
  const after=await(await page.request.get('/api/portal/workflow/me')).json();expect(after.registrations.find(r=>r.code===booking.code).status).toBe('已请假');
 });
 
