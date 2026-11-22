@@ -8,7 +8,8 @@ import {pendingReviewFirst} from '../../shared/activity-running.js';
 const columns=['姓名','学号','岗位与时间','服务时长','培训时长','交通时长','初审结果','原因','签到链接（选填）','已核对签到（选填）'];
 const hourKeys=['serviceHours','trainingHours','travelHours'];
 export function runningReviewEditor({rows,token,importFile,preview,submit,save,onSaved,onClosed=()=>{},single=false,templateUrl=''}){
- let items=rows.map(row=>({...row.item})),proof=null,busy=false,dirty=false,disposed=false,uncertain=false,dialog;
+ const defaultDecision=item=>({...item,decision:item.decision||'pass'});
+ let items=rows.map(row=>defaultDecision(row.item)),proof=null,busy=false,dirty=false,disposed=false,uncertain=false,dialog;
  const body=h('div',{class:'stack-3'}),feedback=h('div',{role:'status'});
  const file=field({label:'时长表（XLSX / CSV，40KB以内）',type:'file',accept:'.xlsx,.csv'});
  // 名单模板由服务端按当前参与记录生成：身份、岗位、日期与预设时长都已填好，
@@ -31,7 +32,7 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
    const bytes=new Uint8Array(await chosen.arrayBuffer());let binary='';for(const value of bytes)binary+=String.fromCharCode(value);
    const result=await importFile({name:chosen.name,bytes:btoa(binary)});if(disposed)return;
    if(result.items.length!==rows.length||result.items.some(item=>!rows.some(row=>row.item.id===item.id)))throw Error('参与名单已变化，请关闭窗口并刷新名单后重新上传');
-   items=result.items;token=result.token;dirty=true;proof=null;feedback.replaceChildren();render();
+   items=result.items.map(defaultDecision);token=result.token;dirty=true;proof=null;feedback.replaceChildren();render();
   }catch(error){reportError(error,'时长表读取失败');}finally{busy=false;renderControls();file.control.value='';}
  }
  file.control.addEventListener('change',()=>void picked());
@@ -44,7 +45,7 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
   for(const row of displayed){
    const item=items.find(item=>item.id===row.item.id);if(!item)continue;
    const tr=h('tr',{},h('td',{},h('span',{text:row.name}),row.participationCount>1?h('small',{class:'t-caption',text:` · ${row.participationCount} 条参与记录`,title:'请逐条核对班次和时长'}):null),h('td',{text:row.studentId}),h('td',{text:[row.position,row.date,row.slot].filter(Boolean).join(' · ')}));
-   for(const key of hourKeys){const input=h('input',{class:'input',type:'number',min:'0',max:'100000',step:'any',value:item[key]??'','aria-label':`${row.name} ${key==='serviceHours'?'服务':key==='trainingHours'?'培训':'交通'}时长`,on:{input:ev=>{item[key]=ev.target.value;item.decision='';item.evidenceChecked=false;tr.querySelector('select').value='';tr.querySelector('input[type=checkbox]').checked=false;dirty=true;proof=null;renderControls();}}});tr.append(h('td',{},editable?input:h('span',{text:String(item[key]??'—')})));}
+   for(const key of hourKeys){const input=h('input',{class:'input',type:'number',min:'0',max:'100000',step:'any',value:item[key]??'','aria-label':`${row.name} ${key==='serviceHours'?'服务':key==='trainingHours'?'培训':'交通'}时长`,on:{input:ev=>{item[key]=ev.target.value;item.evidenceChecked=false;tr.querySelector('input[type=checkbox]').checked=false;dirty=true;proof=null;renderControls();}}});tr.append(h('td',{},editable?input:h('span',{text:String(item[key]??'—')})));}
    const select=h('select',{class:'input','aria-label':`${row.name} 初审结果`,on:{change:ev=>{item.decision=ev.target.value;dirty=true;}}},...['','pass','fail'].map((value,index)=>h('option',{value,text:['待选择','审核通过','不通过'][index]})));select.value=item.decision||'';
    const reason=h('input',{class:'input',value:item.reason||'',maxlength:500,'aria-label':`${row.name} 初审原因`,on:{input:ev=>{item.reason=ev.target.value;dirty=true;}}});
    const check=h('input',{type:'checkbox',checked:item.evidenceChecked===true,'aria-label':`${row.name} 已核对签到依据`,on:{change:ev=>{item.evidenceChecked=ev.target.checked;dirty=true;}}});
@@ -57,13 +58,14 @@ export function runningReviewEditor({rows,token,importFile,preview,submit,save,o
   const hint=templateLink
    ?h('div',{class:'stack-2'},templateLink,h('span',{class:'t-caption',text:'模板已含姓名、学号、岗位、日期、时段与预设时长，只需修改三档时长后原样上传。'}))
    :h('p',{class:'t-caption',text:'列名：姓名、学号、服务时长、培训时长、交通时长。重复参与请增加岗位、日期或报名ID。'});
-  body.replaceChildren(feedback,...(!single&&!proof?[hint,file,h('p',{class:'t-caption',text:'服务、培训、交通三项已按岗位配置自动带出，可直接修改；上传名单后以表内数值为准。'})]:[]),table(!proof));renderControls();
+  body.replaceChildren(feedback,...(!proof?[allPass]:[]),...(!single&&!proof?[hint,file,h('p',{class:'t-caption',text:'服务、培训、交通三项已按岗位配置自动带出，可直接修改；上传名单后以表内数值为准。'})]:[]),table(!proof));renderControls();
  }
  function renderControls(){
   if(disposed)return;for(const input of body.querySelectorAll('input,select'))input.disabled=busy||uncertain;
-  if(templateLink)templateLink.disabled=busy||uncertain;
+  if(templateLink)templateLink.disabled=busy||uncertain;allPass.disabled=busy||uncertain;
   primary.disabled=busy||uncertain;primary.textContent=single?'保存初审':proof?'提交':'预览时长表';back.hidden=!proof;back.disabled=busy||uncertain;cancel.disabled=busy;reconcile.hidden=!uncertain;reconcile.disabled=busy;
  }
+ const allPass=button({label:'一键全部通过',onClick:()=>{if(busy||uncertain||proof)return;for(const item of items)item.decision='pass';dirty=true;render();}});
  const cancel=button({label:'取消',onClick:()=>dialog.close()});
  const back=button({label:'返回修改',onClick:()=>{if(busy||uncertain)return;proof=null;render();}});
  const reconcile=button({label:'核对提交结果',onClick:async()=>{
