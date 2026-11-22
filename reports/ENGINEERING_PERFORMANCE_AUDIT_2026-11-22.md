@@ -186,6 +186,30 @@ HTTP 样本 7644 条，状态 >=400 共 338 条、aborted 13 条；这些是混�
 
 该窗口最值得继续定位的仍是少数长尾：`dependency queue /:other` 中保留一条 21307.83ms 的队列任务记录，`dependency background /:other` p95 3047.59ms、max 4599.53ms；活动详情 `GET /api/volunteer/workflow/events/:id/detail` 的 HTTP p95 为 5911.73ms，浏览器同名链路 p95 5935ms；通知总览 `GET /api/notifications/overview` 的 HTTP p50 2154.94ms、p95 2435.77ms，浏览器 p95 2455ms；签到 `POST /api/portal/workflow/registrations/:id/attendance` 的 HTTP 3640.88ms，关联 `njubox/headers` p95 2223.39ms。这些都是部署后混合有界样本，结论仍是：常态排队已明显改善，下一轮优先缩小锁内活动读取范围、错峰/分片后台重活、按 `requestId/traceId` 关联单个长尾，并单独排查活动详情、通知总览与签到附件链路的外部 I/O。
 
+### 第六轮：按 `traceId` 关联长尾
+
+新增 `scripts/telemetry-trace-analysis.js`、`scripts/analyze-telemetry-traces.mjs` 与 `npm run correlate:telemetry-traces`，并让 `scripts/read-telemetry-trace.mjs <UUID>` 同时输出链路摘要与精简时序。分析器以 `time - durationMs` 还原区间，用 `spanId/parentSpanId` 还原父子关系，按区间并集计算 `coveredMs/overlapMs/uncoveredMs/longestChainMs` 与每个 span 的独占耗时；浏览器记录只用于解释客户端等待，不进入服务端关键路径。`scripts/inspect-production-performance.sh` 和 `ssh njuredcross-diag` 的只读巡检输出现在包含这一段。
+
+对同一批 30000 行生产遥测以 `minMs=1000` 聚合，共得到 544 条慢链路。阶段热点按独占耗时总和排序为 `seatable/read` 790776.82ms（1189 次）、`background/hours-sync` 65505.84ms（89 次）、`queue/activity-read` 34397.12ms（90 次）、`seatable/write` 31873.5ms（101 次）、`content/member-projection` 23566.42ms（21 次）、`queue/activity-mutation` 11728.14ms（27 次）。`seatable/read` 单次最大 2244.62ms；`hotspots` 是该阶段在所有慢链路前三个独占 span 的合计，不代表全量请求率或全量 CPU 时间。
+
+单条请求归因示例：
+
+| trace | 路由 | HTTP | 最长关键路径 | 独占热点 |
+| --- | --- | ---: | ---: | --- |
+| `b306b8c5…` | `/api/public/:id` | 3851.47ms | 1028.14ms | `smtp/send` 1028.14ms；`queue/activity-read` 393.96ms |
+| `f6b64f1f…` | `/api/public/:id` | 3757.19ms | 939.94ms | 两次 `smtp/send` 939.94ms / 432.97ms |
+| `c5a2219f…` | 签到 | 3640.88ms | 2223.39ms | `njubox/headers` 2223.39ms |
+| `786c67ac…` | 控制台写操作 | 3181.51ms | 546.93ms | `smtp/send` 512.22ms；`queue/activity-read` 376.22ms |
+| `f3a848b2…` | 通知总览 | 2894.82ms | 1803.32ms | `seatable/read` 1803.32ms / 765.09ms |
+| `065ad118…` | 志愿者工作流 | 2688.97ms | 1580.34ms | 多次 `seatable/read` 0.77–1.15s |
+| `c2c96160…` | 个人中心 | 2465.09ms | 1561.27ms | `content/member-projection` 1561.27ms；`content/member-data` 664.58ms |
+
+这些 HTTP 请求的浏览器记录覆盖了整段请求时间，因此 `uncoveredMs` 为 0；此前把依赖耗时相加得到的“总依赖 4–14 秒”主要来自并发/父子 span 重复计数，不能当作串行等待。下一步应优先去掉重复整表读、把可并行的外部读取合并，而不是把这些数值解释成 CPU 饱和。
+
+后台 `a07e737c…` 的 21307.83ms trace 包含 627 个依赖、仅 1 个顶层 `queue/run`；`coveredMs` 等于全窗口，`longestChainMs` 只有 1724.27ms，顶层 `queue/run` 独占 801.75ms，最长 SMTP 子任务 922.52ms。结论是这条长尾不是某次 21 秒外部调用，而是大量串行小任务在单个队列任务内累积。下一轮应把通知/对账批次按固定预算拆分或做有界并发，并给每批保留幂等、重试与结果核对语义；不要直接提高全局队列并发去掩盖单批过大。另有 13 条 `/:asset` 与少量后台 trace 存在浏览器记录未覆盖的窗口，应继续按 `traceId` 判断是静态资源传输、浏览器未上报，还是服务端尚未接入观测的阶段。
+
+本轮没有改动邮件投递、审批、名额或时长一致性代码；`displayRead` 已有进程级缓存与请求级单飞，通知总览重复 handler 不再另叠加一层缓存。后续业务优化必须先补对应的合成回归，再用同一个 `traceId` 关联工具核对前后 `http.durationMs`、`exclusiveSpans` 与 `queue/run` 批大小。
+
 ## 本轮验证边界
 
 本轮开始时 `main` 与 `origin/main` 一致、工作区干净；收尾仅更新操作文档、脚本说明和本报告，`git diff --check` 通过。检查覆盖源码、既有报告、缓存/队列设计、写锁、分页读取、前端资源与后台任务。生产侧只执行有界只读日志采样与受限密钥配置，没有执行新的生产压测、没有访问真实业务表、没有改运行代码。后续任何优化都应先定义可观测指标、合成故障回归和回滚点，再按仓库约定验证 CI、发布回执与线上页面。

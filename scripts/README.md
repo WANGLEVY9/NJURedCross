@@ -27,6 +27,8 @@
 
 恢复新生产服务器的直连后，也可直接从本机执行 `ssh njuredcross-diag` 取得相同的有界只读诊断输出；该密钥由 `authorized_keys` 强制绑定到服务器上的只读脚本，不能执行任意 shell。部署密钥别名 `njuredcross-prod` 只用于 `NJRC-MANIFEST-V1` 与发布接收器，不用于日常日志巡检。别名和密钥职责见 [部署、回滚与运行维护](../docs/OPERATIONS.md)。
 
+`npm run correlate:telemetry-traces -- 1000 20` 进一步按 `traceId/spanId/parentSpanId` 还原最慢链路的区间、并发重叠、关键路径和独占耗时热点；参数依次为最小链路耗时（毫秒）和返回条数。配合 `scripts/read-telemetry-trace.mjs <UUID>` 可从聚合结果钻取单条链路。字段含义与排障顺序见 [链路观测与保留策略](../docs/TELEMETRY.md)。
+
 ## main 十分钟兜底同步
 
 `main_sync.py` 由服务器的 `njuredcross-main-sync.timer` 每十分钟调用一次。

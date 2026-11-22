@@ -28,6 +28,11 @@ timeout -k 2 30 journalctl --namespace=njuredcross -u njuredcross \
   | rg '"type":"dependency","service":"queue"' \
   | rg -o '"operation":"[a-z-]+","durationMs":[0-9.]+' || true
 
+printf '%s\n' '--- correlated trace hotspots ---'
+timeout -k 2 30 journalctl --namespace=njuredcross -u njuredcross \
+  --since "$since" -n "$max_lines" -o cat --no-pager 2>/dev/null \
+  | node scripts/analyze-telemetry-traces.mjs 1000 20
+
 printf '%s\n' '--- nginx timing tail ---'
 if [ -r /var/log/nginx/njuredcross-timing.log ]; then
   tail -n 200 /var/log/nginx/njuredcross-timing.log
