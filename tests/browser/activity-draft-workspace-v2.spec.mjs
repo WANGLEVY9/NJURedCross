@@ -160,7 +160,7 @@ test('real running page saves first review, imports all participants and require
  const csv=`姓名,学号,服务时长,培训时长,交通时长\n${participant['姓名']},${participant['学号']},3,0,0\n`;
  await upload.locator('input[type=file]').setInputFiles({name:'合成时长.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
  await expect(upload.getByRole('spinbutton',{name:`${participant['姓名']} 服务时长`,exact:true})).toHaveValue('3');
- await expect(upload.getByLabel(`${participant['姓名']} 初审结果`,{exact:true})).toHaveValue('');await expect(upload.getByRole('button',{name:'提交',exact:true})).toHaveCount(0);
+ await expect(upload.getByLabel(`${participant['姓名']} 初审结果`,{exact:true})).toHaveValue('pass');await expect(upload.getByRole('button',{name:'提交',exact:true})).toHaveCount(0);
  await upload.getByLabel(`${participant['姓名']} 初审结果`,{exact:true}).selectOption('fail');await upload.getByLabel(`${participant['姓名']} 初审原因`,{exact:true}).fill('上传后重新核对，未到场');
  await upload.getByRole('button',{name:'预览时长表',exact:true}).click();await expect(upload.getByRole('spinbutton')).toHaveCount(0);await expect(upload).toContainText('上传后重新核对，未到场');
  if(info.project.name==='desktop-chromium')await page.screenshot({path:info.outputPath('running-preview.png'),timeout:5000});
