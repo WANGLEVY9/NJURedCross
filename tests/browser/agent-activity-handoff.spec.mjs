@@ -166,7 +166,7 @@ async function mount(page, {
   }));
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.goto('/console/events?agentTask=synthetic-handoff-task');
+  await page.goto('/console/events?legacy=1&agentTask=synthetic-handoff-task');
 
   await expect.poll(() =>
     page.evaluate(() => window.fixtureReady === true),
