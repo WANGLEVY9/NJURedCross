@@ -7,7 +7,7 @@ After=network-online.target
 Type=oneshot
 WorkingDirectory=/opt/njuredcross
 EnvironmentFile=/opt/njuredcross/.env
-ExecStart=/usr/bin/node scripts/njutable-maintenance.mjs --apply --confirm=APPLY-NJUTABLE-HYGIENE --include-audit
+ExecStart=/usr/bin/node scripts/run-coordinated-script.mjs njutable-maintenance.mjs --apply --confirm=APPLY-NJUTABLE-HYGIENE --include-audit
 User=root
 Group=root
 UMask=0077

@@ -9,7 +9,7 @@
 - 非空开发表、备份表和 `(copy)` 表默认跳过；只有额外传入 `--confirm=DELETE-NON-EMPTY-DEV-TABLES` 才会纳入。默认空壳表 `Table1` 是例外。
 - 身份库的验证码与邮件发件记录默认跳过；需服务器显式设置 `PLATFORM_NJUTABLE_IDENTITY_CLEANUP=true`。验证码还要求状态为 `已过期` 或 `已失效`，避免删除仍可能用于限流/幂等判断的近期记录。
 - 操作审计默认跳过，需额外传 `--include-audit`；systemd timer 使用该参数以实现 60 天自动清理。审计之外的验证码、账号、报名、时长和审批业务表不做行级自动删除。
-- 每表单次最多读取和删除 1000 条过期行，批量删除按 200 条分批；不完整或畸形读取直接失败，不静默截断。
+- 每表单次最多删除 1000 条过期行，批量删除按 200 条分批。扫描只投影行 ID、时间和必要状态，按稳定行 ID 每页 500 行读取，找到 1000 个候选即停止；全表扫描上限为 100000 行。短页、重复/畸形行、前后计数变化或超出扫描上限直接失败；报告包含总行数和扫描是否完整，避免把未扫描的后续行解释为没有过期日志。
 
 ## 60 天 TTL
 
@@ -43,7 +43,20 @@ sudo systemctl enable --now njuredcross-njutable-hygiene.timer
 sudo systemctl list-timers njuredcross-njutable-hygiene.timer
 ```
 
-服务通过 `EnvironmentFile=/opt/njuredcross/.env` 读取凭据，工作目录为 `/opt/njuredcross`；脚本属于运维工具，不在发布包白名单内，需要 Owner 在服务器上安装。首次安装后先以手动 preview 核对当前 Base UUID、候选表和过期行数，再启用 timer。
+服务通过 `EnvironmentFile=/opt/njuredcross/.env` 读取凭据，工作目录为 `/opt/njuredcross`，写入通过 `scripts/run-coordinated-script.mjs` 获取与应用共用的协调锁；生产 `.env` 必须配置应用使用的 `PLATFORM_WRITE_STATE_DIR`。维护脚本、`scripts/njutable-retention.mjs` 和协调入口属于运维工具，不在发布包白名单内，需要 Owner 在服务器上安装。首次安装后先以手动 preview 核对当前 Base UUID、候选表和过期行数，再启用 timer：
+
+```sh
+cd /opt/njuredcross
+/usr/bin/node --env-file=.env scripts/njutable-maintenance.mjs --include-audit
+sudo systemctl start njuredcross-njutable-hygiene.service
+sudo systemctl show njuredcross-njutable-hygiene.service -p Result -p ExecMainStatus
+sudo systemctl is-enabled njuredcross-njutable-hygiene.timer
+sudo systemctl is-active njuredcross-njutable-hygiene.timer
+```
+
+手动 preview 也需要显式加载生产 `.env`，云助手执行 Shell 不会自动加载它。一次性服务执行完应为 `Result=success`、`ExecMainStatus=0`；服务本身回到 inactive 是正常行为，timer 应保持 enabled/active。
+
+任务通过统一 `background/run` 观测入口和 SeaTable 有界传输运行，单次外部请求上限 20 秒。systemd journal 接收结果与脱敏链路，不输出 Token、日志正文或第三方错误响应。
 
 ## 2026-11-23 首次执行
 

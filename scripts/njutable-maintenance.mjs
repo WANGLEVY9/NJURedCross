@@ -3,6 +3,9 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { deleteRows } from '../lib/http/batch-write.js';
 import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
+import { identifier, readExpiredRows } from './njutable-retention.mjs';
+import { installSeaTableTransport } from '../lib/http/seatable-transport.js';
+import { observer } from '../lib/observability.js';
 
 /**
  * Bounded NJUTable hygiene: remove only allowlisted development leftovers and
@@ -62,21 +65,6 @@ function parseArgs(argv) {
     includeAudit, includeIdentity, includeNonEmptyTables };
 }
 
-function timestampOf(value) {
-  if (value == null || value === '') return null;
-  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.getTime() : null;
-  if (typeof value === 'number' && Number.isFinite(value)) return value > 1e12 ? value : value * 1000;
-  const text = String(value).trim();
-  const iso = Date.parse(text);
-  if (Number.isFinite(iso)) return iso;
-  const local = Date.parse(text.replace(' ', 'T') + '+08:00');
-  return Number.isFinite(local) ? local : null;
-}
-
-function identifier(value) {
-  return `\`${String(value).replaceAll('`', '``')}\``;
-}
-
 async function clientFor(group) {
   if (!group.token || !group.uuid) throw new Error(`Missing credentials or UUID for ${group.key}`);
   const base = new Base({ server, APIToken: group.token });
@@ -122,17 +110,9 @@ async function tablePlan(base, group, obsolete, cutoff, args) {
         reason: 'audit_logs_require_explicit_confirmation' });
       continue;
     }
-    const rows = await base.listRows(rule.table, '', '', false, 0, MAX_DELETIONS_PER_TABLE + 1);
-    if (!Array.isArray(rows)) throw new Error(`Incomplete read for ${rule.table}`);
-    const expired = rows.filter(row => {
-      const at = timestampOf(row?.[rule.column]);
-      if (at === null || at >= cutoff) return false;
-      if (rule.expiredOnly && row?.['状态'] !== '已过期' && row?.['状态'] !== '已失效') return false;
-      return true;
-    }).slice(0, MAX_DELETIONS_PER_TABLE).map(row => row._id).filter(id => typeof id === 'string' && id);
+    const expired = await readExpiredRows(base, rule, cutoff, MAX_DELETIONS_PER_TABLE);
     tables.push({ name: rule.table, action: 'delete-expired-rows', kind: rule.kind,
-      timeColumn: rule.column, expiredCount: expired.length, capped: expired.length >= MAX_DELETIONS_PER_TABLE,
-      readCount: rows.length, expiredRowIds: expired });
+      timeColumn: rule.column, ...expired });
   }
   return tables;
 }
@@ -182,7 +162,8 @@ async function main() {
     appliedAt: receipt.appliedAt, applied, report: REPORT_FILE }, null, 2));
 }
 
-main().catch(error => {
-  console.error(JSON.stringify({ ok: false, mode: 'failed', error: error?.message || 'njutable_maintenance_failed' }));
+installSeaTableTransport();
+observer.dependency('background', 'run', main).catch(error => {
+  console.error(JSON.stringify({ ok: false, mode: 'failed', error: error.response ? 'njutable_request_failed' : error?.message || 'njutable_maintenance_failed' }));
   process.exitCode = 1;
 });
