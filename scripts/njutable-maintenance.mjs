@@ -163,7 +163,7 @@ async function main() {
 }
 
 installSeaTableTransport();
-observer.dependency('background', 'run', main).catch(error => {
+await observer.dependency('background', 'run', main).catch(error => {
   console.error(JSON.stringify({ ok: false, mode: 'failed', error: error.response ? 'njutable_request_failed' : error?.message || 'njutable_maintenance_failed' }));
   process.exitCode = 1;
 });

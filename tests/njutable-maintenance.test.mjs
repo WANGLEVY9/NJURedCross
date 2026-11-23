@@ -12,6 +12,8 @@ test('NJUTable hygiene uses an explicit confirmation and a 60-day retention defa
   assert.match(source, /identity_records_require_explicit_environment_opt_in/);
   assert.match(source, /if \(!args\.apply\) \{/);
   assert.match(source, /deleteRows\(base, plan\.name, ids\)/);
+  assert.match(source, /^await observer\.dependency\('background', 'run', main\)/m,
+    'module evaluation must wait for maintenance before the runner releases its lock');
 });
 
 test('hygiene service and timer enable the daily bounded cleanup', async () => {

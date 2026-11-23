@@ -38,6 +38,8 @@ PLATFORM_NJUTABLE_IDENTITY_CLEANUP=true npm run maintenance:njutable:apply -- --
 ```sh
 sudo install -m 0644 ops/systemd/njuredcross-njutable-hygiene.service /etc/systemd/system/
 sudo install -m 0644 ops/systemd/njuredcross-njutable-hygiene.timer /etc/systemd/system/
+cd /opt/njuredcross
+/usr/bin/node --env-file=.env scripts/njutable-maintenance.mjs --include-audit
 sudo systemctl daemon-reload
 sudo systemctl enable --now njuredcross-njutable-hygiene.timer
 sudo systemctl list-timers njuredcross-njutable-hygiene.timer
@@ -61,3 +63,9 @@ sudo systemctl is-active njuredcross-njutable-hygiene.timer
 ## 2026-11-23 首次执行
 
 对本地 `.env` 指向的开发/测试 Base 做只读盘点后，以协调锁执行 `--apply --include-audit`：删除身份库默认空壳表 `Table1`（3 行）、志愿服务库 `志愿服务平台 脚本运行日志` 中 529 条 60 天前记录、主业务库 `操作审计表` 中 5 条 60 天前记录。执行后读回：`Table1` 已不存在，脚本日志为 0 行，操作审计从 1670 降到 1665；非空测试表、备份/copy 表、验证码、发件记录和所有业务 schema 均保留。运行回执保存在本机受忽略的 `reports/NJUTABLE_MAINTENANCE_2026-11-23.json`，不进入 Git。
+
+### 生产 timer 启用
+
+2026-11-23 16:56（北京时间），通过 ECS 云助手在生产实例安装并校验维护脚本、分页扫描辅助模块、协调入口与两个 systemd 单元。生产 preview 通过三个 Base 的配置/鉴权 UUID 核对；完整扫描操作审计 12420 行，过期候选为 0；脚本日志 776 行中有 563 条超过 60 天。非空备份表、验证码与邮件记录均跳过。
+
+随后执行 `systemctl daemon-reload` 和 `systemctl enable --now njuredcross-njutable-hygiene.timer`，timer 返回 `enabled`、`active`；首次服务执行为 `Result=success`、`ExecMainStatus=0`，实际删除 563 条旧脚本日志。首次下一次触发时间为 2026-11-24 03:29:23（随机延迟后的北京时间）；每日具体触发时间以 `systemctl list-timers` 为准。安装前文件备份在服务器 `/opt/njuredcross-backups/hygiene-20261123T085414Z`，受限只读诊断入口已恢复。数据库清理与应用自动发布独立。
