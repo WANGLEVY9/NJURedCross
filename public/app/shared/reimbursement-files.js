@@ -41,7 +41,7 @@ export function currentMaterialName(name, kind, index) {
 }
 
 export function mergedFilename({ name, label, amount = '' }) {
-  return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-合并材料.pdf`;
+  return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-合并版.pdf`;
 }
 
 /** Download name of the generated Word packet; the stored copy keeps a neutral name. */

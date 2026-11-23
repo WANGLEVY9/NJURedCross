@@ -120,9 +120,10 @@ export default async function reimbursementsPage() {
     const entry = { id: row.id || String(sequence + 1),
       category: field({ label: '报销类别', name: `expenseCategory${sequence}`, required: true, maxlength: 50, value: row.category || '', placeholder: '例如：办公用品、印刷费',
         ...(rulesVersion === 1 ? { options: [{ value: '', label: '请选择报销类别' }, ...REIMBURSEMENT_CATEGORIES] } : {}) }),
-      label: field({ label: '支出项目', name: `expenseLabel${sequence}`, required: true, maxlength: 100, value: row.label || '', placeholder: '例如：便利用品' }),
+      label: field({ label: '支出项目', name: `expenseLabel${sequence}`, required: true, maxlength: 100, value: row.label || '',
+        placeholder: '例如：蒸汽眼罩', hint: '合并 PDF 使用此名称。采购请按发票填写可识别的物资名称。' }),
       amount: field({ label: '金额（元）', name: `expenseAmount${sequence}`, required: true, value: row.amount || '', placeholder: '填写发票与实际支出中的较小金额',
-        hint: '请填写发票金额与实际支出金额中的较小值。' }),
+        hint: '请填写发票价税合计与实付金额中的较小值。' }),
       note: field({ label: '用途 / 备注', name: `expenseNote${sequence}`, maxlength: 300, value: row.note || '' }),
       rail: railJourneyFields(`expenseRail${sequence}`, row.railJourney), originalRailJourney: row.railJourney };
     entry.amount.control.inputMode = 'decimal';

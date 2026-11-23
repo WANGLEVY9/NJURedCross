@@ -59,7 +59,7 @@ test('order and payment pictures produce one downloadable Word packet on submiss
   assert.equal(images.length, 2, 'both screenshots must be embedded in the packet');
 });
 
-test('a Word upload becomes visible pages and still yields a Word packet', async () => {
+test('a Word upload shows the order and payment on one PDF page and still yields a Word packet', async () => {
   const { service } = await seeded();
   const shot = await picture();
   const word = buildEvidenceDocx({ title: '订单与付款证据', groups: [
@@ -72,13 +72,14 @@ test('a Word upload becomes visible pages and still yields a Word packet', async
   ]);
   const source = bundle.sources.find(item => item.name === 'screenshots.docx');
   assert.equal(source.preview, 'word-images');
-  assert.equal(source.pages, 2, 'Word pictures must be laid out as reviewable pages');
-  assert.equal(bundle.pageCount, 3);
+  assert.equal(source.pages, 1, 'order and payment in Word must share one page');
+  assert.equal(bundle.pageCount, 2);
   const result = await service.submit(owner, application(bundle.id));
   assert.ok(result.request.bundle.supportingDocxUrl);
   const analysed = await service.analyze(final, bundle.id, bundle.pageCount);
   assert.equal(analysed.ok, true);
   assert.equal(analysed.analysis.sourceName, 'screenshots.docx');
+  assert.equal(analysed.analysis.materialType, '订单和付款截图');
 });
 
 test('an invoice-only submission produces no Word packet and no empty packet file', async () => {

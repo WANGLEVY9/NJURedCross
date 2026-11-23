@@ -57,7 +57,7 @@ test('real generation copies exact pages with geometry, makes order/payment PDFs
   assert.deepEqual(packets.groups[0].merged.sources.map(source => [source.index, source.startPage, source.endPage]), [[5, 1, 2], [4, 3, 3], [2, 3, 3], [0, 4, 4]]);
   assert.deepEqual(packets.groups[0].orderPayment.sources.map(source => source.index), [4, 2]);
   assert.deepEqual(packets.groups[0].originalOnly.map(file => file.index), [3]);
-  assert.equal(packets.groups[0].merged.name, '合成报销人-鼠标-15.00-合并材料-01.pdf');
+  assert.equal(packets.groups[0].merged.name, '合成报销人-鼠标-15.00-合并版.pdf');
   assert.equal(packets.groups[1].merged.pageCount, 1); assert.equal(packets.groups[2].kind, 'common');
   const file = service.materialPackets.download(admin, request.id, 1, 0, 'merged');
   const generated = await PDFDocument.load(file.bytes);
@@ -137,7 +137,7 @@ test('HTTP packet routes retain CSRF, reviewer access, private PDF headers and r
   const response = await fetch(root + '/1/0/merged', { headers });
   assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
   assert.equal(response.headers.get('content-type'), 'application/pdf');
-  assert.ok(response.headers.get('content-disposition').includes(encodeURIComponent('合成报销人-鼠标-15.00-合并材料-01.pdf')));
+  assert.ok(response.headers.get('content-disposition').includes(encodeURIComponent('合成报销人-鼠标-15.00-合并版.pdf')));
   assert.equal((await PDFDocument.load(await response.arrayBuffer())).getPageCount(), 4);
   assert.equal((await fetch(root + '/1/999/merged', { headers })).status, 404);
   const outsider = await createPreviewServer({ reimbursementService: service, portalActor: owner, seedSyncFailure: false });
