@@ -72,6 +72,8 @@
 
 未登录调用写接口或 `/api/portal/me` 返回 `401` 且 `code=login_required`；缺少 CSRF 令牌返回 `403` 且 `code=csrf_failed`。
 
+`REGISTRATION_STAFF_EMAIL_DOMAINS` 为可选的逗号分隔精确邮箱域名列表。`registration-config` 只返回规范化且格式合法的域名；当注册邮箱后缀命中该列表时，`POST /api/auth/register` 要求 `staffDeclared` 为 `是` 或 `否`，缺失或 `未确认` 返回 `400` 且 `code=staff_confirmation_required`。该字段写入私有账号资料，不作为角色、权限或管理员身份依据；列表为空时无需声明。
+
 活动是否对公众可见的判定：状态属于 `报名中` / `进行中` / `已结束`，且公开范围不包含 `不公开`、`仅管理员`、`内部限定`。
 
 ### 管理端（需 `super_admin`，或带对应权限范围的 `platform_admin`；写操作另需 CSRF）
@@ -95,7 +97,7 @@
 | --- | --- | --- |
 | `GET /api/auth/session` | 当前会话 | 匿名可读 |
 | `POST /api/auth/login`、`POST /api/auth/logout` | 登录与退出 | 退出要求会话与 CSRF |
-| `GET /api/auth/registration-config` | 注册可用性 | 匿名可读 |
+| `GET /api/auth/registration-config` | 注册可用性、密码策略、邮箱域名与需要教职工声明的规范化域名 | 匿名可读 |
 | `POST /api/auth/register`、`POST /api/auth/email-codes` | 注册与发码 | 校园邮箱、来源、验证码与限频 |
 | `POST /api/auth/verify-email`、`POST /api/auth/reset-password` | 邮箱验证与密码重置 | 一次性验证码与密码策略 |
 | `POST /api/auth/change-password/code`、`POST /api/auth/change-password` | 已登录账号修改密码 | 会话、CSRF 与验证码 |
