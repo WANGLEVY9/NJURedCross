@@ -89,7 +89,7 @@ export default async function reimbursementsPage() {
     const types = [...new Set(expenses.flatMap(row => requiredReimbursementMaterials(row.category.control.value, meeting.control.value === 'yes')))];
     requirementsSlot.replaceChildren(h('b', { class: 't-secondary', text: types.length ? `本申请需提供：${types.join('、')}` : '先选择报销类别，再按要求上传材料。' }),
       ...types.map(type => h('p', { class: 't-caption', text: `${type}：${reimbursementMaterialHint(type)}` })),
-      h('p', { class: 't-caption', text: '订单和付款截图请直接上传清晰图片或 PDF，平台自动命名并整理；Word 可作为辅助原件。发票与行程单请上传 PDF 原件。' }));
+      h('p', { class: 't-caption', text: '订单与付款截图可上传图片、PDF，也可直接上传 Word（平台自动提取其中图片并整理成一份 Word）；发票与行程单请上传 PDF 原件。' }));
   }
   meeting.control.addEventListener('change', renderRequirements);
   const expenseList = h('div', { class: 'stack-3' });
@@ -162,7 +162,7 @@ export default async function reimbursementsPage() {
   const submit = button({ label: '提交审核申请', variant: 'primary', onClick: send });
   submit.disabled = true;
   const cancelEdit = button({ label: '取消补充', variant: 'ghost', onClick: () => reset() }); cancelEdit.hidden = true;
-  const uploadHeading = materialSection('上传材料', '发票与补充材料分开上传，按报销人、类别、项目自动命名，原件内容不变。', '02');
+  const uploadHeading = materialSection('上传材料', '发票与补充材料分开上传，按报销人、类别、项目自动命名；补充材料提交后自动合成一份 Word，原件内容不变。', '02');
   const form = h('div', { class: 'panel material-application' }, h('div', { class: 'panel__body stack-6' },
     editMessage,
     h('section', { class: 'stack-4' }, materialSection('申请信息', '填写申请人与本次报销事由。', '01'),
@@ -336,7 +336,8 @@ export default async function reimbursementsPage() {
       h('td', {}, h('div', { class: 'row-2 row-wrap' }, button({ label: '查看材料', variant: 'ghost', size: 'sm', onClick: () => {
         const detail = bundleDetails(item.bundle, { withPreview: false });
         openDrawer({ title: item.activityName || '报销申请详情', width: 820, body: [requestInfo(item), detail], onClose: () => detail.dispose() });
-      } }), item.status === 'returned' ? button({ label: '补充后重提', variant: 'secondary', size: 'sm', onClick: () => {
+      } }), item.bundle?.supportingDocxUrl ? button({ label: '下载 Word 材料', variant: 'secondary', size: 'sm', href: item.bundle.supportingDocxUrl }) : null,
+      item.status === 'returned' ? button({ label: '补充后重提', variant: 'secondary', size: 'sm', onClick: () => {
         supplement(item);
       } }) : null))));
     mine.replaceChildren(data.requests.length ? h('div', { class: 'material-my-requests__scroll', tabIndex: 0,

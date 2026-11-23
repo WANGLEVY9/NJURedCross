@@ -44,6 +44,11 @@ export function mergedFilename({ name, label, amount = '' }) {
   return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-合并材料.pdf`;
 }
 
+/** Download name of the generated Word packet; the stored copy keeps a neutral name. */
+export function supportingPacketFilename({ name, label, amount = '' }) {
+  return `${safePart(name, '报销人')}-${safePart(label, '报销材料')}-${safePart(amount, '金额')}-报销补充材料.docx`;
+}
+
 /** Alias older generated download names using reliable current request metadata, without editing originals. */
 export function requestMaterialFilename(request, file, index, files) {
   const expense = request.expenseItems?.find(item => item.id === file.expenseItemId);
