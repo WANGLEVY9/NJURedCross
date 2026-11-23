@@ -45,8 +45,11 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
     activeOriginal = viewer;
   }
   function originalRow(file, index) {
+    const source = bundle.sources[index];
+    const pages = !withPreview ? '' : !source.startPage ? ' · Word 原件，请下载核对'
+      : bundle.refreshMergedLayout ? '' : ` · 合并页码 ${source.startPage}–${source.endPage}`;
     return h('li', {},
-    h('span', { class: 'material-file-list__name', title: originalName(file), text: `${index + 1}. ${originalName(file)} · ${MATERIAL_KINDS[file.kind] || '原材料'}${withPreview ? bundle.sources[index].startPage > 0 ? ` · 合并页码 ${bundle.sources[index].startPage}–${bundle.sources[index].endPage}` : ' · Word 原件，请下载核对' : ''}` }),
+    h('span', { class: 'material-file-list__name', title: originalName(file), text: `${index + 1}. ${originalName(file)} · ${MATERIAL_KINDS[file.kind] || '原材料'}${pages}` }),
     h('div', { class: 'row-2 row-wrap' }, button({ label: '查看原件', size: 'sm', variant: 'ghost', onClick: () => viewOriginal(file) }),
       downloadLink(file)));
   }
@@ -151,7 +154,7 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
   update(initial);
   const unsubscribe = checks?.subscribe((id, state) => { if (id === bundle.id) update(state); });
   const header = h('div', { class: 'material-bundle-head' },
-      h('p', { class: 't-secondary', text: originalsFirst ? `${bundle.sources.length} 份原材料 · 第 ${request?.revision || 1} 版`
+      h('p', { class: 't-secondary', text: originalsFirst || bundle.refreshMergedLayout ? `${bundle.sources.length} 份原材料 · 第 ${request?.revision || 1} 版`
         : `${bundle.sources.length} 份原材料 · 合并后 ${bundle.pageCount} 页` }),
       bundle.supportingDocxUrl ? button({ label: '下载 Word 材料', variant: 'secondary', size: 'sm', href: bundle.supportingDocxUrl }) : null,
       (!originalsFirst || mergedFirst) && bundle.mergedUrl ? downloadLink({ name: bundle.mergedName || '报销材料合并.pdf', url: bundle.mergedUrl,

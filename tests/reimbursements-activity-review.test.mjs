@@ -69,7 +69,7 @@ test('a single activity draft sorts form rows and evidence together, previews th
   assert.equal(service.get(owner, a.id).request.paymentStatus, 'not-ready');
   const pdf = await PDFDocument.load(service.summaries.download(final, summary.id, 'packet').bytes);
   assert.equal(pdf.getPageCount(), summary.formPages + 2);
-  assert.deepEqual(pdf.getPages().slice(summary.formPages).map(page => page.getWidth()), [350, 300]);
+  assert.deepEqual(pdf.getPages().slice(summary.formPages).map(page => page.getWidth()), [842, 842]);
   assert.equal((await service.summaries.create(final, body)).duplicate, true);
   await assert.rejects(async () => service.summaries.review(initial, summary.id, approveSummary(summary)), { statusCode: 403 });
   await assert.rejects(service.summaries.review(final, summary.id, { ...approveSummary(summary), scopeConfirmed: false }), /申请范围/);

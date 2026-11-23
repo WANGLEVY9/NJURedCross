@@ -62,8 +62,8 @@ test('real generation copies exact pages with geometry, makes order/payment PDFs
   const file = service.materialPackets.download(admin, request.id, 1, 0, 'merged');
   const generated = await PDFDocument.load(file.bytes);
   assert.equal(generated.getPageCount(), 4);
-  assert.deepEqual(generated.getPage(0).getSize(), { width: 300, height: 200 });
-  assert.equal(generated.getPage(0).getRotation().angle, 90);
+  assert.deepEqual(generated.getPage(0).getSize(), { width: 842, height: 595 });
+  assert.equal(generated.getPage(0).getRotation().angle, 0);
   const task = getDocument({ data: new Uint8Array(file.bytes), verbosity: 0 });
   const parsed = await task.promise;
   try {

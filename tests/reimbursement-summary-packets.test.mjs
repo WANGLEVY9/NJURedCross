@@ -58,7 +58,7 @@ test('two-stage activity summaries consume current reviewed project packets in e
   const materials = captured[0].materials;
   assert.deepEqual(await text(materials[0].bytes), ['INVOICE-A-1', 'INVOICE-A-2', 'ORDER-1PAYMENT-1', 'OTHER-1']);
   assert.deepEqual(await text(materials[1].bytes), ['INVOICE-B-1']); assert.deepEqual(await text(materials[2].bytes), ['COMMON-1']);
-  const copied = await PDFDocument.load(materials[0].bytes); assert.equal(copied.getPage(0).getRotation().angle, 90);
+  const copied = await PDFDocument.load(materials[0].bytes); assert.equal(copied.getPage(0).getRotation().angle, 0);
   assert.deepEqual(materials[0].sources.map(source => source.originalIndex), [5, 4, 2, 0, 3]);
   assert.deepEqual(materials[0].sources.slice(1, 3).map(source => [source.startPage, source.endPage]), [[3, 3], [3, 3]]);
   assert.equal(materials[0].sources[0].originalStartPage, 1); assert.equal(materials[0].sources[0].originalEndPage, 2);

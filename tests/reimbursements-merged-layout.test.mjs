@@ -37,8 +37,8 @@ test('merged evidence leads with the invoice, then one page holding the order an
   const result = await processPdfs([
     supporting('order.png', '订单截图', pictureFixture('png')),
     supporting('payment.jpg', '付款截图', pictureFixture('jpg')),
-    supporting('pickup.pdf', '领取单', await invoiceBytes('PICKUP')),
-    { name: 'invoice.pdf', kind: 'invoice', bytes: await invoiceBytes('INVOICE', { size: [842, 595] }) },
+    supporting('pickup.pdf', '领取单', await invoiceBytes('PICKUP', { size: [700, 400] })),
+    { name: 'invoice.pdf', kind: 'invoice', bytes: await invoiceBytes('INVOICE', { size: [310, 580] }) },
   ]);
   assert.equal(result.pageCount, 3);
   // The manifest keeps upload order so original names, hashes and downloads stay aligned.
@@ -49,8 +49,11 @@ test('merged evidence leads with the invoice, then one page holding the order an
   assert.equal(pages[1].images, 2, '订单与付款截图应并排在同一页');
   assert.equal(pages[0].images, 0);
   const merged = await PDFDocument.load(result.merged);
-  assert.deepEqual(merged.getPage(0).getSize(), { width: 842, height: 595 }, '发票页保留原始尺寸');
-  assert.deepEqual(merged.getPage(1).getSize(), { width: 595, height: 842 });
+  assert.deepEqual(merged.getPages().map(page => page.getSize()), [
+    { width: 842, height: 595 }, { width: 595, height: 842 }, { width: 595, height: 842 },
+  ]);
+  assert.ok(pages[0].locations[0][0] > 250, '竖版发票等比居中到横版 A4');
+  assert.ok(pages[2].locations[0][1] > 400, '横版附加材料等比居中到竖版 A4');
 });
 
 test('without an invoice the first page already carries the order and payment pair', async () => {
@@ -108,6 +111,17 @@ test('evidence from different expense items never shares a PDF page', async () =
   ]);
   assert.deepEqual(result.sources.map(source => source.startPage), [1, 2, 1, 2]);
   assert.deepEqual((await readPages(result.merged)).map(page => page.images), [2, 2]);
+});
+
+test('order/payment pairs come before unpaired screenshots and attachments regardless of upload order', async () => {
+  const result = await processPdfs([
+    { ...supporting('other.pdf', '行程单', await invoiceBytes('OTHER')), expenseItemId: 'a' },
+    { ...supporting('unpaired.pdf', '订单截图', await invoiceBytes('EXTRA')), expenseItemId: 'b' },
+    { ...supporting('payment.pdf', '付款截图', await invoiceBytes('PAYMENT')), expenseItemId: 'a' },
+    { ...supporting('order.pdf', '订单截图', await invoiceBytes('ORDER')), expenseItemId: 'a' },
+  ]);
+  assert.deepEqual(result.sources.map(source => source.startPage), [3, 2, 1, 1]);
+  assert.deepEqual((await readPages(result.merged)).map(page => page.text), ['ORDER-1PAYMENT-1', 'EXTRA-1', 'OTHER-1']);
 });
 
 test('several invoices stay in upload order ahead of the screenshots', async () => {
