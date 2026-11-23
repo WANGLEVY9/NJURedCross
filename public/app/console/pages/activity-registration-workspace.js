@@ -1,4 +1,6 @@
-import {request,requestBlob} from '../../core/api.js';
+import {request} from '../../core/api.js';
+import {registrationCapabilities} from '../../shared/registration-capabilities.js';
+import {registrationDownloadButton} from './registration-download.js';
 import {leaveReviewActions,leaveStatus,canReviewLeave,batchLeaveButton} from './activity-leave-review.js';
 import {rosterColumns} from '../roster-columns.js';
 import {activityInformationPreview} from './activity-information-preview.js';
@@ -159,11 +161,8 @@ export function activityRegistrationWorkspace({adminEditInformation,event,data,a
  const batchToggle=button({label:'批量操作',onClick:()=>{if(busy||uncertain||!manager())return;batchMode=!batchMode;selected.clear();render();}});
  search.control.addEventListener('input',()=>{selected.clear();render();});
  for(const control of [status.control,order.control,campus,department])control.addEventListener('change',()=>{selected.clear();render();});
- const download=button({label:'下载报名信息表',onClick:async()=>{
-  if(busy||uncertain)return;busy=true;download.disabled=true;render();
-  try{const {blob}=await requestBlob(`/api/volunteer/workflow/events/${encodeURIComponent(event._id)}/registration-export`);const url=URL.createObjectURL(blob),link=h('a',{href:url,download:`${event['活动名称']}-报名信息表.xlsx`});document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);}
-  catch(error){reportError(error,'报名信息表下载失败');}finally{busy=false;download.disabled=false;if(!disposed)render();}
- }});
+ const capabilities=registrationCapabilities(event);
+ const download=registrationDownloadButton(event,{canDownload:()=>capabilities.exportRegistration&&!busy&&!uncertain,onBusy:value=>{busy=value;if(!disposed)render();}});
  const leaveBatch=batchLeaveButton({getRows:()=>busy||uncertain||!manager()?[]:snapshot.registrations.filter(r=>parent(r)&&canReviewLeave(parent(r))),refresh:fresh,onBusy:value=>{busy=value;if(!disposed)render();}});
  content.append(todo,positionTabs,leaveHint,leaveBatch,h('div',{class:'activity-registration-filters'},search,status,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,renotify,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
  root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,download,actionsNode),h('p',{class:'t-caption',text:'如需修改入群信息、注意事项等通知内容，请点击右上角“通知信息编辑”。修改仅影响后续发送的邮件，已发送或已进入发送队列的邮件保持原内容。'}),content);render();void readMailStatuses();
