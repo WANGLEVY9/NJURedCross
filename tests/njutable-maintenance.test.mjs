@@ -1,13 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { readExpiredRows, timestampOf } from '../scripts/njutable-retention.mjs';
+import { readExpiredRows, readStaleRows, timestampOf } from '../scripts/njutable-retention.mjs';
 
 test('NJUTable hygiene uses an explicit confirmation and a 60-day retention default', async () => {
   const source = await readFile(new URL('../scripts/njutable-maintenance.mjs', import.meta.url), 'utf8');
   assert.match(source, /const RETENTION_DAYS = 60/);
   assert.match(source, /APPLY-NJUTABLE-HYGIENE/);
+  assert.match(source, /hasConfirmation\(args\.confirmation, CONFIRM\)/);
   assert.match(source, /DELETE-NON-EMPTY-DEV-TABLES/);
+  assert.match(source, /DELETE-STALE-ATTACHMENT-SLOTS/);
+  assert.match(source, /DELETE-EXPIRED-COORDINATION-LOCKS/);
+  assert.match(source, /投稿附件表/, 'storage audit must list attachment slots for review');
   assert.match(source, /audit_logs_require_explicit_confirmation/);
   assert.match(source, /identity_records_require_explicit_environment_opt_in/);
   assert.match(source, /if \(!args\.apply\) \{/);
@@ -92,4 +96,39 @@ test('timezone-free retention timestamps use Beijing time regardless of host tim
   assert.equal(timestampOf('2026-09-24'), cutoff - 8 * 3600000);
   assert.equal(timestampOf('2026-02-30'), null);
   assert.equal(timestampOf('September 1, 2026'), null);
+});
+
+test('stale scans only remove terminal rows and respect terminal-time boundaries', async () => {
+  const rule = { table: '投稿附件表', column: '上传时间',
+    filter: { 上传状态: ['已删除'], 投稿ID: [''] } };
+  const client = { async query(sql) {
+    assert.match(sql, /`上传状态` IN \('已删除'\)/);
+    assert.match(sql, /`投稿ID` IN \(''\)/);
+    assert.match(sql, /ORDER BY `_id` LIMIT 1001/);
+    return [
+      { _id: 'deleted-old', 上传时间: '2026-08-01', 上传状态: '已删除', 投稿ID: '' },
+      { _id: 'deleted-boundary', 上传时间: new Date(cutoff).toISOString(), 上传状态: '已删除', 投稿ID: '' },
+      { _id: 'bound-old', 上传时间: '2026-08-01', 上传状态: '已删除', 投稿ID: 'SUB-1' },
+      { _id: 'pending-old', 上传时间: '2026-08-01', 上传状态: '待上传', 投稿ID: '' },
+      { _id: 'bad-date', 上传时间: '2026-02-30', 上传状态: '已删除', 投稿ID: '' },
+    ];
+  } };
+  const result = await readStaleRows(client, rule, cutoff, 1000);
+  assert.deepEqual(result.staleRowIds, ['deleted-old']);
+  assert.equal(result.capped, false);
+  assert.equal(result.scanComplete, true);
+});
+
+test('stale scan rejects truncated or oversized responses instead of deleting a partial set', async () => {
+  const rows = Array.from({ length: 1001 }, (_, index) => ({
+    _id: `row-${index}`, 上传时间: '2026-08-01', 上传状态: '已删除', 投稿ID: '',
+  }));
+  const client = { async query() {
+    rows.readMeta = { truncated: true };
+    return rows;
+  } };
+  await assert.rejects(
+    readStaleRows(client, { table: '投稿附件表', column: '上传时间' }, cutoff, 1000),
+    /Incomplete stale scan/,
+  );
 });

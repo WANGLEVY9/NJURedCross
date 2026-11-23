@@ -3,7 +3,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { deleteRows } from '../lib/http/batch-write.js';
 import { assertCoordinatedMaintenance } from '../lib/maintenance/script-runner.js';
-import { identifier, readExpiredRows } from './njutable-retention.mjs';
+import { identifier, readExpiredRows, readStaleRows } from './njutable-retention.mjs';
 import { installSeaTableTransport } from '../lib/http/seatable-transport.js';
 import { observer } from '../lib/observability.js';
 
@@ -17,6 +17,8 @@ const BATCH_SIZE = 200;
 const MAX_DELETIONS_PER_TABLE = 1000;
 const CONFIRM = 'APPLY-NJUTABLE-HYGIENE';
 const DELETE_NON_EMPTY_CONFIRM = 'DELETE-NON-EMPTY-DEV-TABLES';
+const ATTACHMENT_CLEANUP_CONFIRM = 'DELETE-STALE-ATTACHMENT-SLOTS';
+const LOCK_CLEANUP_CONFIRM = 'DELETE-EXPIRED-COORDINATION-LOCKS';
 const REPORT_DIR = resolve('reports');
 const REPORT_FILE = resolve(REPORT_DIR, 'NJUTABLE_MAINTENANCE_2026-11-23.json');
 const server = (process.env.SEATABLE_SERVER_URL || 'https://table.nju.edu.cn').replace(/\/$/, '');
@@ -26,6 +28,10 @@ const groups = [
     obsoleteTables: ['8月5日测试', '南大红会 志愿服务平台_个人主页（26年备份）'],
     retention: [
       { table: '操作审计表', column: '时间', kind: 'audit', sensitive: true },
+      { table: '投稿附件表', column: '上传时间', kind: 'attachment-slot', selective: true,
+        filter: { 上传状态: ['已删除'], 投稿ID: [''] } },
+      { table: '温暖连接操作锁表', column: '过期时间', kind: 'coordination-lock', selective: true, retentionDays: 7,
+        filter: { 状态: ['已释放'] } },
     ] },
   { key: 'volunteer', token: process.env.SEATABLE_VOLUNTEER_API_TOKEN, uuid: process.env.SEATABLE_VOLUNTEER_BASE_UUID,
     obsoleteTables: ['市血液献血车排班表（汇总底表）(copy)', '个人主页（26年备份）', '个人主页（编辑版）(8.4备份)'],
@@ -53,16 +59,29 @@ const protectedTables = new Set([
 
 function parseArgs(argv) {
   const apply = argv.includes('--apply');
-  const confirmation = argv.find(arg => arg.startsWith('--confirm='))?.slice('--confirm='.length);
+  const confirmations = argv.filter(arg => arg.startsWith('--confirm=')).map(arg => arg.slice('--confirm='.length));
+  const confirmation = confirmations.length > 1 ? confirmations : confirmations[0] || null;
   const dayValue = Number(argv.find(arg => arg.startsWith('--retention-days='))?.slice('--retention-days='.length) || RETENTION_DAYS);
   const batchValue = Number(argv.find(arg => arg.startsWith('--batch-size='))?.slice('--batch-size='.length) || BATCH_SIZE);
   const includeAudit = argv.includes('--include-audit');
   const includeIdentity = process.env.PLATFORM_NJUTABLE_IDENTITY_CLEANUP === 'true';
   const includeNonEmptyTables = argv.includes(`--confirm=${DELETE_NON_EMPTY_CONFIRM}`);
+  const includeStaleAttachments = argv.includes(`--confirm=${ATTACHMENT_CLEANUP_CONFIRM}`);
+  const includeExpiredLocks = argv.includes(`--confirm=${LOCK_CLEANUP_CONFIRM}`);
   if (!Number.isSafeInteger(dayValue) || dayValue < 1 || dayValue > 3650) throw new Error('Invalid retention days');
   if (!Number.isSafeInteger(batchValue) || batchValue < 1 || batchValue > BATCH_SIZE) throw new Error('Invalid batch size');
   return { apply, confirmation, retentionDays: dayValue, batchSize: batchValue,
-    includeAudit, includeIdentity, includeNonEmptyTables };
+    includeAudit, includeIdentity, includeNonEmptyTables, includeStaleAttachments, includeExpiredLocks };
+}
+
+function hasConfirmation(confirmation, token) {
+  return Array.isArray(confirmation) ? confirmation.includes(token) : confirmation === token;
+}
+
+function selectiveEnabled(rule, args) {
+  if (rule.kind === 'attachment-slot') return args.includeStaleAttachments;
+  if (rule.kind === 'coordination-lock') return args.includeExpiredLocks;
+  return true;
 }
 
 async function clientFor(group) {
@@ -95,14 +114,32 @@ async function tablePlan(base, group, obsolete, cutoff, args) {
       rowCount, columnCount: (table.columns || []).length });
   }
   for (const rule of group.retention) {
-    if (protectedTables.has(rule.table)) throw new Error(`Protected retention table: ${rule.table}`);
+    // Selective terminal-state rules are identity-checked, filtered and gated
+    // by their own confirmation token; broad time-based rules stay protected.
+    if (protectedTables.has(rule.table) && !rule.selective) {
+      throw new Error(`Protected retention table: ${rule.table}`);
+    }
     const table = known.get(rule.table);
-    if (!table) continue;
+    if (!table) {
+      if (rule.selective && selectiveEnabled(rule, args)) {
+        tables.push({ name: rule.table, action: 'skipped', kind: rule.kind,
+          reason: 'retention_table_not_present' });
+      }
+      continue;
+    }
     const hasTimeColumn = (table.columns || []).some(column => column.name === rule.column);
-    if (!hasTimeColumn) throw new Error(`Missing retention column ${rule.column} in ${rule.table}`);
+    if (!hasTimeColumn) {
+      if (rule.selective) continue;
+      throw new Error(`Missing retention column ${rule.column} in ${rule.table}`);
+    }
     if (rule.sensitive && group.key === 'identity' && !args.includeIdentity) {
       tables.push({ name: rule.table, action: 'skipped', kind: rule.kind,
         reason: 'identity_records_require_explicit_environment_opt_in' });
+      continue;
+    }
+    if (!selectiveEnabled(rule, args)) {
+      tables.push({ name: rule.table, action: 'skipped', kind: rule.kind,
+        reason: `${rule.kind}_requires_explicit_confirmation` });
       continue;
     }
     if (rule.kind === 'audit' && !args.includeAudit) {
@@ -110,7 +147,10 @@ async function tablePlan(base, group, obsolete, cutoff, args) {
         reason: 'audit_logs_require_explicit_confirmation' });
       continue;
     }
-    const expired = await readExpiredRows(base, rule, cutoff, MAX_DELETIONS_PER_TABLE);
+    const ruleCutoff = rule.retentionDays ? Date.now() - rule.retentionDays * 86400000 : cutoff;
+    const expired = rule.selective
+      ? await readStaleRows(base, rule, ruleCutoff, MAX_DELETIONS_PER_TABLE)
+      : await readExpiredRows(base, rule, cutoff, MAX_DELETIONS_PER_TABLE);
     tables.push({ name: rule.table, action: 'delete-expired-rows', kind: rule.kind,
       timeColumn: rule.column, ...expired });
   }
@@ -120,23 +160,27 @@ async function tablePlan(base, group, obsolete, cutoff, args) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   assertCoordinatedMaintenance({ write: args.apply });
-  if (args.apply && args.confirmation !== CONFIRM) throw new Error(`Refusing to write. Pass --apply --confirm=${CONFIRM}.`);
+  if (args.apply && !hasConfirmation(args.confirmation, CONFIRM)) {
+    throw new Error(`Refusing to write. Pass --apply --confirm=${CONFIRM}.`);
+  }
   const cutoff = Date.now() - args.retentionDays * 86400000;
   const report = { ok: true, mode: args.apply ? 'apply' : 'preview', checkedAt: new Date().toISOString(),
     server, retentionDays: args.retentionDays, cutoffAt: new Date(cutoff).toISOString(),
     batchSize: args.batchSize, writes: args.apply, confirmation: args.confirmation || null,
     includeAudit: args.includeAudit, includeIdentity: args.includeIdentity,
-    includeNonEmptyTables: args.includeNonEmptyTables, groups: [] };
+    includeNonEmptyTables: args.includeNonEmptyTables,
+    includeStaleAttachments: args.includeStaleAttachments, includeExpiredLocks: args.includeExpiredLocks,
+    groups: [] };
   for (const group of groups) {
     const base = await clientFor(group);
     const tables = await tablePlan(base, group, group.obsoleteTables, cutoff, args);
     report.groups.push({ key: group.key, uuid: base.dtableUuid, obsoleteTables: group.obsoleteTables,
-      retention: group.retention.map(({ kind, table, column }) => ({ kind, table, column })), tables });
+      retention: group.retention.map(({ kind, table, column, retentionDays }) => ({ kind, table, column, retentionDays })), tables });
   }
   await mkdir(REPORT_DIR, { recursive: true });
   await writeFile(REPORT_FILE, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
   const publicReport = { ...report, groups: report.groups.map(group => ({ ...group,
-    tables: group.tables.map(({ expiredRowIds, ...table }) => table) })) };
+    tables: group.tables.map(({ expiredRowIds, staleRowIds, ...table }) => table) })) };
   if (!args.apply) {
     console.log(JSON.stringify(publicReport, null, 2));
     return;
@@ -150,7 +194,7 @@ async function main() {
         await base.deleteTable(plan.name);
         applied.push({ group: group.key, table: plan.name, action: plan.action, count: 1 });
       } else if (plan.action === 'delete-expired-rows') {
-        const ids = plan.expiredRowIds || [];
+        const ids = plan.expiredRowIds || plan.staleRowIds || [];
         await deleteRows(base, plan.name, ids);
         applied.push({ group: group.key, table: plan.name, action: plan.action, count: ids.length });
       }

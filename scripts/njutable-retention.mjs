@@ -2,6 +2,7 @@ const PAGE_SIZE = 500;
 const MAX_SCAN_ROWS = 100000;
 
 export const identifier = value => `\`${String(value).replaceAll('`', '``')}\``;
+const quote = value => `'${String(value).replaceAll("'", "''")}'`;
 
 export function timestampOf(value) {
   if (value == null || value === '') return null;
@@ -30,6 +31,48 @@ async function countRows(base, table) {
     throw new Error(`Incomplete count for ${table}`);
   }
   return count;
+}
+
+/** Project the few columns needed by a retention rule so stale values are visible. */
+function projectionFor(rule) {
+  return ['_id', rule.column, ...(rule.filter ? Object.keys(rule.filter) : [])];
+}
+
+function matchesRule(row, rule) {
+  if (!rule.filter) return true;
+  return Object.entries(rule.filter).every(([column, allowed]) => allowed.includes(row[column]));
+}
+
+/**
+ * Count records that are already in a terminal state. These rows are no longer
+ * read by the application, but the base keeps them forever unless a narrow,
+ * explicit rule opts in.
+ */
+export async function readStaleRows(base, rule, cutoff, maxDeletions) {
+  const fields = projectionFor(rule);
+  const where = [`${identifier(rule.column)} < ${quote(new Date(cutoff).toISOString())}`];
+  for (const [column, allowed] of Object.entries(rule.filter || {})) {
+    where.push(`${identifier(column)} IN (${allowed.map(quote).join(', ')})`);
+  }
+  const sql = `SELECT ${fields.map(identifier).join(', ')} FROM ${identifier(rule.table)} WHERE ${where.join(' AND ')} ORDER BY \`_id\` LIMIT ${maxDeletions + 1}`;
+  const rows = await base.query(sql);
+  if (!Array.isArray(rows) || rows.length > maxDeletions + 1 || rows.readMeta?.truncated) {
+    throw new Error(`Incomplete stale scan for ${rule.table}`);
+  }
+  const seen = new Set();
+  const staleRowIds = [];
+  for (const row of rows) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)
+      || typeof row._id !== 'string' || !row._id || seen.has(row._id)) {
+      throw new Error(`Invalid stale row for ${rule.table}`);
+    }
+    seen.add(row._id);
+    const at = timestampOf(row[rule.column]);
+    if (at === null || at >= cutoff || !matchesRule(row, rule)) continue;
+    if (staleRowIds.length < maxDeletions) staleRowIds.push(row._id);
+  }
+  return { staleRowIds, staleCount: staleRowIds.length,
+    capped: staleRowIds.length === maxDeletions, scanComplete: rows.length <= maxDeletions };
 }
 
 export async function readExpiredRows(base, rule, cutoff, maxDeletions) {
