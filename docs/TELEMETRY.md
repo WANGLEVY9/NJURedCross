@@ -23,18 +23,18 @@
 
 ```sh
 ssh njuredcross "timeout -k 2 10 journalctl --namespace=njuredcross -u njuredcross --since '15 minutes ago' -n 2000 -o cat --no-pager" | node scripts/summarize-telemetry.mjs
-ssh njuredcross "timeout -k 2 10 journalctl --namespace=njuredcross -u njuredcross --since '15 minutes ago' -n 2000 -o cat --no-pager" | node scripts/read-telemetry-trace.mjs <UUID>
+ssh njuredcross "timeout -k 2 10 journalctl --namespace=njuredcross -u njuredcross --since '15 minutes ago' -n 2000 -o cat --no-pager" | node scripts/inspect-telemetry-trace.mjs <UUID>
 ```
 
 ## 按 Trace ID 收敛长尾
 
-`npm run correlate:telemetry-traces -- 1000 20` 从 stdin 读取同一批脱敏日志，输出最慢 trace、按路由聚合的瓶颈、按 `service/operation` 聚合的独占耗时热点。参数是最小链路耗时（毫秒）与返回条数；`scripts/inspect-production-performance.sh` 已自动追加这一段。拿到可疑 `traceId` 后，再用 `read-telemetry-trace.mjs <UUID>` 查看单条链路的时序记录。
+`npm run correlate:telemetry-traces -- 1000 20` 从 stdin 读取同一批脱敏日志，输出最慢 trace、按路由聚合的瓶颈、按 `service/operation` 聚合的独占耗时热点。参数是最小链路耗时（毫秒）与返回条数；`scripts/inspect-production-performance.sh` 已自动追加这一段。拿到可疑 `traceId` 后，再用 `scripts/inspect-telemetry-trace.mjs <UUID>` 查看单条链路的时序记录。
 
 发布包只包含 `server.js`、`lib/*.js`、`public/*`，诊断工具保留在仓库 `scripts/`，不会部署到生产运行树。`ssh njuredcross-diag` 用于核对发布记录、服务状态与脱敏后的聚合摘要；它不输出原始结构化遥测行，因此不能直接把该报告交给关联工具。按 `traceId` 收敛时，在已检出的仓库中对同一批原始日志运行 `journalctl ... -o cat | npm run correlate:telemetry-traces -- 1000 20`，或把有界原始日志拉回本机后从 stdin 交给该命令；分析器只解析白名单结构化记录，自动跳过非遥测文本。
 
 分析器把 `time` 视为 span 结束时间，以 `time - durationMs` 还原区间，并用 `spanId/parentSpanId` 还原父子关系。`coveredMs` 是服务端依赖区间并集，`observedCoveredMs` 同时纳入浏览器记录，`uncoveredMs` 是两者都不覆盖的请求时间（业务计算、等待 I/O 或尚未观测的阶段）；`overlapMs` 是并发或父子依赖重复区间，`longestChainMs` 是最长父子关键路径。`exclusiveSpans` 用父 span 耗时减去子 span 区间并集，避免把嵌套 SeaTable 读取重复计入父阶段；`parallelMs` 只描述顶层串行窗口之外的子依赖重叠。浏览器记录标记为不可信，仅用于解释客户端等待，不参与服务端关键路径。
 
-排障顺序：先看 `slowestTraces` 的 `route` 与 `http.durationMs`，再用 `uncoveredMs` 判断是否需要补观测阶段，用 `exclusiveSpans` 与 `criticalSpans` 判断优先优化的外部 I/O 或锁内读取，最后把 `traceId` 传给 `read-telemetry-trace.mjs`；该命令同时输出同一套 `analysis` 摘要与精简时序记录。不要把 `dependencyMs` 或所有 `durationMs` 直接相加：并发依赖会重叠，父子 span 会重复计数。输出只含 trace ID、脱敏路由、固定阶段名和数值，不回显原始日志行、URL、查询参数、正文或账号标识。
+排障顺序：先看 `slowestTraces` 的 `route` 与 `http.durationMs`，再用 `uncoveredMs` 判断是否需要补观测阶段，用 `exclusiveSpans` 与 `criticalSpans` 判断优先优化的外部 I/O 或锁内读取，最后把 `traceId` 传给 `scripts/inspect-telemetry-trace.mjs`；该命令同时输出同一套 `analysis` 摘要与精简时序记录。不要把 `dependencyMs` 或所有 `durationMs` 直接相加：并发依赖会重叠，父子 span 会重复计数。输出只含 trace ID、脱敏路由、固定阶段名和数值，不回显原始日志行、URL、查询参数、正文或账号标识。
 
 ## 新增及改动的质量门禁
 

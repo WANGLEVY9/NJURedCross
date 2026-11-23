@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { correlateTelemetry, parseTelemetryLines } from '../scripts/telemetry-trace-analysis.js';
+import { correlateTelemetry, parseTelemetryLines } from '../scripts/telemetry-trace-analysis.mjs';
 
 const base = {
   schema: 1,

@@ -1,11 +1,11 @@
 import { createInterface } from 'node:readline';
 import { telemetryRoute } from '../public/app/shared/telemetry-route.js';
-import { analyzeTrace, parseTelemetryLines } from './telemetry-trace-analysis.js';
+import { analyzeTrace, parseTelemetryLines } from './telemetry-trace-analysis.mjs';
 
 const id = process.argv[2]?.toLowerCase();
 const uuid = value => typeof value === 'string' && /^[a-f\d]{8}(?:-[a-f\d]{4}){3}-[a-f\d]{12}$/i.test(value);
 if (!uuid(id)) {
-  console.error('Usage: journalctl ... -o cat | node scripts/read-telemetry-trace.mjs <UUID>');
+  console.error('Usage: journalctl ... -o cat | node scripts/inspect-telemetry-trace.mjs <UUID>');
   process.exit(2);
 }
 const rows = [];

@@ -30,6 +30,7 @@ npm run preview:workflow
 | 变更类型 | 验证要求 |
 | --- | --- |
 | 所有变更 | `npm run check`、`npm run lint`、`npm run check:security`；核对实际改动范围 |
+| 新增文件或重命名 | `npm run check:names`，命名规则见 [文件与命名约定](docs/NAMING.md) |
 | 代码变更 | `npm run verify`、`npm run check:links`，增加或更新有价值的行为回归 |
 | 页面与交互 | 相关 Playwright 测试；桌面/手机、键盘焦点、加载/错误状态；附合成数据截图 |
 | 依赖变更 | `npm run audit:dependencies`，核对许可与运行兼容性 |

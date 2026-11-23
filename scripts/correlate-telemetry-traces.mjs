@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import { correlateTelemetry, parseTelemetryLines } from './telemetry-trace-analysis.js';
+import { correlateTelemetry, parseTelemetryLines } from './telemetry-trace-analysis.mjs';
 
 // Read-only stdout analyzer for journalctl -o cat / -o json telemetry.
 // It never echoes raw log lines, URLs, request bodies or identifiers other
