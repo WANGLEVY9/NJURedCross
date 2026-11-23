@@ -28,7 +28,7 @@ const source = (item, entries) => ({ requestId: item.id, revision: item.revision
 const edits = item => ({ activityId: item.activityId, activityName: '修订活动', campus: '南京', amount: '18.00', purpose: '修订事由',
   expenseDate: '2026-10-21', voucherNote: '修订说明', expenseItems: [{ id: 'a', category: '打印材料', label: '修订物品', amount: '18.00', note: '修订用途' }] });
 
-test('each agreed category has its own required materials, meeting invitation is conditional, and Word cannot replace screenshot evidence', () => {
+test('each agreed category has its own required materials, meeting invitation is conditional, and Word may stand in for screenshot evidence', () => {
   for (const category of ['火车票/高铁票', '机票', '物资采买', '打印材料', '打车', '快递', '住宿']) {
     const body = { materialRulesVersion: 1, singleOrderConfirmed: true, meetingRelated: false, expenseItems: [{ category }] };
     const files = requiredReimbursementMaterials(category).map(type => ({ name: `${type}.pdf`, kind: type === '发票' ? 'invoice' : 'supporting', materialType: type }));
@@ -37,8 +37,20 @@ test('each agreed category has its own required materials, meeting invitation is
     assert.match(reimbursementMaterialIssues({ ...body, meetingRelated: true }, files).join(), /会议邀请函/);
     assert.ok(reimbursementMaterialIssues({ ...body, singleOrderConfirmed: false }, files).length);
   }
-  assert.ok(reimbursementMaterialIssues({ materialRulesVersion: 1, singleOrderConfirmed: true, meetingRelated: false, expenseItems: [{ category: '物资采买' }] }, [
-    { kind: 'invoice', name: 'invoice.pdf' }, { kind: 'supporting', materialType: '订单和付款截图', name: 'screenshots.docx' }]).length);
+  const supply = { materialRulesVersion: 1, singleOrderConfirmed: true, meetingRelated: false, expenseItems: [{ category: '物资采买' }] };
+  // One Word holding both order and payment evidence now satisfies both requirements together.
+  assert.deepEqual(reimbursementMaterialIssues(supply, [
+    { kind: 'invoice', name: 'invoice.pdf' },
+    { kind: 'supporting', materialType: '订单和付款截图', name: 'screenshots.docx' }]), []);
+  // Separate Word files are equally acceptable and each still maps to its own requirement.
+  assert.deepEqual(reimbursementMaterialIssues(supply, [
+    { kind: 'invoice', name: 'invoice.pdf' },
+    { kind: 'supporting', materialType: '订单截图', name: 'order.docx' },
+    { kind: 'supporting', materialType: '付款截图', name: 'payment.docx' }]), []);
+  // Legacy .doc cannot yield pictures for review, so Word there does not count as evidence.
+  assert.ok(reimbursementMaterialIssues(supply, [
+    { kind: 'invoice', name: 'invoice.pdf' },
+    { kind: 'supporting', materialType: '订单和付款截图', name: 'screenshots.doc' }]).length);
   assert.deepEqual(reimbursementMaterialIssues({ expenseItems: [{ category: '旧类别' }] }, []), []);
 });
 

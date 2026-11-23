@@ -11,7 +11,7 @@ export const reimbursementMaterialHint = type => ({
   '发票': '上传 PDF 原件；请确认抬头为“南京大学”，并检查红章是否完整。',
   '订单截图': '购物订单请完整显示订单号、收货地址、商品类别、付款金额；打车订单请显示订单号、出发地、目的地和金额。',
   '付款截图': '进入支付宝、微信或银行等付款工具的交易明细，完整显示付款金额、付款时间、付款订单号和收款人。',
-  '订单和付款截图': '需同时包含完整订单信息及付款工具交易明细；缺少其中一部分时请分别上传。',
+  '订单和付款截图': '需同时包含完整订单信息及付款工具交易明细；缺少其中一部分时请分别上传。图片、PDF、Word 均可，平台会整理成一份 Word。',
   '行程单': '打车行程单请上传 PDF 原件，包含对应行程。',
   '高铁二等座价格证明': '提供同起终点的高铁二等座价格高于机票价格的证明截图；价格关系需审核人核实。',
   '快递单': '提供本笔快递的运单凭据。', '快递起终点截图': '清晰呈现本笔快递的寄件地、收件地和运单关联信息。',
@@ -34,11 +34,15 @@ export function reimbursementMaterialIssues(request, files) {
       const acceptable = candidates.some(file => {
         const name = file.originalName || file.file?.name || file.name || '';
         if (['发票', '行程单'].includes(required)) return /\.pdf$/i.test(name);
-        if (['订单截图', '付款截图', '快递起终点截图', '高铁二等座价格证明'].includes(required)) return /\.(pdf|png|jpe?g)$/i.test(name);
+        // Order and payment evidence may be delivered as .docx: the server extracts the pictures so
+        // reviewers see the same content. Legacy .doc stays out because its pictures cannot be read.
+        if (['订单截图', '付款截图'].includes(required)) return /\.(pdf|png|jpe?g|docx)$/i.test(name);
+        if (['快递起终点截图', '高铁二等座价格证明'].includes(required)) return /\.(pdf|png|jpe?g)$/i.test(name);
         return true;
       });
       if (!acceptable) issues.push(`${category}：请补充${required}${['发票', '行程单'].includes(required) ? ' PDF 原件'
-        : ['订单截图', '付款截图', '快递起终点截图', '高铁二等座价格证明'].includes(required) ? '（图片或 PDF，Word 仅作辅助）' : ''}。`);
+        : ['订单截图', '付款截图'].includes(required) ? '（图片、PDF 或 Word）'
+        : ['快递起终点截图', '高铁二等座价格证明'].includes(required) ? '（图片或 PDF）' : ''}。`);
     }
   }
   return [...new Set(issues)];

@@ -153,13 +153,14 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
   const header = h('div', { class: 'material-bundle-head' },
       h('p', { class: 't-secondary', text: originalsFirst ? `${bundle.sources.length} 份原材料 · 第 ${request?.revision || 1} 版`
         : `${bundle.sources.length} 份原材料 · 合并后 ${bundle.pageCount} 页` }),
+      bundle.supportingDocxUrl ? button({ label: '下载 Word 材料', variant: 'secondary', size: 'sm', href: bundle.supportingDocxUrl }) : null,
       (!originalsFirst || mergedFirst) && bundle.mergedUrl ? downloadLink({ name: bundle.mergedName || '报销材料合并.pdf', url: bundle.mergedUrl,
         kind: bundle.sources.length === 1 ? bundle.sources[0].kind : null }, '下载合并 PDF', 'secondary') : null);
   const analysis = h('section', { class: 'stack-3 material-analysis' },
       h('h3', { class: 't-h4', text: '报销材料提取' }), summary,
       results);
   const originalSection = h('section', { class: 'stack-3 material-originals' }, h('h3', { class: 't-h4', text: `原始材料（${bundle.sources.length} 份）` }),
-      bundle.sources.some(source => !source.startPage) ? h('p', { class: 't-caption', text: 'Word 材料保留原件，不包含在合并 PDF 中，请分别下载核对。' }) : null, originals, downloadStatus);
+      bundle.sources.some(source => !source.startPage) ? h('p', { class: 't-caption', text: '未能提取图片的 Word 材料仅保留原件，不包含在合并 PDF 中，请分别下载核对。' }) : null, originals, downloadStatus);
   const node = h('div', { class: 'stack-4 material-bundle' }, header,
     ...(mergedFirst ? [preview, analysis, originalSection] : originalsFirst ? [analysis, originalSection] : [analysis, originalSection, preview]));
   node.dispose = () => { unsubscribe?.(); preview?.dispose?.(); activeOriginal?.close(); };
