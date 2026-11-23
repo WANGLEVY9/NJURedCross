@@ -98,7 +98,8 @@ test('formal HTTP workflow persists all material kinds through the real Box adap
   assert.ok([403, 404].includes((await call(`/bundles/${a.bundle.id}/merged`, { user: 'material-admin' })).status));
   assert.equal((await call('', { user: 'initial-other' })).data.requests.length, 0);
   const merged = await call(`/bundles/${a.bundle.id}/merged`);
-  assert.equal((await PDFDocument.load(merged.bytes)).getPageCount(), 3);
+  // Invoice on page 1, order and payment screenshots sharing page 2.
+  assert.equal((await PDFDocument.load(merged.bytes)).getPageCount(), 2);
   const sent = [];
   const notifier = () => createReimbursementNotifier({ service: service(), enabled: () => true, origin: f.origin,
     getReviewer: async key => ({ id: `synthetic-contact-${key}`, email: `${key}@example.invalid`, emailVerified: true }),
@@ -125,7 +126,7 @@ test('formal HTTP workflow persists all material kinds through the real Box adap
   assert.deepEqual(summary.rows.map(row => row.label), ['第二项', '第一项']); assert.equal(summary.unmergedAttachments.length, 1);
   f.reopen();
   const packet = await call(`/summaries/${summary.id}/packet`, { user: 'final' }); assert.equal(packet.status, 200);
-  const pdf = await PDFDocument.load(packet.bytes); assert.equal(pdf.getPageCount(), summary.formPages + 4);
+  const pdf = await PDFDocument.load(packet.bytes); assert.equal(pdf.getPageCount(), summary.formPages + 3);
   assert.equal(pdf.getPage(summary.formPages).getWidth(), 350);
   const form = await call(`/summaries/${summary.id}/form`, { user: 'final' }); assert.equal(form.status, 200);
   assert.equal(f.fixture.objects.has(checksum(packet.bytes)), true); assert.equal(f.fixture.objects.has(checksum(form.bytes)), true);
