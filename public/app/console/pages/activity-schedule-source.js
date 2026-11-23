@@ -17,12 +17,46 @@ export async function openScheduleSource(onRefresh=async()=>{}){
    definitionList([['岗位来源底表',result.sourceTable],['模板表',result.templateTable],['已读取班次',String(result.sessionCount)],['底表有效名额合计',String(result.capacity)]]),
    !result.bookingReady?notice(`报名占位尚未就绪：请管理员核对底表文本列 ${result.missingBookingColumns.join('、')}。本入口不会自动增列或修改历史数据。`,{tone:'warning'}):notice('报名占位关联列已就绪。'),
    automation?bloodWeekAutomation(automation,onRefresh):null,
+   automation?bloodNotificationReviews():null,
    notice('新增日期、班次、名额或停点在底表维护，刷新后读取。已有报名、签到和时长不迁移；照片证据和时长审核规则保留。'),
    result.templateAvailable?h('div',{class:'table-wrap'},h('table',{},h('thead',{},h('tr',{},...['序号','点位','活动时间'].map(text=>h('th',{text})))),h('tbody',{},...result.templateRows.map(row=>h('tr',{},...['序号','点位','活动时间'].map(key=>h('td',{text:row[key]||'—'}))))))):notice('未找到模板表；平台仍可读取已生成的底表岗位。请由底表管理员核对模板及自动化规则。',{tone:'warning'}));
   let drawer,busy=false;
   const refresh=button({label:'刷新排班',onClick:async()=>{if(busy)return;busy=true;refresh.disabled=true;try{await onRefresh();await drawer.close();}catch(error){reportError(error,'排班刷新失败');}finally{busy=false;refresh.disabled=false;}}});
   drawer=openDrawer({title:'排班来源与模板',width:850,body,footer:[button({label:'关闭',onClick:()=>drawer.close()}),refresh]});
  }catch(error){reportError(error,'排班来源与模板读取失败');}
+}
+
+function bloodNotificationReviews(){
+ const endpoint='/api/volunteer/workflow/blood-notification-reviews';
+ const list=h('div',{class:'stack-2','aria-live':'polite'});
+ const refresh=button({label:'刷新待核对',onClick:load});
+
+ async function load(){
+  refresh.disabled=true;
+  try{
+   const {result}=await request(endpoint,{fresh:true});
+   list.replaceChildren(...(result.length?result.map(row=>{
+    const release=button({label:'放行此条',onClick:async()=>{
+     if(!await confirmAction({title:'放行这条报名通知？',description:'系统会重新核对底表，再按当前报名状态处理该条通知。',confirmLabel:'放行此条'}))return;
+     release.disabled=true;
+     try{
+      await request(`${endpoint}/release`,{method:'POST',body:{id:row.id,revision:row.revision}});
+      notify.success('已放行该条报名通知');
+     }catch(error){reportError(error,'放行失败');}
+     await load();
+    }});
+    release.disabled=!row.canRelease;
+    return h('div',{class:'stack-2'},definitionList([['报名编号',row.registrationCode],['班次',`${row.date} ${row.slot}`],['平台结果',row.expected],['底表结果',row.actual]]),release);
+   }):[notice('暂无待核对的报名通知。')]));
+  }catch{list.replaceChildren(notice('暂时无法读取待核对记录，请重试。',{tone:'warning'}));}
+  finally{refresh.disabled=false;}
+ }
+
+ const root=h('section',{class:'stack-3','aria-label':'报名通知待核对'},h('h3',{text:'报名通知待核对'}),
+  notice('发现底表结果与平台报名记录不一致时，系统会暂缓相关邮件。核对并修正底表后，可逐条放行。'),refresh,list);
+ list.append(notice('正在读取待核对记录…'));
+ void load();
+ return root;
 }
 
 const WEEKDAYS=[['1','周一'],['2','周二'],['3','周三'],['4','周四'],['5','周五'],['6','周六'],['7','周日']];

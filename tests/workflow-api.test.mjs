@@ -5,6 +5,27 @@ import {workflowRoutes} from '../lib/events/workflow-api.js';
 function ctx(){const events=[{_id:'draft',活动ID:'D',活动名称:'草稿',状态:'待审核',申请版本:'1',批准版本:''},{_id:'public',活动ID:'P',活动名称:'公开',状态:'报名中',申请版本:'1',批准版本:'1',负责人账号ID:'private-owner'}];events[1]['批准摘要']=workflowApprovalHash(events[1]);let writes=0;return {json:(_r,status,body)=>({status,body}),getWorkflow:async()=>({async read(){return this.publicRead();},async memberRead(){return this.publicRead();},publicRead:async()=>({events,registrations:[{_id:'private-source',账号ID:'own',活动ID:'P',姓名:'自己',学号:'999990001',报名ID:'mine'},{账号ID:'other',姓名:'其他学生'}],ledger:[{账号ID:'own',来源摘要:'internal',服务时长:'2'},{账号ID:'other',姓名:'其他学生'}],profiles:[{账号ID:'own',志愿时长:'2'}]}),register:async()=>{writes++;return{};}}),requireConsoleAccess:()=>null,requirePortalSession:()=>({username:'own'}),requireCsrf:()=>true,readJson:async req=>req.body||{},getAccount:async()=>({accountId:'own',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true,campus:'鼓楼',studentId:'999990001',department:'合成院系',qq:'123456789',wechat:'synthetic_wechat',gender:'女',certificate:'否',phone:'13800000000',grade:'2023级'}),actor:()=>'',audit:async()=>{},writes:()=>writes};}
 const req=(method='GET',body)=>({method,body,headers:{host:'localhost'}});
 
+test('blood notification review uses global activity authority and releases only the requested revision',async()=>{
+ const c=ctx(),calls=[],revision='12345678-1234-1234-1234-123456789012';
+ const root='http://localhost/api/volunteer/workflow/blood-notification-reviews';
+ let global=false;
+ c.getEventAuthority=async()=>({canEnter:true,assertGlobal(){if(!global)throw Object.assign(Error('denied'),{statusCode:403});}});
+ c.getWorkflow=async()=>({bloodNotificationReviews:()=>[{id:'reg-a',revision}],
+  releaseBloodNotification:async(id,current)=>{calls.push([id,current]);}});
+ c.queueRegistrationNotifications=()=>calls.push('wake');
+ await assert.rejects(workflowRoutes(req(),null,new URL(root),c),{statusCode:403});
+ global=true;
+ assert.deepEqual((await workflowRoutes(req(),null,new URL(root),c)).body.result,[{id:'reg-a',revision}]);
+ const release=new URL(root+'/release');
+ c.requireCsrf=()=>false;
+ await workflowRoutes(req('POST',{id:'reg-a',revision}),null,release,c);
+ assert.deepEqual(calls,[]);
+ c.requireCsrf=()=>true;
+ assert.equal((await workflowRoutes(req('POST',{id:['reg-a','reg-b'],revision}),null,release,c)).status,400);
+ assert.equal((await workflowRoutes(req('POST',{id:'reg-a',revision}),null,release,c)).status,200);
+ assert.deepEqual(calls,[['reg-a',revision],'wake']);
+});
+
 test('a historical registration with no current activity keeps the member view usable and closes attendance',async()=>{
  const c=ctx(),original=c.getWorkflow;
  const workflow=createWorkflow({});

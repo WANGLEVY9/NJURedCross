@@ -4,6 +4,7 @@ import {projectEventSessionAccess} from './lib/events/event-session-access.js';
 import {createHoursPostingStore} from './lib/events/hours-posting-store.js';
 import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-store.js';
 import {createBloodWeekStore} from './lib/events/blood-week-store.js';
+import {createBloodNotificationReview} from './lib/events/blood-notification-review.js';
 import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
 import {openMailSettings,publicParticipationGuide} from './lib/mail/templates.js';
 import {workspaceNotificationItems} from './lib/events/workspace-notifications.js';
@@ -870,6 +871,7 @@ function getWorkspaceRoleStore(){
 }
 const approvalRouting=createActivityApprovalRouter({legacy:legacyApprovalRouting,getRoster:getWorkspaceRoster});
 let workflowInstance, wishlistPending, registrationNotifications;
+const permitsBloodMail=async(event,row)=>(await getWorkflow()).permitsBloodMail(event,row);
 let registrationDeliveryRunning=false,registrationDeliveryQueued=false;
 async function reconcileRegistrationNotifications(data){
  if(registrationDeliveryRunning){registrationDeliveryQueued=true;return;}
@@ -911,7 +913,7 @@ const decisionSnapshot=async()=>{
  decisionRead=(await getWorkflow()).read(['events','registrations']).catch(error=>{decisionRead=null;throw error;});
  return decisionRead;
 };
-const decisionMail=createDecisionMail({read:decisionSnapshot,store:decisionMailStore,recipientFor:recipientForBusinessRow,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
+const decisionMail=createDecisionMail({read:decisionSnapshot,store:decisionMailStore,recipientFor:recipientForBusinessRow,permitsBloodMail,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn',
  send:message=>mailerStatus().configured?sendMail(message):Promise.resolve({ok:false,retryable:true,transport:'none'}),
  schedule:task=>setImmediate(()=>{void Promise.resolve().then(()=>observer.withoutTrace(()=>withoutReadContext(()=>withoutRequestBudget(task)))).catch(()=>console.warn('Activity decision mail deferred'));}),onError:()=>console.warn('Activity decision mail requires reconciliation')});
 function notifyRegistrationDecisions(items){
@@ -961,7 +963,7 @@ function queueHoursSync({manual=false}={}){
 function queueFinalHoursMail(){setImmediate(()=>{void withoutRequestBudget(reconcileFinalHoursMail).catch(()=>console.warn('Final hours mail deferred for reconciliation'));});}
 async function getRegistrationNotifications(){
  const base=await getVolunteerBase();
- if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,recipientFor:recipientForBusinessRow,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
+ if(!registrationNotifications)registrationNotifications=createRegistrationNotifications(base,{send:sendMail,recipientFor:recipientForBusinessRow,permitsBloodMail,enabled:()=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'&&mailerStatus().configured,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'});
  return registrationNotifications;
 }
 async function getWishlist(){if(!wishlistPending)wishlistPending=Promise.all([getVolunteerBase(),getWorkflow()]).then(([base,workflow])=>createWishlist(base,workflow,{sendMail,recipientFor:recipientForBusinessRow,origin:process.env.PUBLIC_BASE_URL||'https://njuredcross.cn'})).catch(error=>{wishlistPending=null;throw error;});return wishlistPending;}
@@ -1016,7 +1018,11 @@ async function getWorkflow() {
     let hoursSchemaReady=false;
     const stateSuffix=createHash('sha256').update(base.dtableUuid).digest('hex').slice(0,16);
     const activityChangeStore=createActivityChangeStore(join(writeStateDir,`activity-changes-${stateSuffix}.sqlite`));
-    workflowInstance=createWorkflow(base,{recipientFor:recipientForBusinessRow,onTrainingQualified:profileAccess?async source=>upgradeTrainingQualification(await getProfileBase(),source):null,hoursPostingStore:config.mode==='production'?createHoursPostingStore(join(writeStateDir,`hours-posting-${stateSuffix}.sqlite`)):null,onProfilesChanged:()=>{volunteerHoursByAccount.clear();volunteerPlatformHours={at:0,promise:null};},onSourceLifecycleChanged:()=>invalidateWrittenSnapshots(WF.events),activityLifecycleStore:createActivityLifecycleStore(join(writeStateDir,`activity-lifecycle-${stateSuffix}.sqlite`)),bloodWeekStore:createBloodWeekStore(join(writeStateDir,`blood-week-${stateSuffix}.sqlite`)),activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
+    const bloodNotificationReview=config.mode==='production'&&config.bloodSourceTable?createBloodNotificationReview({
+      path:join(writeStateDir,`blood-notification-review-${stateSuffix}.sqlite`),
+      readSourceRow:id=>base.getRow(config.bloodSourceTable,id),
+    }):null;
+    workflowInstance=createWorkflow(base,{recipientFor:recipientForBusinessRow,onTrainingQualified:profileAccess?async source=>upgradeTrainingQualification(await getProfileBase(),source):null,hoursPostingStore:config.mode==='production'?createHoursPostingStore(join(writeStateDir,`hours-posting-${stateSuffix}.sqlite`)):null,onProfilesChanged:()=>{volunteerHoursByAccount.clear();volunteerPlatformHours={at:0,promise:null};},onSourceLifecycleChanged:()=>invalidateWrittenSnapshots(WF.events),activityLifecycleStore:createActivityLifecycleStore(join(writeStateDir,`activity-lifecycle-${stateSuffix}.sqlite`)),bloodWeekStore:createBloodWeekStore(join(writeStateDir,`blood-week-${stateSuffix}.sqlite`)),bloodNotificationReview,activityChangeStore,hoursSubmissionStore:createHoursSubmissionStore(join(writeStateDir,'activity-hours-review.json')),approvalRouting,prepareLeaveDecision:async(event,row,decision)=>{if(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true')await (await getRegistrationNotifications()).prepareLeaveDecision(event,row,decision);},mode:config.mode,bloodSourceTable:config.bloodSourceTable,places:process.env.PLATFORM_ORDINARY_PLACES==='true'?createOrdinaryPlaces(base):null,checkinSecret:process.env.PLATFORM_CHECKIN_SECRET||sessionSecret||'',assertWritable:async()=>{
       if(workflowMode(process.env).expected!==base.dtableUuid)throw new Error('Workflow Base changed');
     },assertHoursWritable:async()=>{
       if(!hoursSchemaReady){

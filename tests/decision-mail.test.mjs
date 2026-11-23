@@ -38,6 +38,18 @@ test('durable OFF-mode confirmations/rejections, batch, exact deduplication and 
  await restarted.drain();assert.equal(restarted.info().states.sent,2);
 });
 
+test('queued generated-blood confirmation defers delivery until the source review permits it',async t=>{
+ const f=await fixture(t);
+ const data=snapshot({岗位同步状态:'已同步'},{source:{kind:'generated_blood'}});
+ let permitted=false,clock=Date.now();
+ const worker=f.worker({read:async()=>data,now:()=>clock,permitsBloodMail:async()=>permitted});
+ worker.enqueue([{kind:'confirm',id:'registration-1'}]);
+ assert.equal((await worker.drain()).deferred,1);
+ permitted=true;clock+=11;
+ assert.equal((await worker.drain()).sent,1);
+ assert.equal((await worker.drain()).sent,0);
+});
+
 test('restart restores only queued operations and freezes leave request time and reason',async t=>{
  const f=await fixture(t),messages=[];
  const first=f.worker();assert.equal(first.enqueue([leave]),true);
