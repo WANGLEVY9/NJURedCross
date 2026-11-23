@@ -3,7 +3,7 @@ export const isOrderPayment = file => file.kind === 'supporting' && paymentTypes
 function priority(file) {
   if (file.kind === 'invoice') return 0;
   const index = paymentTypes.indexOf(file.materialType);
-  return file.kind === 'supporting' && index >= 0 ? index + 1 : 4;
+  return file.kind === 'supporting' && index >= 0 ? index + 1 : paymentTypes.length + 1;
 }
 
 /** Stable expense IDs only; common attachments are never copied into every expense. */
