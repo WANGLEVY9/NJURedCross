@@ -289,6 +289,11 @@ export default async function activityWorkspacePage(context){
           loadInformation:async()=>(await request(`${base}/workspace-content`)).result,
           editInformation:onSaved=>activityLiveInformation({loadProjectPeopleOptions,load:async()=>(await request(`${base}/workspace-content`)).result,save:body=>request(`${base}/workspace-content`,{method:'PATCH',body}),loadResponsibleOptions:async params=>(await request(`${root}/responsible-options?${new URLSearchParams(params)}`,{fresh:true})).options,loadResponsibleProfile:async params=>(await request(`${root}/responsible-profile?${new URLSearchParams(params)}`,{fresh:true})).profile,onSaved}),
           loadAttendance:id=>request(`/api/volunteer/workflow/registrations/${encodeURIComponent(id)}/attendance-detail`),
+          // 补录与初审同权：本人负责的活动即可添加，提交后等主席团确认。
+          addSupplement:body=>request(`${base}/hours-supplement`,{method:'POST',body}),
+          loadSupplements:async()=>(await request(`${base}/hours-supplement`)).result,
+          revokeSupplement:body=>request(`${base}/hours-supplement-revoke`,{method:'POST',body}),
+          searchPeople:async q=>(await request(`/api/volunteer/workflow/hours-supplement-directory?event=${encodeURIComponent(row.id)}&q=${encodeURIComponent(q)}`)).items||[],
           onChanged:next=>{events=events.map(event=>next.events.find(item=>item._id===event._id)||event);renderList();if(workspaceStage(next.events.find(item=>item._id===row.id)||row.event)!=='进行中')renderDetail();},
         });pane.append(editor.node);
         void loadReview().then(reviewState=>{if(!disposed&&sequence===detailSequence)editor.applyReview(reviewState);}).catch(error=>{/* 静默会让「点不动」无从排查：把原因交给工作区自己显示。 */if(!disposed&&sequence===detailSequence)editor.applyReview({entries:[],canRecord:false,canRecordReason:error?.message||'初审状态加载失败，请刷新重试'});});
@@ -303,6 +308,8 @@ export default async function activityWorkspacePage(context){
           postingAction:getSessionState().user?.role==='super_admin'?body=>request(`${base}/hours-posting`,{method:'POST',body}):null,
           save:body=>request(`${base}/final-hours`,{method:'PATCH',body}),exportFile:body=>request(`${base}/final-hours-export`,{method:'POST',body}),
           addParticipant:body=>request(`${base}/final-hours-participants`,{method:'POST',body}),
+          confirmSupplement:body=>request(`${base}/hours-supplement-confirm`,{method:'POST',body}),
+          searchPeople:async q=>(await request(`/api/volunteer/workflow/hours-supplement-directory?event=${encodeURIComponent(row.id)}&q=${encodeURIComponent(q)}`)).items||[],
           retryMail:()=>request(`${base}/final-hours-mail`,{method:'POST',body:{}}),downloadUrl:`${base}/final-hours-download`,
           loadInformation:async()=>(await request(`${base}/workspace-content`)).result,
           onChanged:state=>{if(row.stage!=='已结束'&&state.status==='exported')void load();},

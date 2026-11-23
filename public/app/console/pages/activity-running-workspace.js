@@ -1,7 +1,7 @@
 import {leaveReviewActions,leaveStatus,canReviewLeave,batchLeaveButton} from './activity-leave-review.js';
 import {h} from '../../core/dom.js';
 import {button,field,definitionList,notice} from '../../ui/primitives.js';
-import {openModal} from '../../ui/overlay.js';
+import {openModal,confirmAction} from '../../ui/overlay.js';
 import {reportError} from '../../core/toast.js';
 import {runningPositions,runningParticipants,runningHours,runningHourDefaults,runningPresetHours} from '../../shared/activity-running.js';
 import {activityInformationPreview} from './activity-information-preview.js';
@@ -9,13 +9,16 @@ import {runningReviewEditor} from './activity-running-editor.js';
 import {hoursBatchReview} from './activity-hours-batch.js';
 import {positionLeaveSummary} from '../../shared/activity-leave-attention.js';
 import {leaveAttention,markPositionLeave} from './activity-leave-attention.js';
+import {manualHoursDialog} from './manual-hours-dialog.js';
 
 /** Running roster and independent director review; final presidium approval is a later phase. */
-export function activityRunningWorkspace({adminEditInformation,event,data,reviewState={entries:[],canRecord:false},actionsNode,reload,loadInformation,editInformation,loadAttendance,loadReview,decideLeave,saveReview,importFile,previewReview,submitReview,templateUrl='',reopen,reopenReview,onChanged=()=>{}}){
+export function activityRunningWorkspace({adminEditInformation,event,data,reviewState={entries:[],canRecord:false},actionsNode,reload,loadInformation,editInformation,loadAttendance,loadReview,decideLeave,saveReview,importFile,previewReview,submitReview,templateUrl='',reopen,reopenReview,addSupplement=null,loadSupplements=null,searchPeople=null,revokeSupplement=null,onChanged=()=>{}}){
  let snapshot=data,state=reviewState,active='',busy=false,disposed=false,liveEditor=null;
  const todo=h('aside',{class:'activity-pending-tasks',role:'region','aria-label':'待办事项','aria-live':'polite',hidden:true});
  const blocked=h('div',{class:'stack-2'});
  const leaves=h('section',{class:'stack-3'}),body=h('tbody'),tabs=h('div',{class:'activity-registration-positions',role:'tablist','aria-label':'活动岗位'}),summary=h('span',{class:'t-caption',role:'status'});
+ // 补录人员不进初审名单，单独列区展示，避免负责人补完看不到结果。
+ const supplementBox=h('section',{class:'stack-2'});
  const batch=hoursBatchReview({title:'批量负责人初审',description:'按各人的现有或岗位预设时长保存初审结果；纸质签到可由负责人确认。保存后仍需预览完整时长表并提交主席团终审。',getToken:()=>state.token,itemOf:row=>row.item,save:saveReview,onSaved:fresh,onSaving:value=>{busy=value;if(!disposed)render();}});
  const filter=field({label:'初审状态',options:[{value:'',label:'全部状态'},{value:'待初审',label:'待初审'},{value:'初审通过',label:'初审通过'},{value:'初审不通过',label:'初审不通过'}],onInput:render});
  const attention=leaveAttention({onOpen:id=>{if(busy||!id)return;active=id;render();leaves.tabIndex=-1;leaves.focus({preventScroll:true});leaves.scrollIntoView({block:'nearest'});}});
@@ -94,10 +97,45 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
   // 三种失败在界面上完全一样，只剩一个点不动的下拉。
   const blockedReason=state.canRecord||state.status==='submitted'?'':state.canRecordReason||'当前账号或项目状态不允许进行时长初审';
   blocked.replaceChildren(...(blockedReason?[notice(blockedReason,{tone:'warning'})]:[]));blocked.hidden=!blockedReason;
+  supplement.hidden=!addSupplement;
+  supplement.disabled=busy||!state.canRecord||!addSupplement;
+  supplement.title=state.status==='submitted'?'时长已提交主席团审核；如需补录请先「重新打开初审」':state.canRecord?'':'当前账号或项目状态不允许补录人员';
+  // 补录单独成区：它不进初审名单，若和报名行混排会让「参与 N 人」对不上。
+  const supplements=state.supplements||[];
+  supplementBox.hidden=!supplements.length;
+  supplementBox.replaceChildren(...(supplements.length?[
+   h('h3',{class:'activity-section-title',text:`已补录 ${supplements.length} 人`}),
+   h('p',{class:'t-caption',text:'补录人员不计入初审名单；主席团确认后才计入最终时长表。'}),
+   ...supplements.map(row=>h('div',{class:'row-between row-wrap'},
+    h('span',{class:'t-caption',text:`${row.name} · ${row.studentId} · ${row.department||'院系未填'} · ${row.position||''} · 服务 ${row.serviceHours} · 培训 ${row.trainingHours} · 交通 ${row.travelHours}`}),
+    h('span',{class:'row-2'},
+     h('span',{class:'t-caption',text:row.approval==='pending'?'待主席团确认':'已确认'}),
+     row.canRevoke&&revokeSupplement?button({label:'撤回',size:'sm',variant:'ghost',onClick:async()=>{
+      if(!await confirmAction({title:'撤回这条补录？',description:`${row.name} · ${row.studentId}`,confirmLabel:'撤回补录'}))return;
+      try{await revokeSupplement({rowId:row.id});await fresh();}catch(error){reportError(error,'撤回失败');}
+     }}):null)))]:[]));
  }
  const view=button({label:'活动信息查看',onClick:async()=>{try{const content=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(content),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
  const edit=button({label:'活动信息修改',disabled:true,onClick:async()=>{if(adminEditInformation&&(!editInformation||snapshot.events.find(row=>row._id===event._id)?.approvalAccess?.canEditInformation!==true))return adminEditInformation();if(busy||!editInformation||edit.disabled)return;try{liveEditor=await editInformation(fresh);}catch(error){reportError(error,'活动信息加载失败');}}});
  const upload=button({label:'上传及预览时长表',variant:'primary',onClick:()=>openEditor()});
+// 补录入口与初审同权：本活动负责人即可，提交后由主席团逐条确认。
+const supplementPositions=()=>runningPositions(snapshot).map(row=>({id:row._id,name:`${row['地点']||row['岗位']||row['活动名称']} · ${row['报名日期']} ${row['报名时段']}`,event:row}));
+const supplement=button({label:'手动添加人员',onClick:async()=>{
+ if(busy||!state.canRecord||!addSupplement)return;
+ busy=true;render();
+ try{
+  const latest=loadSupplements?await loadSupplements():null;
+  if(latest&&latest.canSupplement!==true)throw Object.assign(new Error('当前账号不能为该活动补录人员'),{status:403});
+  busy=false;render();
+  liveEditor=manualHoursDialog({key:`supplement:${event._id}`,positions:supplementPositions(),integerTraining:true,searchPeople,
+   submit:body=>addSupplement(body),
+   loadLatest:async()=>({canSupplement:true,status:'review',positions:supplementPositions(),token:state.token}),
+   onSaving:value=>{busy=value;if(!disposed)render();},
+   onSaved:fresh,
+   onClosed:()=>{liveEditor=null;if(!disposed)render();}});
+ }catch(error){if(!disposed)reportError(error,'补录入口加载失败');}
+ finally{busy=false;if(!disposed)render();}
+}});
  const backToRegistration=button({label:'回退报名中',onClick:()=>{
   if(busy||!reopen)return;const reason=field({label:'回退原因',required:true,multiline:true,maxlength:500});let dialog,saving=false;
   const confirm=button({label:'确认回退',onClick:async()=>{if(saving||!reason.control.reportValidity()||!reason.control.value.trim())return;saving=true;confirm.disabled=true;try{await reopen(reason.control.value.trim());saving=false;await dialog.close();await fresh();}catch(error){reportError(error,'回退未完成，请刷新核对');}finally{saving=false;confirm.disabled=false;}}});
@@ -119,7 +157,7 @@ const reopenReviewButton=button({label:'重新打开初审',onClick:()=>{
  dialog=openModal({title:'重新打开时长初审',body:h('div',{class:'stack-3'},notice('退回后各岗位可继续补充初审，已保存的明细会保留；再次提交后进入终审。',{tone:'info'}),reason),footer:[button({label:'取消',onClick:()=>dialog.close()}),confirm]});dialog.setCloseGuard(()=>!saving);
 }});
 if(event.approvalAccess?.canManageRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(reopenReviewButton);
- const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},todo,h('div',{class:'activity-draft-toolbar'},view,edit,upload,actionsNode),h('div',{class:'activity-registration-content'},attention.node,tabs,leaves,blocked,h('div',{class:'activity-registration-filters'},filter,summary),batch.node,h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
+ const node=h('div',{class:'activity-registration-workspace activity-running-workspace'},todo,h('div',{class:'activity-draft-toolbar'},view,edit,supplement,upload,actionsNode),h('div',{class:'activity-registration-content'},attention.node,tabs,leaves,supplementBox,blocked,h('div',{class:'activity-registration-filters'},filter,summary),batch.node,h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},h('tr',{},...['姓名','学号','时长（小时）','签到','负责人初审'].map(text=>h('th',{scope:'col',text})))),body))));
  const leaveBatch=batchLeaveButton({getRows:()=>busy||event.approvalAccess?.canManageRegistration!==true||!canReviewLeave(event)?[]:snapshot.registrations.filter(r=>snapshot.events.some(e=>e['活动ID']===r['活动ID'])),refresh:fresh,onBusy:value=>{busy=value;if(!disposed)render();}});node.querySelector('.activity-registration-content').prepend(leaveBatch);
  render();return {node,dispose:()=>{disposed=true;liveEditor?.dispose();batch.dispose();},hasUnsaved:()=>liveEditor?.hasUnsaved()||batch.hasUnsaved()||false,isSaving:()=>busy||liveEditor?.isSaving()||batch.isSaving()||false,applyReview(next){if(disposed||busy||liveEditor||batch.hasUnsaved()||next===undefined)return;state=next;render();}};
 }

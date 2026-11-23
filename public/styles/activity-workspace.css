@@ -768,3 +768,8 @@ details.service-tools:not([open])>:not(summary){display:none}
 .blood-card-grid.special-schedule-grid.recurring-duty-grid.is-selecting{grid-template-columns:44px repeat(var(--schedule-columns),minmax(0,1fr))}
 .recurring-duty-grid .blood-schedule-card{padding:10px 8px}
 .recurring-duty-grid .blood-schedule-card__title strong{font-size:.83rem}
+
+/* 补录选人：候选列表限高滚动，避免十几个人把对话框顶得过长；空态直接收起。 */
+.hours-supplement-results{max-height:220px;overflow:auto;border:1px solid var(--border,#d7dbe0);border-radius:10px;padding:6px}
+.hours-supplement-results:empty{display:none}
+.hours-supplement-results>button{width:100%;justify-content:flex-start;text-align:left}

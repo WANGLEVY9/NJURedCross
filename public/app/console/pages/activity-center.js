@@ -38,7 +38,11 @@ import {buildPositionMap,labelPosition} from '../../shared/position-labels.js';
 const config=e=>{try{return JSON.parse(e['报名页配置']||'{}');}catch{return {};}};
 const result=r=>r['报名状态']==='待筛选'?'待确认':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
 export default async function activityCenter(context,shell){
- if(REGISTRATION_ENTRY_FLAGS.unifiedWorkspace)return (await import('./activity-workspace-page.js')).default(context,shell);
+ // 统一工作区是默认入口，但 `?legacy=1` 必须还能显式打开历史页面：
+ // 历史活动的能力尚未全部并入工作区，且 tests/browser/legacy-activity-fixture.mjs
+ // 一整族用例靠这条入口回归老版报名表、审批与通知面板。
+ const legacyEntry=typeof location!=='undefined'&&new URLSearchParams(location.search).get('legacy')==='1';
+ if(REGISTRATION_ENTRY_FLAGS.unifiedWorkspace&&!legacyEntry)return (await import('./activity-workspace-page.js')).default(context,shell);
  let publicationEditor=null,publicationIdentity=null,leaving=false,serviceIdentity=null;
  const serviceEditor=()=>document.querySelector('.field-edit-dialog')||document.querySelector('.service-workspace');
  const hasUnsaved=()=>serviceEditor()?.hasUnsaved?.()||publicationEditor?.hasUnsaved()||document.querySelector('.notification-email')?.hasUnsaved();
@@ -572,7 +576,7 @@ export default async function activityCenter(context,shell){
   return (!query||`${r['姓名']||''} ${r['学号']||''}`.toLowerCase().includes(query))&&(!state.date||state.date===context.date)&&(!state.position||state.position===context.position)&&(!state.session||state.session===context.session)&&(!state.campus||state.campus===context.campus)&&(!state.leave||state.leave===(r['请假状态']||'none'))&&(!state.status||(state.status==='leave'?r['请假状态']==='待审批':state.status===r['报名状态']));
  }
  function canApproveLegacy(r){return r['报名状态']==='待筛选'&&r['请假状态']!=='待审批';}
- function showRecords(e,kind,viewState){if(kind==='roster')return rosterPanel(e,scopedRows(data.registrations,e),{refresh:()=>refreshRecords(e),directory:directory.participants,directoryError,viewState,events:projectEvents(data.events,e)});const regs=scopedRows(data.registrations,e);const hours=scopedRows(data.ledger,e);
+ function showRecords(e,kind,viewState){if(kind==='roster'&&!config(e).ordinary&&!config(e).blood)return rosterPanel(e,scopedRows(data.registrations,e),{refresh:()=>refreshRecords(e),directory:directory.participants,directoryError,viewState,events:projectEvents(data.events,e)});const regs=scopedRows(data.registrations,e);const hours=scopedRows(data.ledger,e);
   if(['checkins','hours'].includes(kind)){
    const key=`${e._id}:${kind}`;if(!serviceStates.has(key))serviceStates.set(key,{expanded:true});
    syncExplorer();

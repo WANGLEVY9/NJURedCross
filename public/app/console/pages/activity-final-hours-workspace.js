@@ -8,7 +8,7 @@ import {activityInformationPreview} from './activity-information-preview.js';
 import {hoursBatchReview} from './activity-hours-batch.js';
 import {manualHoursDialog} from './manual-hours-dialog.js';
 const valid=row=>row.decision==='pass'&&row.serviceHours+row.trainingHours+row.travelHours>0;
-export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,addParticipant,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,openPosting=null,postingAction=null,onChanged=()=>{}}){
+export function activityFinalHoursWorkspace({adminEditInformation,initial,load,save,addParticipant,exportFile,downloadUrl,retryMail,loadInformation,actionsNode,openPosting=null,postingAction=null,confirmSupplement=null,searchPeople=null,onChanged=()=>{}}){
  let state=initial,busy=false,disposed=false,dirty=false,editing=null,previewDialog=null,previewToken=null;
  const content=h('div',{class:'activity-registration-content'}),toolbar=h('div',{class:'activity-draft-toolbar'});
  const ended=()=>state.status==='exported';
@@ -24,7 +24,14 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
    const cells=FINAL_HOURS_COLUMNS.map(([key])=>key==='name'&&controls
     ?h('td',{},person)
     :h('td',{text:key==='index'?String(index+1):String(row[key]??'')}));
-   if(controls)cells.push(h('td',{},h('span',{text:row.decision==='pass'?'通过':'未通过'}),state.canEdit?button({label:'修改明细',size:'sm',onClick:()=>editRow(row)}):null));
+   if(controls){
+    const pending=row.manual&&row.manualApproval==='pending';
+    cells.push(h('td',{},
+     row.manual?h('span',{class:'t-caption',text:pending?'补录·待确认':'补录'}):null,
+     h('span',{text:row.decision==='pass'?'通过':'未通过'}),
+     state.canEdit?button({label:'修改明细',size:'sm',onClick:()=>editRow(row)}):null,
+     state.canEdit&&pending&&confirmSupplement?button({label:'确认补录',size:'sm',variant:'primary',onClick:()=>confirmRow(row)}):null));
+   }
    body.append(h('tr',{},...cells));
   }
   if(!rows.length)body.append(h('tr',{},h('td',{colspan:controls?12:11,text:'暂无符合条件的时长'})));
@@ -58,6 +65,14 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   dialog=openModal({title:'修改时长明细',width:1000,body:form,footer:[button({label:'取消',onClick:()=>dialog.close()}),reconcile,confirm],onClose:()=>{dirty=false;editing=null;}});editing=dialog;
   dialog.setCloseGuard(async()=>disposed||!saving&&(!dirty||await confirmAction({title:'放弃未保存的时长修改？',confirmLabel:'放弃修改'})));lock();
  }
+ async function confirmRow(row){
+  if(busy||!state.canEdit||!confirmSupplement)return;
+  if(!await confirmAction({title:'确认这条补录？',description:`${row.name} · ${row.studentId} · 服务 ${row.serviceHours} 小时`,confirmLabel:'确认补录'}))return;
+  busy=true;render();
+  try{await confirmSupplement({rowId:row.id});await fresh();notify.success('补录已确认，可计入导出');}
+  catch(error){reportError(error,'补录确认失败');}
+  finally{busy=false;if(!disposed)render();}
+ }
  const view=button({label:'活动信息查看',onClick:async()=>{try{const data=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(data),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
  const infoEdit=button({label:'活动信息修改',disabled:!adminEditInformation,onClick:()=>adminEditInformation?.()});
  const previewButton=button({label:'预览并导出',onClick:preview});
@@ -67,7 +82,7 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   busy=true;render();
   try{
    const latest=await loadLatest();if(!latest||!latest.canEdit||ended())return;
-   editing=manualHoursDialog({key:downloadUrl,positions:state.positions||[],token:state.token,resume:state.pendingRequests?.[0],integerTraining:true,submit:addParticipant,loadLatest,onSaving:value=>{busy=value;if(!disposed)render();},onSaved:fresh,onClosed:()=>{editing=null;}});
+   editing=manualHoursDialog({key:downloadUrl,positions:state.positions||[],token:state.token,resume:state.pendingRequests?.[0],integerTraining:true,submit:addParticipant,loadLatest,searchPeople,onSaving:value=>{busy=value;if(!disposed)render();},onSaved:fresh,onClosed:()=>{editing=null;}});
   }catch(error){if(!disposed)reportError(error,'最新时长表读取失败，请重试；补录草稿仍保留');}
   finally{busy=false;if(!disposed)render();}
  }});
@@ -168,6 +183,9 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
    content.append(block);
   }
   if(state.pendingManual)content.append(notice('存在未完成的人员补录，请重新打开“手动添加人员”核对完成后再导出。',{tone:'warning'}));
+  // 未确认的补录会挡住导出：提前在页面上说清是哪几个人，不要等点了导出才报错。
+  const unconfirmed=state.rows.filter(row=>row.manual&&row.manualApproval==='pending');
+  if(unconfirmed.length)content.append(notice(`有 ${unconfirmed.length} 条人员补录待确认（${unconfirmed.slice(0,3).map(row=>row.name).join('、')}${unconfirmed.length>3?'等':''}），确认后才能导出。`,{tone:'warning'}));
   batch.update(state.rows,state.canEdit===true&&!ended()&&!busy);
   if(!ended())content.append(batch.node);
   content.append(table(ended()?state.rows.filter(valid):state.rows,!ended()));
