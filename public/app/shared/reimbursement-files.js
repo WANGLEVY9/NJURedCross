@@ -2,7 +2,7 @@ export const MATERIAL_KINDS = Object.freeze({ invoice: '发票', supporting: '�
 export const MATERIAL_UPLOADS = Object.freeze({ version: 3, kinds: ['invoice', 'supporting'], automaticNames: true,
   supportingFormats: ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png'] });
 /** 补充材料的文件类型；命名规则「报销人-条目-金额-文件类型」中的「文件类型」。 */
-export const SUPPORTING_MATERIAL_TYPES = Object.freeze(['订单截图', '付款截图', '订单和付款截图', '领取单', '行程单', '会议邀请函', '高铁二等座价格证明', '快递单', '快递起终点截图', '人员名单', '住宿清单', '其他']);
+export const SUPPORTING_MATERIAL_TYPES = Object.freeze(['订单截图', '付款截图', '订单和付款截图', '共用付款账单', '物流截图', '领取单', '行程单', '会议邀请函', '高铁二等座价格证明', '快递单', '快递起终点截图', '人员名单', '住宿清单', '其他']);
 export const INVOICE_FIELD_LABELS = Object.freeze({ buyerName: '购买方名称', buyerTaxId: '购买方识别号',
   sellerName: '开票方名称', invoiceNumber: '发票号码', invoiceDate: '开票日期', totalAmount: '实际金额（价税合计）' });
 export function materialExtension(name) { return String(name || '').match(/\.([a-z0-9]+)$/i)?.[1].toLowerCase() || ''; }
@@ -69,7 +69,7 @@ export function invoicePages(bundle) {
 export function analysisPages(bundle, { includeSupporting = false } = {}) {
   const pages = new Set(invoicePages(bundle));
   if (includeSupporting) for (const source of bundle.sources || []) {
-    if (source.kind === 'supporting' && ['订单截图', '付款截图', '订单和付款截图'].includes(source.materialType) && source.startPage > 0)
+    if (source.kind === 'supporting' && ['订单截图', '付款截图', '订单和付款截图', '共用付款账单'].includes(source.materialType) && source.startPage > 0)
       for (let page = source.startPage; page <= source.endPage; page++) pages.add(page);
   }
   return [...pages].sort((a, b) => a - b);

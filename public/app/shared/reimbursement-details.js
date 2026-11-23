@@ -121,6 +121,9 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
       const amountState = group.amount?.state === 'unknown' && !state?.complete ? 'pending' : group.amount?.state || 'unknown';
       const nameState = group.name?.state === 'unknown' && !state?.complete ? 'pending' : group.name?.state || 'unknown';
       const duplicate = invoices.some(result => numberCounts.get(result.invoice?.fields?.invoiceNumber?.value) > 1);
+      const separate = bundle.separateExpenseIds?.includes(group.expenseItemId) || bundle.sources.some(source => source.kind === 'invoice'
+        && source.expenseItemId === group.expenseItemId && analyses.some(result => result.page >= source.startPage
+          && result.page <= source.endPage && result.buyer?.state === 'different'));
       const details = h('details', { class: 'material-recognition-details', open: expandedChecks.has(group.expenseItemId) },
         h('summary', { class: 't-caption', text: '查看识别详情' }),
         group.amount ? h('section', { class: 'stack-3 material-cross-check-details' }, h('h4', { class: 't-h4', text: '跨材料核对依据' }),
@@ -143,6 +146,9 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
           checkBadge(!duplicate && amountState === 'matched' ? group.amountScope === 'order' ? '订单总额正确' : '金额正确' : !duplicate && amountState === 'pending' ? '金额核验中' : '金额待核对', duplicate ? 'different' : amountState, group.amount?.message || '缺少可靠关联信息'),
           checkBadge(nameState === 'matched' ? '物资名正确' : nameState === 'not-applicable' ? '本类别无需物资名核验' : nameState === 'pending' ? '物资名核验中' : '物资名待核对', nameState, group.name?.message || '缺少可靠关联信息')),
         group.amountScope === 'order' ? h('p', { class: 't-caption', text: '已按整单合计核验，各物品的金额分摊仍须人工确认。' }) : null,
+        separate ? notice('非南京大学抬头，不计入学校报销。请按实际渠道另行处理。', { tone: 'warning' }) : null,
+        bundle.taxMismatchExpenseIds?.includes(group.expenseItemId)
+          ? notice('南京大学发票的纳税人识别号不符，请核对原件。', { tone: 'warning' }) : null,
         duplicate ? notice('发票号码重复，请核对是否重复上传。', { tone: 'error' }) : null,
         details);
     }), ...materialAnalysisFeedback(bundle, state).map(entry => {

@@ -115,7 +115,7 @@ test('evidence from different expense items never shares a PDF page', async () =
 
 test('order/payment pairs come before unpaired screenshots and attachments regardless of upload order', async () => {
   const result = await processPdfs([
-    { ...supporting('other.pdf', '行程单', await invoiceBytes('OTHER')), expenseItemId: 'a' },
+    { ...supporting('other.pdf', '领取单', await invoiceBytes('OTHER')), expenseItemId: 'a' },
     { ...supporting('unpaired.pdf', '订单截图', await invoiceBytes('EXTRA')), expenseItemId: 'b' },
     { ...supporting('payment.pdf', '付款截图', await invoiceBytes('PAYMENT')), expenseItemId: 'a' },
     { ...supporting('order.pdf', '订单截图', await invoiceBytes('ORDER')), expenseItemId: 'a' },
@@ -135,4 +135,28 @@ test('several invoices stay in upload order ahead of the screenshots', async () 
   assert.deepEqual(result.sources.map(source => [source.startPage, source.endPage]), [[4, 4], [1, 1], [2, 3], [4, 4]]);
   const pages = await readPages(result.merged);
   assert.deepEqual(pages.map(page => page.text), ['B-1', 'A-1', 'A-2', '']);
+});
+
+test('trip documents stand alone after the invoice and the last page pairs the ride and payment captures', async () => {
+  const result = await processPdfs([
+    supporting('payment.pdf', '付款截图', await invoiceBytes('PAYMENT')),
+    supporting('trip.pdf', '行程单', await invoiceBytes('TRIP')),
+    supporting('order.pdf', '订单截图', await invoiceBytes('RIDE')),
+    supporting('other.pdf', '领取单', await invoiceBytes('OTHER')),
+    { name: 'invoice.pdf', kind: 'invoice', bytes: await invoiceBytes('INVOICE') },
+  ]);
+  assert.deepEqual((await readPages(result.merged)).map(page => page.text), ['INVOICE-1', 'TRIP-1', 'OTHER-1', 'RIDE-1PAYMENT-1']);
+  assert.deepEqual(result.sources.map(source => source.startPage), [4, 2, 4, 3, 1]);
+});
+
+test('order, logistics and payment documents occupy the left, center and right of the same A4 page', async () => {
+  const result = await processPdfs([
+    supporting('logistics.pdf', '物流截图', await invoiceBytes('LOGISTICS')),
+    supporting('payment.pdf', '共用付款账单', await invoiceBytes('PAYMENT')),
+    supporting('order.pdf', '订单截图', await invoiceBytes('ORDER')),
+  ]);
+  assert.deepEqual(result.sources.map(source => source.startPage), [1, 1, 1]);
+  const [page] = await readPages(result.merged);
+  assert.equal(page.text, 'ORDER-1LOGISTICS-1PAYMENT-1');
+  assert.ok(page.locations[0][0] < 198 && page.locations[1][0] > 198 && page.locations[1][0] < 397 && page.locations[2][0] > 397);
 });
