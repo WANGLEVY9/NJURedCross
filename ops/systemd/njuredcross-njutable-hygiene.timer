@@ -1,0 +1,13 @@
+[Unit]
+Description=Run allowlisted NJUTable hygiene daily
+
+[Timer]
+OnBootSec=15min
+OnCalendar=*-*-* 03:20:00 Asia/Shanghai
+Persistent=true
+AccuracySec=15min
+RandomizedDelaySec=10min
+Unit=njuredcross-njutable-hygiene.service
+
+[Install]
+WantedBy=timers.target

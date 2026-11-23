@@ -12,6 +12,8 @@
     "check:security": "node scripts/check-security.mjs",
     "inspect:production-performance": "sh scripts/inspect-production-performance.sh",
     "correlate:telemetry-traces": "node scripts/analyze-telemetry-traces.mjs",
+    "maintenance:njutable:preview": "node --env-file=.env scripts/njutable-maintenance.mjs",
+    "maintenance:njutable:apply": "node --env-file=.env scripts/run-coordinated-script.mjs njutable-maintenance.mjs --apply --confirm=APPLY-NJUTABLE-HYGIENE",
     "smoke:public": "node scripts/smoke-public.mjs",
     "smoke:auth": "node scripts/smoke-auth.mjs",
     "smoke:data-boundary": "node scripts/smoke-data-boundary.mjs",

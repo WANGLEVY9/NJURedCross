@@ -1,0 +1,18 @@
+[Unit]
+Description=Preview and apply allowlisted NJUTable hygiene for NJURedCross
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/njuredcross
+EnvironmentFile=/opt/njuredcross/.env
+ExecStart=/usr/bin/node scripts/njutable-maintenance.mjs --apply --confirm=APPLY-NJUTABLE-HYGIENE --include-audit
+User=root
+Group=root
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+TimeoutStartSec=10min
+StandardOutput=journal
+StandardError=journal
