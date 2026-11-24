@@ -430,7 +430,7 @@ body.is-resizing-activity-directory {
 }
 
 .activity-v2 .panel,
-.activity-v2 .activity-registration-table {
+.activity-v2 .activity-registration-table:not(.activity-final-hours-table) {
   border-radius: var(--workspace-radius-sm);
   border-color: var(--workspace-line);
 }
@@ -552,12 +552,12 @@ body.is-resizing-activity-directory {
   line-height: var(--lh-normal);
 }
 
-.activity-v2 :is(.activity-registration-table, .activity-running-review-table) th,
-.activity-v2 :is(.activity-registration-table, .activity-running-review-table) td {
+.activity-v2 :is(.activity-registration-table:not(.activity-final-hours-table), .activity-running-review-table) th,
+.activity-v2 :is(.activity-registration-table:not(.activity-final-hours-table), .activity-running-review-table) td {
   font-size: var(--fs-secondary);
 }
 
-.activity-v2 .activity-registration-table table {
+.activity-v2 .activity-registration-table:not(.activity-final-hours-table) table {
   min-width: 720px;
 }
 
@@ -592,171 +592,14 @@ body.is-resizing-activity-directory {
   font-variant-numeric: tabular-nums;
 }
 
-.activity-v2 .activity-registration-table {
+.activity-v2 .activity-registration-table:not(.activity-final-hours-table) {
   min-height: 0;
 }
 
-.activity-v2 .activity-final-hours-table {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  border: 1px solid var(--workspace-line);
-  border-radius: var(--workspace-radius-sm);
-  background: var(--surface);
-}
-
-.activity-v2 .activity-final-hours-table>table,
-.activity-v2 .activity-final-hours-full-preview .activity-final-hours-table>table {
-  min-width: 1630px;
-  width: 100%;
-  table-layout: fixed;
-}
-
-.activity-v2 .activity-final-hours-table>table>colgroup>col {
-  min-width: 50px;
-}
-
-.activity-v2 .activity-registration-table td:only-child {
+.activity-v2 .activity-registration-table:not(.activity-final-hours-table) td:only-child {
   padding: var(--s8) var(--s4);
   text-align: center;
   color: var(--workspace-muted);
-}
-
-.activity-v2 .activity-final-hours-table caption {
-  padding: var(--s3);
-  font-size: var(--fs-title);
-  font-weight: var(--fw-semibold);
-  line-height: var(--lh-snug);
-  text-align: left;
-}
-
-.activity-v2 .activity-final-hours-table th {
-  padding: var(--s3);
-  background: var(--workspace-soft);
-  color: var(--text-primary);
-  font-size: var(--fs-secondary);
-  font-weight: var(--fw-semibold);
-  line-height: 1.45;
-  text-align: left;
-  vertical-align: middle;
-  white-space: nowrap;
-}
-
-.activity-v2 .activity-final-hours-table :is(.activity-final-hours-col-location,
-  .activity-final-hours-col-dates,
-  .activity-final-hours-col-work,
-  .activity-final-hours-col-remark) th {
-  white-space: normal;
-}
-
-.activity-v2 .activity-final-hours-table td {
-  padding: var(--s3);
-  color: var(--text-primary);
-  font-size: var(--fs-body);
-  line-height: var(--lh-normal);
-  vertical-align: middle;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.activity-v2 .activity-final-hours-table th:not(.activity-final-hours-col-review),
-.activity-v2 .activity-final-hours-table td:not(.activity-final-hours-col-review) {
-  text-align: left;
-}
-
-.activity-v2 .activity-final-hours-table :is(.activity-final-hours-col-index,
-  .activity-final-hours-col-studentId,
-  .activity-final-hours-col-trainingHours,
-  .activity-final-hours-col-travelHours,
-  .activity-final-hours-col-serviceHours) {
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.activity-v2 .activity-final-hours-table :is(.activity-final-hours-col-name,
-  .activity-final-hours-col-department) {
-  white-space: nowrap;
-}
-
-.activity-v2 .activity-final-hours-table :is(.activity-final-hours-col-location,
-  .activity-final-hours-col-dates,
-  .activity-final-hours-col-work,
-  .activity-final-hours-col-remark) {
-  min-width: 0;
-}
-
-.activity-v2 .activity-final-hours-table .activity-final-hours-col-work {
-  font-size: var(--fs-secondary);
-}
-
-.activity-v2 .activity-final-hours-table .activity-final-hours-col-review {
-  text-align: left;
-  vertical-align: middle;
-  white-space: normal;
-}
-
-.activity-v2 .activity-final-hours-table .activity-final-hours-col-review > .btn {
-  display: inline-flex;
-  vertical-align: middle;
-}
-
-.activity-v2 .activity-final-hours-table .activity-hours-person {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  white-space: nowrap;
-}
-
-.activity-v2 .activity-final-hours-table .activity-hours-person>div {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  white-space: nowrap;
-}
-
-.activity-v2 .activity-final-hours-table .activity-hours-person input[type=checkbox] {
-  margin: 0;
-}
-
-.activity-v2 .activity-final-hours-table .activity-hours-person .t-caption {
-  white-space: nowrap;
-}
-
-.activity-v2 .activity-final-hours-table .activity-final-hours-col-review>.t-caption,
-.activity-v2 .activity-final-hours-table .activity-final-hours-col-review>span {
-  display: block;
-  margin-bottom: var(--s1);
-  color: var(--workspace-muted);
-  font-size: var(--fs-caption);
-  line-height: 1.4;
-}
-
-.activity-v2 .activity-final-hours-table .activity-final-hours-col-review>span {
-  color: var(--text-primary);
-  font-size: var(--fs-secondary);
-  font-weight: var(--fw-medium);
-}
-
-.activity-v2 .activity-final-hours-table .activity-final-hours-col-review>.btn {
-  min-height: 36px;
-  margin: var(--s1) var(--s1) 0 0;
-  padding: var(--s1) var(--s3);
-  font-size: var(--fs-caption);
-  line-height: 1.4;
-  white-space: nowrap;
-}
-
-.activity-v2 .activity-final-hours-table .activity-final-hours-instructions td {
-  color: var(--workspace-muted);
-  font-size: var(--fs-caption);
-  line-height: var(--lh-normal);
-  background: var(--surface);
-}
-
-.activity-v2 .activity-final-hours-full-preview .activity-final-hours-table {
-  max-width: 100%;
 }
 
 /* Desktop workspace uses a stable reading width for forms. */
@@ -1009,11 +852,6 @@ body.is-resizing-activity-directory {
     grid-template-rows: minmax(0, 1fr);
   }
 
-  .activity-v2 .activity-final-hours-table th,
-  .activity-v2 .activity-final-hours-table td {
-    padding: var(--s2) var(--s3);
-    font-size: var(--fs-secondary);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

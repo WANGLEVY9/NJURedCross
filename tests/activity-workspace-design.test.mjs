@@ -59,17 +59,25 @@ test('desktop directory width is resizable by pointer, keyboard and persisted pr
 });
 
 test('final hours columns keep readable type, stable classes and aligned review controls', async () => {
-  const [css, source] = await Promise.all([
+  const [css, scoped, source] = await Promise.all([
+    read('public/styles/activity-workspace.css'),
     read('public/styles/activity-workspace-redesign.css'),
     read('public/app/console/pages/activity-final-hours-workspace.js'),
   ]);
   assert.match(source, /const columnClass=key=>`activity-final-hours-col-\$\{key\}`/);
-  assert.match(source, /class:'activity-final-hours-col-review'/);
-  assert.match(css, /\.activity-v2 \.activity-final-hours-table>table,[\s\S]*min-width: 1630px/);
-  assert.match(css, /\.activity-v2 \.activity-final-hours-table td \{[^}]*font-size: var\(--fs-body\)/s);
-  assert.match(css, /\.activity-v2 \.activity-final-hours-table \.activity-final-hours-col-review \{[^}]*vertical-align: middle/s);
-  assert.match(css, /\.activity-final-hours-col-review>\.btn \{[^}]*white-space: nowrap/s);
+  assert.match(source, /statusIndicator\(approved\?'通过':'未通过'/);
+  assert.match(source, /activity-final-hours-review__status/);
+  assert.match(source, /activity-final-hours-review__actions/);
+  assert.match(source, /--final-hours-table-width/);
+  assert.match(css, /\.activity-final-hours-table>table\{[^}]*--final-hours-table-width/);
+  assert.match(css, /\.activity-final-hours-table th,\.activity-final-hours-table td\{[^}]*font-size:var\(--fs-body\)/s);
+  assert.match(css, /\.activity-final-hours-review\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(css, /\.activity-final-hours-review__status\{[^}]*align-items:center/);
+  assert.match(css, /\.activity-final-hours-review__status \.status/);
+  assert.match(css, /\.activity-hours-person__name/);
   assert.match(css, /\.activity-final-hours-col-studentId/);
+  assert.doesNotMatch(css, /\.activity-final-hours-table[^{]*\{[^}]*width:1%/);
+  assert.doesNotMatch(scoped, /\.activity-v2 \.activity-final-hours-table/);
 });
 
 test('workspace marks one primary action and separates destructive menu actions', async () => {
