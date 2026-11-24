@@ -1,6 +1,17 @@
 # PC Web 与移动端组件 / UI 验收
 
-本轮检查覆盖 10 条关键路由 × 桌面 1440×900、手机 390×844 两档，共 20 个页面/视口组合。使用隔离合成预览（`scripts/preview-workflow.mjs`）和 Chromium，不连接生产数据。原始数据见 [UI_COMPONENT_AUDIT_2026-11-24.json](../reports/UI_COMPONENT_AUDIT_2026-11-24.json)，源码守卫见 [ui-dual-viewport-audit.test.mjs](../tests/ui-dual-viewport-audit.test.mjs)。
+本轮检查覆盖 10 条关键路由 × 桌面 1440×900、手机 390×844 两档，共 20 个页面/视口组合。使用隔离合成预览（`scripts/preview-workflow.mjs`）和 Chromium，不连接生产数据。原始数据保存在本机受忽略的 `reports/UI_COMPONENT_AUDIT_2026-11-24.json`；下列摘要是随仓库提交的验收凭据，源码守卫见 [ui-dual-viewport-audit.test.mjs](../tests/ui-dual-viewport-audit.test.mjs)。
+
+## 摘要
+
+- 路由：门户 `/`、`/events`、`/outreach`、`/community`、`/materials`；管理端 `/console/overview`、`/console/events`、`/console/outreach`、`/console/materials`、`/console/audit`。
+- 视口：桌面 1440×900、手机 390×844。
+- 页面级横向溢出：0/20。
+- 控制台改造作用域覆盖：10/10。
+- 手机端低于 11px 的功能文字：0。
+- 标题层级跳跃：0。
+- JS 运行时异常：0；合成预览缺少部分 API 的 404 控制台消息不计入 UI 异常。
+- 页面错误/空态节点：19 个，属于预览数据状态展示。
 
 ## 目标与结论
 

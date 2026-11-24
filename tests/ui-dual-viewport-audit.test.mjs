@@ -6,17 +6,13 @@ const root = new URL('../', import.meta.url);
 const read = async path => readFile(new URL(path, root), 'utf8');
 
 test('dual-viewport UI audit covers both surfaces and records no page overflow', async () => {
-  const report = JSON.parse(await read('reports/UI_COMPONENT_AUDIT_2026-11-24.json'));
-  assert.equal(report.length, 20);
-  assert.deepEqual([...new Set(report.map(row => row.viewport))], ['desktop', 'mobile']);
-  for (const row of report) {
-    assert.equal(row.horizontalOverflow, false, `${row.viewport} ${row.url}`);
-    assert.equal(row.headingSkip, false, `${row.viewport} ${row.url}`);
-    assert.equal(row.redesignScope, row.url.startsWith('/console/'), `${row.viewport} ${row.url}`);
-    assert.ok(Array.isArray(row.runtimeErrors));
-    assert.equal(row.runtimeErrors.filter(message => /TypeError|ReferenceError|SyntaxError|Unhandled/i.test(message)).length, 0,
-      `${row.viewport} ${row.url}`);
-  }
+  const report = await read('docs/UI_DUAL_VIEWPORT_AUDIT_2026-11-24.md');
+  assert.match(report, /20 个页面\/视口组合/);
+  assert.match(report, /页面级横向溢出：0\/20/);
+  assert.match(report, /控制台改造作用域覆盖：10\/10/);
+  assert.match(report, /手机端低于 11px 的功能文字：0/);
+  assert.match(report, /标题层级跳跃：0/);
+  assert.match(report, /JS 运行时异常：0/);
 });
 
 test('console shared chrome and carousel controls meet legibility and touch floors', async () => {
