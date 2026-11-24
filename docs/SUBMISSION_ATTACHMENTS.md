@@ -165,4 +165,4 @@ npm run v3:apply      # 确认短语 APPLY-NJU-RC-V3-SCHEMA
 
 > 运行提示：脚本用 `E2E_BASE` 指定服务地址（如 `E2E_BASE=http://127.0.0.1:3210`），需与本地服务**同一条命令内**启动并收尾（后台进程会随回合结束被回收）。限流是**进程内存**计数（每桶 1 小时窗口），同一进程内重复跑同一脚本会撞 429，重启服务即可复位。
 
-> **v2.2 修复专项**：`photos.js` 模块加载错误由 Node 直接复现——`SyntaxError: The requested module '../../core/store.js' does not provide an export named 'getSessionState'`；修正导入来源后同一命令返回仅 `window is not defined`（浏览器模块在 Node 下的预期表现），证明模块已可正常加载。同类问题已加静态防线：`scripts/.link-check.mjs` 逐模块比对「具名导入 ↔ 目标导出」（v3.1 全仓 212 个模块通过）。
+> **v2.2 修复专项**：`photos.js` 模块加载错误由 Node 直接复现——`SyntaxError: The requested module '../../core/store.js' does not provide an export named 'getSessionState'`；修正导入来源后同一命令返回仅 `window is not defined`（浏览器模块在 Node 下的预期表现），证明模块已可正常加载。同类问题已加静态防线：`scripts/check-esm-links.mjs` 逐模块比对「具名导入 ↔ 目标导出」（v3.1 全仓 212 个模块通过）。

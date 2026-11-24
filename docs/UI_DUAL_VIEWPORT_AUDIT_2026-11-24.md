@@ -1,6 +1,6 @@
 # PC Web 与移动端组件 / UI 验收
 
-本轮检查覆盖 10 条关键路由 × 桌面 1440×900、手机 390×844 两档，共 20 个页面/视口组合。使用隔离合成预览（`scripts/preview-workflow.mjs`）和 Chromium，不连接生产数据。原始数据保存在本机受忽略的 `reports/UI_COMPONENT_AUDIT_2026-11-24.json`；下列摘要是随仓库提交的验收凭据，源码守卫见 [ui-dual-viewport-audit.test.mjs](../tests/ui-dual-viewport-audit.test.mjs)。
+本轮检查覆盖 10 条关键路由 × 桌面 1440×900、手机 390×844 两档，共 20 个页面/视口组合。使用隔离合成预览（`scripts/preview-workflow.mjs`）和 Chromium，不连接生产数据。原始数据保存在本机受忽略的 `reports/UI_COMPONENT_AUDIT_2026-11-24.json`，由 [ui-audit-report.mjs](../scripts/ui-audit-report.mjs) 生成；下列摘要是随仓库提交的验收凭据，源码守卫见 [ui-dual-viewport-audit.test.mjs](../tests/ui-dual-viewport-audit.test.mjs)。
 
 ## 摘要
 
@@ -11,7 +11,7 @@
 - 手机端低于 11px 的功能文字：0。
 - 标题层级跳跃：0。
 - JS 运行时异常：0；合成预览缺少部分 API 的 404 控制台消息不计入 UI 异常。
-- 页面错误/空态节点：19 个，属于预览数据状态展示。
+- 页面错误/空态节点：20 个（桌面 10、手机 10）。构成：10 个「个人资料暂时无法读取」（预览未实现 `/api/auth/account`）、2 个审计日志不可用（预览未实现审计接口）、4 个总览空态、2 个来源说明、2 个安全提示卡；另 18 个空的 `role="alert"` 读屏占位不计入。
 
 ## 目标与结论
 
@@ -42,10 +42,9 @@
 ## 复核命令
 
 ```sh
-node scripts/preview-workflow.mjs
-node scripts/.ui-audit-tmp.mjs  # 临时脚本，结果写入 reports/UI_COMPONENT_AUDIT_2026-11-24.json
+node scripts/ui-audit-report.mjs  # 自起合成预览（127.0.0.1:3127，可用 --port 覆盖），采完写入 reports/
 node --test tests/ui-dual-viewport-audit.test.mjs
 npm run verify
 ```
 
-报告中的 `errorStateNodes` 表示页面内已渲染的错误/空态提示节点，`runtimeErrors` 表示浏览器控制台消息；合成预览里 `/api/auth/account`、`/api/public/showcase`、`/api/public/warmth/capabilities` 与审计记录接口未实现，因此会出现可预期的 404 消息，均不是 UI 资源或脚本异常。复核线上时使用已登录浏览器检查总览与活动管理首屏；生产数据读取慢时页面会显示骨架和错误态，不能把数据加载超时当作 UI 回归。
+脚本打印的组合数与六项计数与上面摘要同一口径，可直接对着核；出现横向溢出、标题跳级、控制台页缺改造标记或页面脚本异常时以退出码 1 结束。报告里的 `errorStateNodes` 是「可见且有文案」的错误/空态节点，`stateAll` 是含读屏占位的全部命中数，`stateTexts` 逐条记录文案，`runtimeErrors` 是浏览器控制台消息。合成预览里 `/api/auth/account`、`/api/public/showcase`、`/api/public/warmth/capabilities` 与审计记录接口未实现，因此会出现可预期的 404 消息，均不是 UI 资源或脚本异常。复核线上时使用已登录浏览器检查总览与活动管理首屏；生产数据读取慢时页面会显示骨架和错误态，不能把数据加载超时当作 UI 回归。
