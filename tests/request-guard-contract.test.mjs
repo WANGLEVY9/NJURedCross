@@ -14,6 +14,8 @@ test('request middleware, probes and bounded admission are wired at the HTTP ent
   assert.match(source, /createRequestConcurrencyGate\(\{/);
   assert.match(source, /http\.createServer\(\(req, res\) => observer\.http\(req, res, \(\) => requestMiddleware\(req, res\)\)\)/);
   assert.match(source, /readinessChecks:/);
-  assert.match(source, /metricsAccess:/);
+  assert.match(source, /metricsAccess[,:\s]/);
   assert.match(source, /bodyLimitFor:/);
+  assert.match(source, /loopbackAddresses\.has\(forwarded\)/,
+    'metrics must distinguish a local reverse proxy from a public visitor');
 });

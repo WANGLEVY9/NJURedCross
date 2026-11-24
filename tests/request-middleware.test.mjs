@@ -50,7 +50,11 @@ function dependencyStubs(overrides = {}) {
       runtimeStats: () => ({ rssBytes: 1024, heapBytes: 512, active: 1, dropped: 0 }),
       telemetryStats: () => ({ dropped: 0 }),
       readinessChecks: { config: true, failing: () => { throw new Error('synthetic outage'); } },
-      metricsAccess: req => req.socket?.remoteAddress === '127.0.0.1',
+      metricsAccess: req => {
+        if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket?.remoteAddress)) return false;
+        const forwarded = String(req.headers['x-real-ip'] || '').trim();
+        return forwarded ? ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(forwarded) : true;
+      },
       ...overrides,
     },
   };
@@ -111,6 +115,8 @@ test('probes and metrics are wired into the request pipeline', async () => {
     assert.match(metrics.text, /njuredcross_http_requests_total 3/);
     assert.match(metrics.text, /njuredcross_display_cache_hits_total 4/);
     assert.doesNotMatch(metrics.text, /student|token|cookie|password/i);
+    const proxied = await request(base, '/metrics', { headers: { 'x-real-ip': '203.0.113.5' } });
+    assert.equal(proxied.status, 403);
   } finally {
     await close(server);
   }

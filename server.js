@@ -7150,6 +7150,13 @@ async function handleUno(req, res, url) {
   return undefined;
 }
 
+const loopbackAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const metricsAccess = req => {
+  if (!loopbackAddresses.has(req.socket?.remoteAddress)) return false;
+  const forwarded = String(req.headers['x-real-ip'] || '').trim();
+  return forwarded ? loopbackAddresses.has(forwarded) : true;
+};
+
 const requestMiddleware = createRequestMiddleware({
   api, staticFile, pdfAssets, backgroundGate, requestGate,
   createWriteJournal, withWriteJournal, withHttpRequestBudget, withDisplayReads,
@@ -7160,7 +7167,7 @@ const requestMiddleware = createRequestMiddleware({
   readinessChecks: { sessionSecret: () => Boolean(sessionSecret),
     writeState: () => Boolean(writeStateDir), jobQueue: () => Boolean(jobQueue),
     server: () => server.listening },
-  metricsAccess: req => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket?.remoteAddress),
+  metricsAccess,
   bodyLimitFor: (req, url) => requestBudgetMsFor(req.method, url.pathname) > 30_000
     ? { uploadMaxBytes: DEFAULT_UPLOAD_BODY_LIMIT_BYTES, allowNonMultipartUpload: true }
     : undefined,
