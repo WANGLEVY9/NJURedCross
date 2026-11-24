@@ -38,6 +38,9 @@ jobs:
       - run: npm ci --ignore-scripts --include=optional
       - name: Check modules and documentation
         run: npm run check
+      - name: Check browser regression contracts
+        if: matrix.os == 'ubuntu-latest' && matrix.node == 24
+        run: npm run check:browser-contracts
       - name: Check named ESM imports
         run: npm run check:links
       - name: Source security inspection
@@ -111,16 +114,17 @@ jobs:
           fi
       - name: Browser regressions
         shell: bash
+        env:
+          BROWSER_SHARD_SUMMARY: test-results/browser-${{ matrix.project }}-${{ matrix.shard }}-summary.json
         run: |
           set -uo pipefail
-          # 基础设施抖动（ECONNRESET、runner 排队）不应直接判红：失败重跑一次。
-          for attempt in 1 2; do
-            if npm run test:browser -- --project=${{ matrix.project }} --shard=${{ matrix.shard }}/3 --grep-invert "$VISUAL_TAG" ${{ steps.specs.outputs.args }}; then
-              exit 0
-            fi
-            echo "::warning::browser attempt ${attempt} failed; retrying once"
-          done
-          exit 1
+          # Only infrastructure failures are retried. Deterministic assertion
+          # failures keep their first-run JSON evidence for Quality gate.
+          node scripts/run-browser-shard.mjs \
+            --project=${{ matrix.project }} \
+            --shard=${{ matrix.shard }}/3 \
+            --grep-invert "$VISUAL_TAG" \
+            ${{ steps.specs.outputs.args }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         # Browser tests already report failures through the test command. An
@@ -253,78 +257,21 @@ jobs:
       contents: read
       actions: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        if: always()
+        continue-on-error: true
+        with:
+          pattern: browser-*-evidence
+          path: browser-evidence
+          merge-multiple: true
       - name: Require every quality stage
         env:
           RESULTS: ${{ toJSON(needs) }}
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
           SUMMARY: ${{ github.step_summary }}
         run: |
-          python3 - <<'PY'
-          import io, json, os, re, urllib.request, zipfile
-
-          results = json.loads(os.environ['RESULTS'])
-          failed = {name: job['result'] for name, job in results.items() if job['result'] == 'failure'}
-          cancelled = {name: job['result'] for name, job in results.items() if job['result'] == 'cancelled'}
-
-          def job_ids():
-              request = urllib.request.Request(
-                  f"https://api.github.com/repos/{os.environ['REPOSITORY']}/actions/runs/{os.environ['RUN_ID']}/jobs?per_page=100",
-                  headers={'Authorization': f"Bearer {os.environ['GH_TOKEN']}", 'Accept': 'application/vnd.github+json'})
-              try:
-                  data = json.load(urllib.request.urlopen(request, timeout=30))
-              except Exception:
-                  return {}
-              return {job['name']: job['id'] for job in data.get('jobs', [])}
-
-          def failing_tests(job_id):
-              # 日志是 zip：取出失败用例名，省得每次都手动下载 job 日志。
-              request = urllib.request.Request(
-                  f"https://api.github.com/repos/{os.environ['REPOSITORY']}/actions/jobs/{job_id}/logs",
-                  headers={'Authorization': f"Bearer {os.environ['GH_TOKEN']}", 'Accept': 'application/vnd.github+json'})
-              try:
-                  blob = urllib.request.urlopen(request, timeout=60).read()
-              except Exception:
-                  return []
-              names = []
-              with zipfile.ZipFile(io.BytesIO(blob)) as archive:
-                  for member in archive.namelist():
-                      text = archive.read(member).decode('utf-8', 'ignore')
-                      for line in text.splitlines():
-                          stripped = line.strip()
-                          if re.match(r'^\s*(✘|×)\s+\d+\s', stripped) or stripped.startswith('1) ['):
-                              cleaned = re.sub(r'^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s*', '', stripped)
-                              if cleaned not in names:
-                                  names.append(cleaned[:220])
-              return names[:20]
-
-          ids = job_ids() if (failed or cancelled) else {}
-          lines = []
-          if failed:
-              lines.append('### 未通过的门禁')
-              for name in sorted(failed):
-                  lines.append(f'- **{name}**')
-                  if ids.get(name):
-                      for case in failing_tests(ids[name]):
-                          lines.append(f'  - `{case}`')
-          if cancelled:
-              # 被取消不等于验证失败（历史上 webkit 曾因 apt 超时被 cancel）。
-              lines.append('### 未完成验证（被取消，同样不会部署）')
-              for name in sorted(cancelled):
-                  lines.append(f'- {name}')
-          if not failed and not cancelled:
-              lines.append('全部质量阶段通过。')
-          else:
-              lines.append('')
-              lines.append('修复后重跑失败的作业即可；无需新增提交。')
-          summary = os.environ.get('SUMMARY')
-          if summary:
-              with open(summary, 'a', encoding='utf-8') as handle:
-                  handle.write('\n'.join(lines) + '\n')
-          print('\n'.join(lines))
-          assert not failed and not cancelled, {'failed': failed, 'cancelled': cancelled}
-          PY
+          mapfile -t summaries < <(find browser-evidence -name '*-summary.json' -type f 2>/dev/null | sort)
+          node scripts/ci-quality-report.mjs quality "$RESULTS" "${summaries[@]}"
   deploy:
     name: Deploy main to production
     needs: quality
@@ -349,8 +296,12 @@ jobs:
           else
             echo "A newer main commit will be deployed."
           fi
+      - name: Deepen deployment history for the release receipt
+        if: steps.current.outputs.deploy == 'true'
+        run: git fetch --deepen=50 origin main || true
       - name: Prepare secure deployment and inspect current runtime
         if: steps.current.outputs.deploy == 'true'
+        id: baseline
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -363,6 +314,8 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$HOME/.ssh/njuredcross-deploy"
           printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           printf 'NJRC-MANIFEST-V1\n' | timeout 90 ssh -i "$HOME/.ssh/njuredcross-deploy" -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 "root@$DEPLOY_HOST" > /tmp/njuredcross-baseline.json
+          python3 -c 'import json;print(json.load(open("/tmp/njuredcross-baseline.json")).get("commit",""))' > /tmp/njuredcross-baseline-commit.txt
+          echo "commit=$(cat /tmp/njuredcross-baseline-commit.txt)" >> "$GITHUB_OUTPUT"
       - name: Package verified runtime source
         if: steps.current.outputs.deploy == 'true'
         run: python3 scripts/package-release.py /tmp/njuredcross-release.tar.gz /tmp/njuredcross-baseline.json
@@ -385,26 +338,9 @@ jobs:
       - name: Report deployment verification layers
         if: always() && steps.current.outputs.deploy == 'true'
         run: |
-          python3 - <<'PY'
-          import json, os
-          lines = ['### 生产发布回执']
-          try:
-              with open('/tmp/deployment-result.json', encoding='utf-8') as handle:
-                  receipt = json.loads([line for line in handle.read().splitlines() if line.strip()][-1])
-          except Exception:
-              receipt = None
-          if not isinstance(receipt, dict):
-              lines.append('- 未取得回执：部署步骤失败或未运行，查看上一步日志。')
-          else:
-              lines.append(f"- 提交 `{receipt.get('deployedCommit')}`，校验 {receipt.get('verifiedFiles')} 个运行文件（变更 {receipt.get('changedFiles')} / 删除 {receipt.get('removedFiles')}）")
-              lines.append(f"- 重启后端：{'是' if receipt.get('restarted') else '否'}")
-              if receipt.get('bridgeReady') is False:
-                  lines.append('- ⚠️ 后端就绪慢于等待窗口，部署队列已被强制放行（站点保持可用，但本次冷启动偏慢）')
-              if receipt.get('publicHealth') is False:
-                  lines.append('- ⚠️ 公网健康检查未过：文件与本地服务已核验并保留该版本，请检查 DNS/TLS/nginx/桥接')
-          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as handle:
-              handle.write('\n'.join(lines) + '\n')
-          PY
+          node scripts/ci-quality-report.mjs receipt \
+            /tmp/deployment-result.json \
+            "$(cat /tmp/njuredcross-baseline-commit.txt 2>/dev/null || true)"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: steps.current.outputs.deploy == 'true'
         with:

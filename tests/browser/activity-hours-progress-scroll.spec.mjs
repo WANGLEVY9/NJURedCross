@@ -44,7 +44,13 @@ test('expanded posting progress stays compact and preserves final-table vertical
  await table.hover({position:{x:Math.min(300,Math.floor((await table.boundingBox()).width/2)),y:Math.min(240,Math.floor((await table.boundingBox()).height/2))}});
  await page.mouse.wheel(0,450);
  await expect.poll(()=>table.evaluate(node=>node.scrollTop)).toBeGreaterThan(50);
- await expect(table.locator('thead th').first()).toBeInViewport();
+ const stickyHead=await table.evaluate(node=>{
+  const head=node.querySelector('thead th');
+  const box=node.getBoundingClientRect();
+  const headBox=head.getBoundingClientRect();
+  return headBox.top>=box.top-1&&headBox.bottom<=box.bottom+1;
+ });
+ expect(stickyHead).toBe(true);
  await table.evaluate(node=>{node.scrollTop=node.scrollHeight;});
  // 判「行落在表格自己的可视区内」，而不是 toBeInViewport：`#main` 是 100vh，
  // 表格底边与视口底边重合（本地实测余量 0px），CI 的字体度量差 1px 就会把
@@ -57,7 +63,12 @@ test('expanded posting progress stays compact and preserves final-table vertical
   return {atBottom:Math.abs(node.scrollTop+node.clientHeight-node.scrollHeight)<=1,inside:last.bottom<=box.bottom+1&&last.top>=box.top-1};
  });
  expect(reach).toEqual({atBottom:true,inside:true});
- await expect(table.locator('thead th').first()).toBeInViewport();
+ expect(await table.evaluate(node=>{
+  const head=node.querySelector('thead th');
+  const box=node.getBoundingClientRect();
+  const headBox=head.getBoundingClientRect();
+  return headBox.top>=box.top-1&&headBox.bottom<=box.bottom+1;
+ })).toBe(true);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('hours-progress-and-table-scroll.png'),animations:'disabled'});
 });

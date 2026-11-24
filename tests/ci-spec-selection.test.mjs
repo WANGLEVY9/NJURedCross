@@ -28,7 +28,7 @@ test('activity workflow changes select activity, workflow and events specs', asy
 });
 
 test('shared layers fall back to the full suite', async () => {
-  for (const file of ['server.js', 'public/app/core/api.js', 'public/styles/tokens.css', 'public/index.html']) {
+  for (const file of ['server.js', 'public/app/core/api.js', 'public/styles/tokens.css', 'public/index.html', '.github/workflows/ci.yml', 'scripts/run-browser-shard.mjs', 'scripts/ci-quality-report.mjs', 'scripts/check-browser-contracts.mjs']) {
     assert.deepEqual(await select([file]), [], `expected full suite for ${file}`);
   }
 });

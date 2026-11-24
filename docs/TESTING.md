@@ -39,7 +39,7 @@ npm run verify
 
 本地命令：`npm run test:browser:cross`（先 `npx playwright install firefox webkit`）、`npm run test:coverage`、`python3 scripts/package-release.py /tmp/release.tar.gz` 后 `npm run test:release -- /tmp/release.tar.gz`。后者需要 Python 和 npm 网络/缓存，仅在临时目录安装公开依赖；结束后清理，不加载 `.env`、不启动真实业务服务。Safari 不默认把鼠标点击按钮变成键盘焦点，跨引擎测试使用实际键盘激活来验证焦点保留。
 
-浏览器截图/trace/JUnit 保存 7 天，HTTP 覆盖率报告保存 14 天，生产发布回执保存 30 天。Node 26 现为正式门禁，不再允许失败。main 推送通过全部检查后部署；每日和 PR 仅检查。部署完成额外执行有 30 秒单请求期限的只读公网冒烟；若此检查失败，发布任务报告失败，按运维指南排查或回滚，不能把文件更新当成已验收。
+浏览器截图/trace/JUnit 与分片失败摘要保存 7 天，HTTP 覆盖率报告保存 14 天，生产发布回执保存 30 天。`npm run check:browser-contracts` 会拦截内部滚动表格/弹窗仍使用页面级 `toBeInViewport()` 的回归；这类可达性应改用容器几何断言。`Quality gate` 汇总失败摘要，列出文件、行号、项目及基础设施/断言类别。Node 26 现为正式门禁，不再允许失败。main 推送通过全部检查后部署；每日和 PR 仅检查。部署完成额外执行有 30 秒单请求期限的只读公网冒烟；该冒烟非阻塞，若失败仍需排查或按运维指南回滚，不能把文件更新当成已验收。
 
 ## 完整环境冒烟
 
