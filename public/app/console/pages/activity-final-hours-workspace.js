@@ -16,17 +16,18 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
  async function fresh(){const next=await load();if(disposed)return;state=next;render();onChanged(next);return next;}
  function table(rows,controls=false,instructions=false){
   const body=h('tbody');
+  const columnClass=key=>`activity-final-hours-col-${key}`;
   for(const [index,row] of rows.entries()){
    const count=row.memberIds?.length||1;
    const person=controls?h('div',{class:'activity-hours-person'},
     batch.selection(row),h('div',{},h('span',{text:row.name}),
      count>1?h('div',{class:'t-caption',title:'请逐场核对签到和时长',text:`${count} 场`}):null)):null;
    const cells=FINAL_HOURS_COLUMNS.map(([key])=>key==='name'&&controls
-    ?h('td',{},person)
-    :h('td',{text:key==='index'?String(index+1):String(row[key]??'')}));
+    ?h('td',{class:columnClass(key)},person)
+    :h('td',{class:columnClass(key),text:key==='index'?String(index+1):String(row[key]??'')}));
    if(controls){
     const pending=row.manual&&row.manualApproval==='pending';
-    cells.push(h('td',{},
+    cells.push(h('td',{class:'activity-final-hours-col-review'},
      row.manual?h('span',{class:'t-caption',text:pending?'补录·待确认':'补录'}):null,
      h('span',{text:row.decision==='pass'?'通过':'未通过'}),
      state.canEdit?button({label:'修改明细',size:'sm',onClick:()=>editRow(row)}):null,
@@ -36,7 +37,9 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
   }
   if(!rows.length)body.append(h('tr',{},h('td',{colspan:controls?12:11,text:'暂无符合条件的时长'})));
   const compact={index:'序号',trainingHours:'培训时长/小时',travelHours:'交通时长/小时',serviceHours:'服务时长/小时'};
-  return h('div',{class:'activity-registration-table activity-final-hours-table'},h('table',{},h('caption',{text:'分工时长表'}),h('colgroup',{},...(controls?[4,7,8,10,10,15,6,6,6,12,6,10]:[4,7,9,10,11,18,7,7,7,14,6]).map(width=>h('col',{width:`${width}%`}))),h('thead',{},h('tr',{},...FINAL_HOURS_COLUMNS.map(([key,text])=>h('th',{scope:'col',title:text,text:instructions?text:compact[key]||text})),...(controls?[h('th',{scope:'col',text:'审核'})]:[])),instructions?h('tr',{class:'activity-final-hours-instructions'},...FINAL_HOURS_INSTRUCTIONS.map(text=>h('td',{text})),...(controls?[h('td')]:[])):null),body));
+  const widths=controls?[52,110,120,140,190,220,104,104,104,190,120,180]:[52,110,120,140,200,230,110,110,110,200,120];
+  const columns=[...FINAL_HOURS_COLUMNS.map(([key])=>key),...(controls?['review']:[])];
+  return h('div',{class:'activity-registration-table activity-final-hours-table'},h('table',{},h('caption',{text:'分工时长表'}),h('colgroup',{},...widths.map((width,index)=>h('col',{class:columnClass(columns[index]),width:String(width)}))),h('thead',{},h('tr',{},...FINAL_HOURS_COLUMNS.map(([key,text])=>h('th',{class:columnClass(key),scope:'col',title:text,text:instructions?text:compact[key]||text})),...(controls?[h('th',{class:'activity-final-hours-col-review',scope:'col',text:'审核'})]:[])),instructions?h('tr',{class:'activity-final-hours-instructions'},...FINAL_HOURS_INSTRUCTIONS.map((text,index)=>h('td',{class:columnClass(FINAL_HOURS_COLUMNS[index][0]),text})),...(controls?[h('td',{class:'activity-final-hours-col-review'})]:[])):null),body));
  }
  function preview(){
   const rows=state.rows.filter(valid),rejected=state.rows.filter(row=>row.decision!=='pass');

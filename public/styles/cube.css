@@ -75,7 +75,7 @@
 .console .view:not(.operations-module) .metrics { background: transparent; border: 0; gap: 14px; overflow: visible; }
 .console .view:not(.operations-module) .metric { background: var(--surface); border: 1px solid var(--tile-border); border-radius: 20px; padding: 24px; box-shadow: var(--tile-shadow); }
 .console .view:not(.operations-module) .wsregion .metric { padding: 16px; box-shadow: none; border-radius: 14px; }
-.console .nav__item { border-radius: 12px; min-height: 40px; }
+.console .nav__item { border-radius: 12px; }
 .console .nav { background: color-mix(in srgb,var(--bg-sunken) 75%,var(--surface)); }
 .console .topbar { background: color-mix(in srgb,var(--surface) 94%,transparent); }
 .activity-summary { gap: 14px; }

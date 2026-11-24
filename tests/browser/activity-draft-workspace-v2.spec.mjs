@@ -241,9 +241,23 @@ test('shared console rail stays balanced across overview, administrator and acti
   await expect.poll(async()=>Math.round((await page.locator('.nav').boundingBox()).width)).toBeLessThanOrEqual(264);
  }
  const directory=await page.locator('.activity-v2-directory').boundingBox();
- expect(directory.width).toBeGreaterThanOrEqual(250);expect(directory.width).toBeLessThanOrEqual(300);
+ expect(directory.width).toBeGreaterThanOrEqual(300);expect(directory.width).toBeLessThanOrEqual(460);
  const workspace=await page.locator('.activity-v2-workspace').boundingBox();
  expect(directory.width/workspace.width).toBeLessThan(0.5);
+ const resizer=page.getByRole('separator',{name:'调整活动列表宽度',exact:true});
+ await expect(resizer).toBeVisible();
+ await expect(resizer).toHaveAttribute('aria-valuemin','300');
+ await expect(resizer).toHaveAttribute('aria-valuemax',String(Math.min(460,Math.round(workspace.width*0.48))));
+ const before=directory.width;
+ await resizer.focus();await page.keyboard.press('ArrowRight');
+ await expect.poll(async()=>Math.round((await page.locator('.activity-v2-directory').boundingBox()).width)).toBeGreaterThanOrEqual(Math.round(before)+20);
+ const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('nju-rc.preferences.v1')||'{}').activityDirectoryWidth);
+ expect(stored).toBeGreaterThanOrEqual(320);
+ await page.reload();await expect(page.locator('.activity-v2-directory')).toBeVisible();
+ await expect.poll(async()=>Math.round((await page.locator('.activity-v2-directory').boundingBox()).width)).toBeGreaterThanOrEqual(Math.round(before)+12);
+ const reset=page.getByRole('separator',{name:'调整活动列表宽度',exact:true});
+ await reset.focus();await page.keyboard.press('Home');
+ await expect.poll(async()=>Math.round((await page.locator('.activity-v2-directory').boundingBox()).width)).toBe(300);
 });
 test('new activity requires regional classification and restores its saved draft after reload',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
@@ -254,6 +268,17 @@ test('new activity requires regional classification and restores its saved draft
  const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name);await pane.getByLabel('活动名称',{exact:true}).fill(name+'修改');await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
  await page.reload();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');
  const card=page.locator('.activity-v2-card[aria-pressed=true]');await expect(card).toHaveAttribute('data-region','nanjing');await expect(card).toHaveAttribute('data-category','生命中心');await expect(card.locator('small')).toHaveCount(0);
+ if(!info.project.name.includes('mobile')){
+  const cardStyle=await card.evaluate(node=>({background:getComputedStyle(node).backgroundColor,ink:getComputedStyle(node,'::before').backgroundColor}));
+  const plazaStyle=await page.evaluate(async()=>{
+   const link=document.createElement('link');link.rel='stylesheet';link.href='/styles/events-plaza.css';document.head.append(link);await new Promise(resolve=>link.addEventListener('load',resolve,{once:true}));
+   const probe=document.createElement('div');probe.className='events-page';probe.innerHTML='<div class="event-row" data-category="生命中心"></div>';probe.style.position='absolute';probe.style.opacity='0';document.body.append(probe);
+   const target=probe.querySelector('.event-row'),style=getComputedStyle(target);const result={bg:style.getPropertyValue('--category-label-bg').trim(),ink:style.getPropertyValue('--category-label-ink').trim()};probe.remove();link.remove();return result;
+  });
+  expect(plazaStyle.bg).toBe('#e2f2e6');expect(plazaStyle.ink).toBe('#276b44');
+  expect(cardStyle.background).not.toBe('rgb(255, 255, 255)');
+  expect(cardStyle.ink).toBe('rgb(39, 107, 68)');
+ }
  if(info.project.name.includes('mobile')){
   await page.getByRole('button',{name:'返回活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeVisible();await page.locator('.activity-v2-card').filter({hasText:name+'修改'}).click();await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');
  }else{

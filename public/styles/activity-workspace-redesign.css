@@ -49,11 +49,66 @@
 }
 
 .activity-v2-workspace {
-  grid-template-columns: minmax(260px, var(--activity-directory-width)) minmax(0, 1fr);
+  grid-template-columns: clamp(260px, var(--activity-directory-width, 300px), 460px) minmax(0, 1fr);
   border: 1px solid var(--workspace-line);
   border-radius: var(--workspace-radius);
   background: var(--surface);
   overflow: hidden;
+  position: relative;
+}
+
+.activity-v2-workspace.is-directory-collapsed {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.activity-v2-directory-resizer {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  bottom: 0;
+  left: calc(clamp(260px, var(--activity-directory-width, 300px), 460px) - 6px);
+  width: 12px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.activity-v2-directory-resizer::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 44px;
+  border-radius: var(--r-full);
+  background: var(--border-strong);
+  opacity: 0;
+  transform: translate(-50%, -50%);
+  transition: opacity var(--dur-1) var(--ease-out), background-color var(--dur-1) linear;
+}
+
+.activity-v2-workspace.has-directory-resizer:hover .activity-v2-directory-resizer::after,
+.activity-v2-directory-resizer:focus-visible::after,
+.activity-v2-directory-resizer[data-dragging]::after {
+  opacity: 1;
+  background: var(--accent);
+}
+
+.activity-v2-directory-resizer:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.activity-v2-directory-resizer[hidden] {
+  display: none;
+}
+
+body.is-resizing-activity-directory {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .activity-v2-directory {
@@ -106,36 +161,44 @@
 }
 
 .activity-v2-list {
-  gap: var(--s2);
+  gap: var(--s3);
   padding: 0 var(--s1) var(--s3);
   scrollbar-color: var(--border-strong) transparent;
   scrollbar-width: thin;
 }
 
-/* Directory rows are a list, not a decoration grid. Category is a small dot
-   on the label; workflow state is the only coloured chip. */
+/* Directory rows use the plaza's category palette, with the category named in
+   text and workflow state kept as a separate readable chip. */
 .activity-v2-card {
-  border: 1px solid var(--workspace-line);
+  --activity-card-bg: color-mix(in srgb, var(--category-label-bg, var(--surface-muted)) 42%, var(--surface));
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--category-label-ink, var(--workspace-line)) 28%, var(--workspace-line));
   border-radius: var(--workspace-radius-sm);
-  background: var(--surface);
+  background: var(--activity-card-bg);
   box-shadow: none;
-  padding: var(--s3);
-  gap: var(--s2);
+  padding: var(--s3) var(--s4) var(--s3) calc(var(--s4) + 15px);
+  gap: var(--s3);
   transition: border-color var(--dur-1) var(--ease-out),
     background-color var(--dur-1) var(--ease-out),
-    box-shadow var(--dur-1) var(--ease-out);
+    box-shadow var(--dur-1) var(--ease-out),
+    transform var(--dur-1) var(--ease-out);
 }
 
 .activity-v2-card:hover {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--workspace-line));
-  background: var(--surface);
+  border-color: var(--category-label-ink, var(--accent));
+  background: color-mix(in srgb, var(--category-label-bg, var(--surface-muted)) 55%, var(--surface));
   box-shadow: var(--e1);
+}
+
+.activity-v2-card:active {
+  transform: scale(0.995);
+  box-shadow: none;
 }
 
 .activity-v2-card[aria-pressed=true] {
   border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent-soft) 55%, var(--surface));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+  background: var(--activity-card-bg);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 .activity-v2-card:focus-visible {
@@ -143,13 +206,22 @@
   outline-offset: 2px;
 }
 
+.activity-v2-card::before {
+  content: '';
+  position: absolute;
+  top: calc(var(--s3) + 0.45em);
+  left: var(--s4);
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-full);
+  background: var(--category-label-ink, var(--text-muted));
+}
+
 .activity-v2-card strong {
   font-size: var(--fs-body);
   font-weight: var(--fw-semibold);
   line-height: var(--lh-snug);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .activity-v2-card__meta,
@@ -170,10 +242,10 @@
   align-items: center;
   min-height: 22px;
   padding: 2px var(--s2);
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--workspace-line));
+  border: 1px solid color-mix(in srgb, var(--text-primary) 22%, var(--workspace-line));
   border-radius: var(--r-xs);
-  background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
-  color: var(--accent);
+  background: var(--surface);
+  color: var(--text-primary);
   font-size: var(--fs-caption);
   font-weight: var(--fw-semibold);
   line-height: 1.35;
@@ -528,17 +600,163 @@
   width: 100%;
   max-width: 100%;
   overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-x: contain;
+  border: 1px solid var(--workspace-line);
+  border-radius: var(--workspace-radius-sm);
+  background: var(--surface);
 }
 
-.activity-v2 .activity-final-hours-table>table {
-  min-width: 680px;
+.activity-v2 .activity-final-hours-table>table,
+.activity-v2 .activity-final-hours-full-preview .activity-final-hours-table>table {
+  min-width: 1630px;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.activity-v2 .activity-final-hours-table>table>colgroup>col {
+  min-width: 50px;
 }
 
 .activity-v2 .activity-registration-table td:only-child {
   padding: var(--s8) var(--s4);
   text-align: center;
   color: var(--workspace-muted);
+}
+
+.activity-v2 .activity-final-hours-table caption {
+  padding: var(--s3);
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  text-align: left;
+}
+
+.activity-v2 .activity-final-hours-table th {
+  padding: var(--s3);
+  background: var(--workspace-soft);
+  color: var(--text-primary);
+  font-size: var(--fs-secondary);
+  font-weight: var(--fw-semibold);
+  line-height: 1.45;
+  text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.activity-v2 .activity-final-hours-table :is(.activity-final-hours-col-location,
+  .activity-final-hours-col-dates,
+  .activity-final-hours-col-work,
+  .activity-final-hours-col-remark) th {
+  white-space: normal;
+}
+
+.activity-v2 .activity-final-hours-table td {
+  padding: var(--s3);
+  color: var(--text-primary);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  vertical-align: middle;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.activity-v2 .activity-final-hours-table th:not(.activity-final-hours-col-review),
+.activity-v2 .activity-final-hours-table td:not(.activity-final-hours-col-review) {
+  text-align: left;
+}
+
+.activity-v2 .activity-final-hours-table :is(.activity-final-hours-col-index,
+  .activity-final-hours-col-studentId,
+  .activity-final-hours-col-trainingHours,
+  .activity-final-hours-col-travelHours,
+  .activity-final-hours-col-serviceHours) {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-v2 .activity-final-hours-table :is(.activity-final-hours-col-name,
+  .activity-final-hours-col-department) {
+  white-space: nowrap;
+}
+
+.activity-v2 .activity-final-hours-table :is(.activity-final-hours-col-location,
+  .activity-final-hours-col-dates,
+  .activity-final-hours-col-work,
+  .activity-final-hours-col-remark) {
+  min-width: 0;
+}
+
+.activity-v2 .activity-final-hours-table .activity-final-hours-col-work {
+  font-size: var(--fs-secondary);
+}
+
+.activity-v2 .activity-final-hours-table .activity-final-hours-col-review {
+  text-align: left;
+  vertical-align: middle;
+  white-space: normal;
+}
+
+.activity-v2 .activity-final-hours-table .activity-final-hours-col-review > .btn {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+.activity-v2 .activity-final-hours-table .activity-hours-person {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  white-space: nowrap;
+}
+
+.activity-v2 .activity-final-hours-table .activity-hours-person>div {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  white-space: nowrap;
+}
+
+.activity-v2 .activity-final-hours-table .activity-hours-person input[type=checkbox] {
+  margin: 0;
+}
+
+.activity-v2 .activity-final-hours-table .activity-hours-person .t-caption {
+  white-space: nowrap;
+}
+
+.activity-v2 .activity-final-hours-table .activity-final-hours-col-review>.t-caption,
+.activity-v2 .activity-final-hours-table .activity-final-hours-col-review>span {
+  display: block;
+  margin-bottom: var(--s1);
+  color: var(--workspace-muted);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+}
+
+.activity-v2 .activity-final-hours-table .activity-final-hours-col-review>span {
+  color: var(--text-primary);
+  font-size: var(--fs-secondary);
+  font-weight: var(--fw-medium);
+}
+
+.activity-v2 .activity-final-hours-table .activity-final-hours-col-review>.btn {
+  min-height: 36px;
+  margin: var(--s1) var(--s1) 0 0;
+  padding: var(--s1) var(--s3);
+  font-size: var(--fs-caption);
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.activity-v2 .activity-final-hours-table .activity-final-hours-instructions td {
+  color: var(--workspace-muted);
+  font-size: var(--fs-caption);
+  line-height: var(--lh-normal);
+  background: var(--surface);
+}
+
+.activity-v2 .activity-final-hours-full-preview .activity-final-hours-table {
+  max-width: 100%;
 }
 
 /* Desktop workspace uses a stable reading width for forms. */
@@ -776,12 +994,36 @@
   .activity-v2 .activity-registration-batch {
     flex-wrap: wrap;
   }
+
+  .activity-v2-directory-resizer {
+    display: none;
+  }
+
+  .activity-v2-workspace,
+  .activity-v2-workspace.is-directory-collapsed {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 220px minmax(0, 1fr);
+  }
+
+  .activity-v2-workspace.is-directory-collapsed {
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .activity-v2 .activity-final-hours-table th,
+  .activity-v2 .activity-final-hours-table td {
+    padding: var(--s2) var(--s3);
+    font-size: var(--fs-secondary);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .activity-v2-card,
   .activity-v2 :is(.btn, .select-menu__trigger) {
     transition: none;
+  }
+
+  .activity-v2-card:active {
+    transform: none;
   }
 }
 }

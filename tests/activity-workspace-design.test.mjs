@@ -19,15 +19,57 @@ test('activity management loads one scoped design baseline', async () => {
   assert.doesNotMatch(css, /font-size:\s*10px/);
 });
 
-test('directory cards stay neutral and status remains a readable chip', async () => {
-  const css = await read('public/styles/activity-workspace-redesign.css');
-  assert.match(css, /\.activity-v2-card \{[^}]*background: var\(--surface\)/s);
+test('directory cards share the plaza category palette and status stays a readable chip', async () => {
+  const [css, tokens, plaza] = await Promise.all([
+    read('public/styles/activity-workspace-redesign.css'),
+    read('public/styles/tokens.css'),
+    read('public/styles/events-plaza.css'),
+  ]);
+  assert.match(css, /\.activity-v2-card \{[^}]*--activity-card-bg: color-mix\(in srgb, var\(--category-label-bg/s);
   assert.match(css, /\.activity-v2-card\[aria-pressed=true\] \{[^}]*border-color: var\(--accent\)[^}]*box-shadow: inset 0 0 0 1px/s);
-  assert.doesNotMatch(css, /inset 3px 0 0 var\(--accent\)/);
+  assert.doesNotMatch(css, /inset 3px 0 0/);
   assert.doesNotMatch(css, /border-left: 2px/);
   assert.match(css, /\.activity-v2-badge \{[^}]*min-height: 22px/s);
   assert.match(css, /\.activity-v2-heading li \{[^}]*min-width: 56px/s);
   assert.doesNotMatch(css, /content: attr\(data-category\)/);
+  for (const category of ['主席团专项', '博爱中心', '生命中心', '综事中心', '一加助残专项', '献血车专项', '排班专项']) {
+    const escaped = category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const token = tokens.match(new RegExp(`\\[data-category='${escaped}'\\][^{]*\\{([^}]+)\\}`))?.[1];
+    const plazaRule = plaza.match(new RegExp(`\\[data-category='${escaped}'\\][^{]*\\{([^}]+)\\}`))?.[1];
+    assert.ok(token && plazaRule, `${category} should have a shared palette`);
+    assert.equal(token.trim().toLowerCase(), plazaRule.trim().toLowerCase());
+  }
+});
+
+test('desktop directory width is resizable by pointer, keyboard and persisted preference', async () => {
+  const [page, css, module] = await Promise.all([
+    read('public/app/console/pages/activity-workspace-page.js'),
+    read('public/styles/activity-workspace-redesign.css'),
+    read('public/app/console/activity-directory-width.js'),
+  ]);
+  assert.match(page, /bindActivityDirectoryWidth\(\{workspace,directory,handle:directoryResizer,desktop\}/);
+  assert.match(page, /role:'separator'/);
+  assert.match(page, /aria-orientation':'vertical'/);
+  assert.match(page, /directoryWidth\?\.sync\(\)/);
+  assert.match(css, /clamp\(260px, var\(--activity-directory-width, 300px\), 460px\)/);
+  assert.match(css, /\.activity-v2-directory-resizer\[hidden\][\s\S]*display: none/);
+  assert.match(module, /prefs\.set\(KEY, width\)/);
+  assert.match(module, /ArrowLeft: -STEP, ArrowRight: STEP, Home: -Infinity, End: Infinity/);
+  assert.match(module, /new ResizeObserver/);
+});
+
+test('final hours columns keep readable type, stable classes and aligned review controls', async () => {
+  const [css, source] = await Promise.all([
+    read('public/styles/activity-workspace-redesign.css'),
+    read('public/app/console/pages/activity-final-hours-workspace.js'),
+  ]);
+  assert.match(source, /const columnClass=key=>`activity-final-hours-col-\$\{key\}`/);
+  assert.match(source, /class:'activity-final-hours-col-review'/);
+  assert.match(css, /\.activity-v2 \.activity-final-hours-table>table,[\s\S]*min-width: 1630px/);
+  assert.match(css, /\.activity-v2 \.activity-final-hours-table td \{[^}]*font-size: var\(--fs-body\)/s);
+  assert.match(css, /\.activity-v2 \.activity-final-hours-table \.activity-final-hours-col-review \{[^}]*vertical-align: middle/s);
+  assert.match(css, /\.activity-final-hours-col-review>\.btn \{[^}]*white-space: nowrap/s);
+  assert.match(css, /\.activity-final-hours-col-studentId/);
 });
 
 test('workspace marks one primary action and separates destructive menu actions', async () => {

@@ -18,7 +18,7 @@
 @media (max-width: 960px) {
   .console .nav__item {
     min-height: 44px;
-    height: 44px;
+    height: auto;
   }
 }
 

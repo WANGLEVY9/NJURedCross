@@ -11,6 +11,7 @@ import {registrationCapacity} from '../../shared/activity-registration.js';
 import {activityApprovalWorkspace} from './activity-approval-workspace.js';
 import {activityRegistrationWorkspace} from './activity-registration-workspace.js';
 import {h,icon} from '../../core/dom.js';
+import {bindActivityDirectoryWidth,ACTIVITY_DIRECTORY_MIN_WIDTH,ACTIVITY_DIRECTORY_MAX_WIDTH} from '../activity-directory-width.js';
 import {request,getSessionState} from '../../core/api.js';
 import {setLeaveGuard,patchQuery,navigate,buildPath} from '../../core/router.js';
 import {pageHead,button,field,notice,emptyState,skeletonLine} from '../../ui/primitives.js';
@@ -82,7 +83,7 @@ export default async function activityWorkspacePage(context){
     if(context.state?.activityDirectory){history.back();return;}
     return navigate(buildPath(context.path,{...Object.fromEntries(context.query),draft:null,event:null,tab:null}),{replace:true});
   }
-  function toggleDirectory(){directoryCollapsed=!directoryCollapsed;workspace.classList.toggle('is-directory-collapsed',directoryCollapsed);for(const control of pane.querySelectorAll('.activity-v2-collapse')){control.textContent=directoryCollapsed?'›':'‹';control.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');control.setAttribute('aria-expanded',String(!directoryCollapsed));}}
+  function toggleDirectory(){directoryCollapsed=!directoryCollapsed;workspace.classList.toggle('is-directory-collapsed',directoryCollapsed);directoryWidth?.sync();for(const control of pane.querySelectorAll('.activity-v2-collapse')){control.textContent=directoryCollapsed?'›':'‹';control.setAttribute('aria-label',directoryCollapsed?'展开活动列表':'收起活动列表');control.setAttribute('aria-expanded',String(!directoryCollapsed));}}
   const currentActor=getSessionState().user?.accountId||getSessionState().user?.username;
   let searchDebounce=0;
   const search=field({label:'搜索活动',type:'search',placeholder:'搜索活动名称',onInput:()=>{clearTimeout(searchDebounce);searchDebounce=setTimeout(renderList,150);}});
@@ -510,7 +511,12 @@ export default async function activityWorkspacePage(context){
     modal=openModal({title:'新建活动',body:h('div',{class:'stack-3'},name,names,area,kind),dismissible:false,footer:[sourceButton,button({label:'取消',onClick:()=>{if(!busy)void modal.close();}}),createButton]});
     modal.setCloseGuard(()=>!busy);
   }
-  const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory','aria-label':'活动筛选与目录'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
+  const directory=h('aside',{class:'activity-v2-directory','aria-label':'活动筛选与目录'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list);
+  const directoryResizer=h('button',{class:'activity-v2-directory-resizer',type:'button',role:'separator',attrs:{'aria-label':'调整活动列表宽度','aria-orientation':'vertical','aria-valuemin':String(ACTIVITY_DIRECTORY_MIN_WIDTH),'aria-valuemax':String(ACTIVITY_DIRECTORY_MAX_WIDTH),'aria-valuenow':String(ACTIVITY_DIRECTORY_MIN_WIDTH),'aria-controls':'activity-directory'}});
+  directory.id='activity-directory';
+  const workspace=h('div',{class:'activity-v2-workspace'},directory,directoryResizer,pane);
+  const desktop=window.matchMedia('(min-width:961px)');
+  const directoryWidth=bindActivityDirectoryWidth({workspace,directory,handle:directoryResizer,desktop});
   const createButton=button({label:'新建活动',variant:'primary',onClick:create});
   createButton.disabled=true;
   const tools=h('details',{class:'activity-page-tools'},h('summary',{text:'管理工具'}),h('div',{},
@@ -520,5 +526,5 @@ export default async function activityWorkspacePage(context){
   if(mobile.matches&&directoryState){search.control.value=directoryState.search;stage.control.value=directoryState.stage;region.control.value=directoryState.region;syncCategories();category.control.value=directoryState.category;}
   syncLayout();mobile.addEventListener('change',resizeLayout);
   list.append(...Array.from({length:3},()=>h('div',{class:'activity-v2-card activity-v2-card--skeleton','aria-hidden':'true'},h('strong',{class:'sk sk--line sk-w-70'}),h('span',{class:'sk sk--line sk-w-40'}))));
-  void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{rememberDirectory();disposed=true;loadSequence++;clearTimeout(searchDebounce);editor?.dispose();release();mobile.removeEventListener('change',resizeLayout);window.removeEventListener('beforeunload',beforeUnload);}};
+  void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{rememberDirectory();disposed=true;loadSequence++;clearTimeout(searchDebounce);directoryWidth.dispose();editor?.dispose();release();mobile.removeEventListener('change',resizeLayout);window.removeEventListener('beforeunload',beforeUnload);}};
 }
