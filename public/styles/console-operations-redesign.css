@@ -201,6 +201,10 @@
   display: none;
 }
 
+.console-operations-redesign .overview-task>.ico {
+  display: none;
+}
+
 .console-operations-redesign .overview-task__body {
   gap: var(--s1);
 }
@@ -262,12 +266,16 @@
 }
 
 .console-operations-redesign .overview-bar__track {
+  display: block;
+  width: 100%;
   height: 6px;
   border-radius: var(--r-xs);
   background: color-mix(in srgb, var(--border-strong) 35%, var(--surface));
 }
 
 .console-operations-redesign .overview-bar__fill {
+  display: block;
+  max-width: 100%;
   border-radius: inherit;
   background: color-mix(in srgb, var(--accent) 68%, var(--text-secondary));
 }

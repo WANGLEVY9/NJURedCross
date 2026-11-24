@@ -14,6 +14,8 @@ test('operations pages share one console-only visual baseline', async () => {
   assert.match(css, /--ops-control-h: 40px/);
   assert.match(css, /font-family: var\(--font-sans\)/);
   assert.match(css, /\.metric__value \{[\s\S]*font-variant-numeric: tabular-nums/);
+  assert.match(css, /\.console-operations-redesign \.overview-task>\.ico \{\s*display: none/s);
+  assert.match(css, /\.overview-bar__track \{[\s\S]*display: block[\s\S]*width: 100%/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(css, /border-left: [2-9]px/);
   assert.doesNotMatch(css, /font-size:\s*10px/);
