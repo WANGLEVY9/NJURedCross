@@ -46,7 +46,17 @@ test('expanded posting progress stays compact and preserves final-table vertical
  await expect.poll(()=>table.evaluate(node=>node.scrollTop)).toBeGreaterThan(50);
  await expect(table.locator('thead th').first()).toBeInViewport();
  await table.evaluate(node=>{node.scrollTop=node.scrollHeight;});
- await expect(page.locator('.activity-final-hours-table tbody tr').last()).toBeInViewport();
+ // 判「行落在表格自己的可视区内」，而不是 toBeInViewport：`#main` 是 100vh，
+ // 表格底边与视口底边重合（本地实测余量 0px），CI 的字体度量差 1px 就会把
+ // 「滚到底」判成「不在视口」。表格内部能滚到最后一行才是这条用例的契约；
+ // 页面级要不要露出表尾由 activity-mobile-scroll.spec.mjs 覆盖。
+ const reach=await table.evaluate(node=>{
+  const rows=node.querySelectorAll('tbody tr');
+  const last=rows[rows.length-1].getBoundingClientRect();
+  const box=node.getBoundingClientRect();
+  return {atBottom:Math.abs(node.scrollTop+node.clientHeight-node.scrollHeight)<=1,inside:last.bottom<=box.bottom+1&&last.top>=box.top-1};
+ });
+ expect(reach).toEqual({atBottom:true,inside:true});
  await expect(table.locator('thead th').first()).toBeInViewport();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('hours-progress-and-table-scroll.png'),animations:'disabled'});
