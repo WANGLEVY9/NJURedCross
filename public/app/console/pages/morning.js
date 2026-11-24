@@ -925,7 +925,7 @@ export default async function morningAdminPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide operations-module operations-community' },
+    { class: 'view wspad wspad--wide operations-module operations-community console-operations-redesign' },
     pageHead({
       label: '温暖连接 · 早安晚安',
       title: '早安晚安管理',

@@ -1,0 +1,424 @@
+/* 管理端运营模块共享基线：Operate 模式。仅作用于带 redesign 标记的页面，
+   保留既有主题 token、共享按钮、表格与数据结构。 */
+.console-operations-redesign {
+  --ops-control-h: 40px;
+  --ops-radius: var(--r-md);
+  --ops-line: var(--border);
+  --ops-soft: var(--surface-muted, var(--bg-sunken));
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  line-height: var(--lh-normal);
+  letter-spacing: var(--tracking-body);
+  color: var(--text-primary);
+}
+
+.console-operations-redesign :is(button, input, select, textarea, summary) {
+  font-family: inherit;
+  letter-spacing: inherit;
+}
+
+.console-operations-redesign :is(h1, h2, h3, h4, strong, th) {
+  font-family: var(--font-sans);
+  letter-spacing: var(--tracking-heading);
+}
+
+.console-operations-redesign :is(h1, h2, h3) {
+  text-wrap: balance;
+}
+
+.console-operations-redesign > .pagehead {
+  align-items: center;
+  gap: var(--s4);
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--ops-line);
+}
+
+.console-operations-redesign > .pagehead h1 {
+  font-size: var(--fs-h1);
+  line-height: var(--lh-snug);
+  font-weight: var(--fw-bold);
+}
+
+.console-operations-redesign > .pagehead p {
+  font-size: var(--fs-secondary);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+
+.console-operations-redesign > .pagehead .btn {
+  min-height: var(--ops-control-h);
+  padding-inline: var(--s4);
+  font-size: var(--fs-secondary);
+  box-shadow: none;
+}
+
+.console-operations-redesign .stack-8 {
+  gap: var(--s6);
+}
+
+/* Metric strip stays one connected band, but reads as data rather than four
+   identical marketing cards. */
+.console-operations-redesign .metrics {
+  gap: 0;
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.console-operations-redesign .metric {
+  display: grid;
+  align-content: center;
+  gap: var(--s1);
+  min-height: 92px;
+  padding: var(--s4);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.console-operations-redesign .metric__value {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+}
+
+.console-operations-redesign .metric + .metric {
+  border-left: 1px solid var(--ops-line);
+}
+
+.console-operations-redesign .metric :is(.t-label, .metric__label) {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
+  letter-spacing: 0;
+  color: var(--text-secondary);
+}
+
+.console-operations-redesign .metric__value {
+  font-size: var(--fs-h2);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-operations-redesign .metric__unit {
+  margin-left: var(--s1);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-regular);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.console-operations-redesign .metric__foot,
+.console-operations-redesign .metric__foot .t-caption {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+
+/* Regions are full-width work bands; titles carry themselves. */
+.console-operations-redesign .wsregion {
+  gap: var(--s4);
+}
+
+.console-operations-redesign .wsregion__head {
+  align-items: center;
+  gap: var(--s3);
+  min-height: 48px;
+  padding: 0 var(--s4) var(--s3);
+  border-bottom: 1px solid var(--ops-line);
+}
+
+.console-operations-redesign .section-head__text {
+  display: grid;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.console-operations-redesign .section-head__text>.t-label {
+  display: none;
+}
+
+.console-operations-redesign .section-head__text>.t-caption {
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+
+.console-operations-redesign .wsregion__head h2 {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  line-height: var(--lh-snug);
+}
+
+.console-operations-redesign .wsregion__head>.btn {
+  min-height: 36px;
+  padding-inline: var(--s3);
+  font-size: var(--fs-secondary);
+  white-space: nowrap;
+}
+
+.console-operations-redesign .wsregion__body {
+  padding: 0 var(--s4) var(--s4);
+}
+
+/* Overview task rows: no decorative rail, clear hierarchy and stable targets. */
+.console-operations-redesign .overview-board {
+  gap: var(--s4);
+}
+
+.console-operations-redesign .overview-board__main {
+  gap: var(--s2);
+}
+
+.console-operations-redesign .overview-task {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--s3);
+  min-height: 72px;
+  padding: var(--s3) var(--s4);
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  background: var(--surface);
+  transition: border-color var(--dur-1) var(--ease-out),
+    background-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+
+.console-operations-redesign .overview-task:hover {
+  transform: none;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--ops-line));
+  box-shadow: var(--e1);
+}
+
+.console-operations-redesign .overview-task:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.console-operations-redesign .overview-task__rail {
+  display: none;
+}
+
+.console-operations-redesign .overview-task__body {
+  gap: var(--s1);
+}
+
+.console-operations-redesign .overview-task__head {
+  gap: var(--s2);
+}
+
+.console-operations-redesign .overview-task__head strong {
+  font-size: var(--fs-body);
+  font-weight: var(--fw-semibold);
+}
+
+.console-operations-redesign .overview-task__head .t-caption,
+.console-operations-redesign .overview-task__body>.t-caption {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-normal);
+  color: var(--text-secondary);
+}
+
+.console-operations-redesign .overview-task__count strong {
+  font-size: var(--fs-h3);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.console-operations-redesign .overview-task__go {
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
+  color: var(--accent);
+}
+
+.console-operations-redesign .overview-board__side {
+  gap: var(--s3);
+  padding: var(--s4);
+  border: 1px solid var(--ops-line);
+  border-radius: var(--ops-radius);
+  background: var(--ops-soft);
+}
+
+.console-operations-redesign .overview-board__title {
+  margin: 0 0 var(--s1);
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  letter-spacing: 0;
+  color: var(--text-primary);
+}
+
+.console-operations-redesign .overview-bar {
+  grid-template-columns: minmax(48px, auto) minmax(0, 1fr) 32px;
+  gap: var(--s2);
+}
+
+.console-operations-redesign .overview-bar__label,
+.console-operations-redesign .overview-bar__value {
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-operations-redesign .overview-bar__track {
+  height: 6px;
+  border-radius: var(--r-xs);
+  background: color-mix(in srgb, var(--border-strong) 35%, var(--surface));
+}
+
+.console-operations-redesign .overview-bar__fill {
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--accent) 68%, var(--text-secondary));
+}
+
+/* Data lists and facts use the same compact reading rhythm. */
+.console-operations-redesign .overview-facts,
+.console-operations-redesign .overview-lists {
+  gap: var(--s3);
+}
+
+.console-operations-redesign .overview-facts dt {
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+
+.console-operations-redesign .overview-facts dd {
+  font-size: var(--fs-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.console-operations-redesign .overview-list li {
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--ops-line);
+  font-size: var(--fs-secondary);
+}
+
+.console-operations-redesign .overview-list li:last-child {
+  border-bottom: 0;
+}
+
+.console-operations-redesign :is(.input, .select, .textarea, .select-menu__trigger) {
+  min-height: var(--ops-control-h);
+  font-size: var(--fs-secondary);
+}
+
+.console-operations-redesign .btn {
+  min-height: var(--ops-control-h);
+  font-size: var(--fs-secondary);
+}
+
+.console-operations-redesign .btn--sm {
+  min-height: 32px;
+  font-size: var(--fs-caption);
+}
+
+.console-operations-redesign .t-caption {
+  font-size: var(--fs-caption);
+  line-height: var(--lh-normal);
+}
+
+.console-operations-redesign :is(.toolbar, .queue__filters, .audit-log__toolbar) {
+  align-items: center;
+  gap: var(--s2);
+  min-height: 48px;
+}
+
+.console-operations-redesign .operations-dashboard {
+  gap: var(--s4);
+}
+
+.console-operations-redesign .operations-dashboard>.wsregion,
+.console-operations-redesign .operations-dashboard>.panel {
+  border-radius: var(--ops-radius);
+}
+
+.console-operations-redesign .datatable--records {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+}
+
+@media (max-width: 960px) {
+  .console-operations-redesign.wspad {
+    padding-inline: var(--s3);
+  }
+
+  .console-operations-redesign>.pagehead {
+    align-items: flex-start;
+    gap: var(--s3);
+  }
+
+  .console-operations-redesign>.pagehead .pagehead__actions {
+    width: 100%;
+  }
+
+  .console-operations-redesign>.pagehead .pagehead__actions>.btn {
+    flex: 1 1 auto;
+    min-height: 44px;
+  }
+
+  .console-operations-redesign .stack-8,
+  .console-operations-redesign .operations-dashboard {
+    gap: var(--s4);
+  }
+
+  .console-operations-redesign .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .console-operations-redesign .metric {
+    min-height: 88px;
+    padding: var(--s3);
+  }
+
+  .console-operations-redesign .metric:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .console-operations-redesign .metric:nth-child(n+3) {
+    border-top: 1px solid var(--ops-line);
+  }
+
+  .console-operations-redesign .wsregion__head {
+    padding-inline: var(--s3);
+    flex-wrap: wrap;
+  }
+
+  .console-operations-redesign .wsregion__body {
+    padding-inline: var(--s3);
+  }
+
+  .console-operations-redesign .overview-board,
+  .console-operations-redesign .overview-lists {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .console-operations-redesign .overview-task {
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: var(--s3);
+  }
+
+  .console-operations-redesign .overview-task__go {
+    display: none;
+  }
+
+  .console-operations-redesign .overview-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .console-operations-redesign :is(.input, .select, .textarea, .select-menu__trigger, .btn) {
+    min-height: 44px;
+    font-size: var(--fs-body);
+  }
+
+  .console-operations-redesign .btn--sm {
+    min-height: 44px;
+    font-size: var(--fs-secondary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-operations-redesign .overview-task {
+    transition: none;
+  }
+}

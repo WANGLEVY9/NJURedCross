@@ -357,7 +357,7 @@ export default async function dataPage() {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide operations-module console-operations-redesign' },
     pageHead({
       label: '数据中心',
       title: 'SeaTable 表结构与数据',

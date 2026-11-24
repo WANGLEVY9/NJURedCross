@@ -81,9 +81,9 @@ export default async function overviewPage(context, shell) {
         const top = group.top || {};
         return h('button', {
           class: 'overview-task', type: 'button', data: { board: group.key },
+          aria: { label: `${group.label} ${group.count} 项待处理，前往处理` },
           on: { click: () => { const route = taskRoute({ view: group.view, target: top.target }); if (route) navigate(route); } },
         },
-          h('span', { class: 'overview-task__rail' }),
           h('span', { class: 'overview-task__body' },
             h('span', { class: 'overview-task__head' },
               h('strong', { text: group.label }),
@@ -98,11 +98,12 @@ export default async function overviewPage(context, shell) {
       });
       const distribution = groups.map((group) => {
         const max = Math.max(...groups.map(item => item.count), 1);
-        return h('div', { class: 'overview-bar' },
+        const percent = Math.round((group.count / max) * 100);
+        return h('div', { class: 'overview-bar', role: 'group', aria: { label: `${group.label} ${group.count} 项，占最多板块 ${percent}%` } },
           h('span', { class: 'overview-bar__label', text: group.label }),
-          h('span', { class: 'overview-bar__track' },
-            h('span', { class: 'overview-bar__fill', attrs: { style: `width:${Math.round((group.count / max) * 100)}%` } })),
-          h('span', { class: 'overview-bar__value', text: String(group.count), attrs: { title: `${group.count} 项待办，占最多板块的 ${Math.round((group.count / max) * 100)}%` } }));
+          h('span', { class: 'overview-bar__track', role: 'meter', aria: { label: `${group.label}待办占比`, valuenow: String(group.count), valuemin: '0', valuemax: String(max), valuetext: `${group.count} 项，占最多板块 ${percent}%` } },
+            h('span', { class: 'overview-bar__fill', attrs: { style: `width:${percent}%` } })),
+          h('span', { class: 'overview-bar__value', text: String(group.count) }));
       });
       return [
         h('div', { class: 'overview-board' },
@@ -202,7 +203,7 @@ export default async function overviewPage(context, shell) {
     },
   });
 
-  const node = h('div', { class: 'view wspad operations-module operations-overview' },
+  const node = h('div', { class: 'view wspad operations-module operations-overview console-operations-redesign' },
     pageHead({
       title: '运营总览',
       description: '先看现在要处理什么，再看业务是否健康。',
@@ -213,20 +214,20 @@ export default async function overviewPage(context, shell) {
     }),
     h('div', { class: 'stack-8' },
       metricsRegion,
-      region({ label: '待办', title: '待处理事项', body: queueRegion }),
+      region({ title: '待处理事项', description: '按板块聚合，先看紧急事项。', body: queueRegion }),
       h('div', { class: 'operations-dashboard' },
         hasPermission('events') ? region({
-          label: '活动', title: '活动健康',
+          title: '活动健康',
           actions: [button({ label: '活动管理', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/events' })],
           body: activityRegion,
         }) : null,
         hasPermission('materials') ? region({
-          label: '物资', title: '库存与在办',
+          title: '库存与在办',
           actions: [button({ label: '物资管理', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/materials' })],
           body: materialsRegion,
         }) : null,
         hasPermission('settings') ? region({
-          label: '审计', title: '最近操作记录',
+          title: '最近操作记录',
           actions: [button({ label: '全部记录', variant: 'ghost', size: 'sm', iconAfter: 'arrowRight', iconMotion: 'nudge', href: '/console/audit' })],
           body: auditRegion,
         }) : null,

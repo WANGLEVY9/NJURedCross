@@ -1769,7 +1769,7 @@ export default async function outreachPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide operations-module operations-outreach' },
+    { class: 'view wspad wspad--wide operations-module operations-outreach console-operations-redesign' },
     pageHead({
             title: '审核内容，安排发布',
       description: '征集、审核、排期与发布结果登记在一条流水线上。外部渠道仍由人工确认发布，平台负责记录与追溯。',
