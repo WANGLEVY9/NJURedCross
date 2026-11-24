@@ -3,7 +3,7 @@ import {h} from '../../core/dom.js';
 import {button,field,definitionList,notice} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {reportError} from '../../core/toast.js';
-import {runningPositions,runningParticipants,runningHours,runningHourDefaults,runningPresetHours} from '../../shared/activity-running.js';
+import {runningPositions,runningParticipants,runningHours,runningHourDefaults,runningPresetHours,positionOptionLabel} from '../../shared/activity-running.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {runningReviewEditor} from './activity-running-editor.js';
 import {hoursBatchReview} from './activity-hours-batch.js';
@@ -101,25 +101,35 @@ export function activityRunningWorkspace({adminEditInformation,event,data,review
   supplement.disabled=busy||!state.canRecord||!addSupplement;
   supplement.title=state.status==='submitted'?'时长已提交主席团审核；如需补录请先「重新打开初审」':state.canRecord?'':'当前账号或项目状态不允许补录人员';
   // 补录单独成区：它不进初审名单，若和报名行混排会让「参与 N 人」对不上。
+  // 分岗位活动按岗位分组：平铺成一张清单时看不出谁属于哪个岗位，
+  // 补录时选错岗位也不会暴露出来。
   const supplements=state.supplements||[];
+  const supplementGroups=new Map();
+  for(const row of supplements){
+   const key=row.position||'未标岗位';
+   if(!supplementGroups.has(key))supplementGroups.set(key,[]);
+   supplementGroups.get(key).push(row);
+  }
   supplementBox.hidden=!supplements.length;
   supplementBox.replaceChildren(...(supplements.length?[
    h('h3',{class:'activity-section-title',text:`已补录 ${supplements.length} 人`}),
    h('p',{class:'t-caption',text:'补录人员不计入初审名单；主席团确认后才计入最终时长表。'}),
-   ...supplements.map(row=>h('div',{class:'row-between row-wrap'},
-    h('span',{class:'t-caption',text:`${row.name} · ${row.studentId} · ${row.department||'院系未填'} · ${row.position||''} · 服务 ${row.serviceHours} · 培训 ${row.trainingHours} · 交通 ${row.travelHours}`}),
-    h('span',{class:'row-2'},
-     h('span',{class:'t-caption',text:row.approval==='pending'?'待主席团确认':'已确认'}),
-     row.canRevoke&&revokeSupplement?button({label:'撤回',size:'sm',variant:'ghost',onClick:async()=>{
-      if(!await confirmAction({title:'撤回这条补录？',description:`${row.name} · ${row.studentId}`,confirmLabel:'撤回补录'}))return;
-      try{await revokeSupplement({rowId:row.id});await fresh();}catch(error){reportError(error,'撤回失败');}
-     }}):null)))]:[]));
+   ...[...supplementGroups].flatMap(([position,rows])=>[
+    h('h4',{text:`${position} · ${rows.length} 人`}),
+    ...rows.map(row=>h('div',{class:'row-between row-wrap'},
+     h('span',{class:'t-caption',text:`${row.name} · ${row.studentId} · ${row.department||'院系未填'} · 服务 ${row.serviceHours??'—'} · 培训 ${row.trainingHours??'—'} · 交通 ${row.travelHours??'—'}`}),
+     h('span',{class:'row-2'},
+      h('span',{class:'t-caption',text:row.approval==='pending'?'待主席团确认':'已确认'}),
+      row.canRevoke&&revokeSupplement?button({label:'撤回',size:'sm',variant:'ghost',onClick:async()=>{
+       if(!await confirmAction({title:'撤回这条补录？',description:`${row.name} · ${row.studentId}`,confirmLabel:'撤回补录'}))return;
+       try{await revokeSupplement({rowId:row.id});await fresh();}catch(error){reportError(error,'撤回失败');}
+      }}):null)))])]:[]));
  }
  const view=button({label:'活动信息查看',onClick:async()=>{try{const content=await loadInformation();if(!disposed)openModal({title:'活动信息',width:1100,body:activityInformationPreview(content),footer:[]});}catch(error){reportError(error,'活动信息加载失败');}}});
  const edit=button({label:'活动信息修改',disabled:true,onClick:async()=>{if(adminEditInformation&&(!editInformation||snapshot.events.find(row=>row._id===event._id)?.approvalAccess?.canEditInformation!==true))return adminEditInformation();if(busy||!editInformation||edit.disabled)return;try{liveEditor=await editInformation(fresh);}catch(error){reportError(error,'活动信息加载失败');}}});
  const upload=button({label:'上传及预览时长表',variant:'primary',onClick:()=>openEditor()});
 // 补录入口与初审同权：本活动负责人即可，提交后由主席团逐条确认。
-const supplementPositions=()=>runningPositions(snapshot).map(row=>({id:row._id,name:`${row['地点']||row['岗位']||row['活动名称']} · ${row['报名日期']} ${row['报名时段']}`,event:row}));
+const supplementPositions=()=>runningPositions(snapshot).map(row=>({id:row._id,name:positionOptionLabel(row),event:row}));
 const supplement=button({label:'手动添加人员',onClick:async()=>{
  if(busy||!state.canRecord||!addSupplement)return;
  busy=true;render();

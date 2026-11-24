@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
-import {createFinalHours} from '../lib/events/final-hours.js';
-import {runningSourceDigest} from '../lib/events/running-review.js';
+import {createFinalHours,groupFinalHoursRows} from '../lib/events/final-hours.js';
+import {runningSourceDigest,supplementRowsOf} from '../lib/events/running-review.js';
 import {workflowApprovalHash,workflowEventApproved} from '../lib/events/workflow.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
 import {createMutationQueue} from '../lib/events/safety.js';
@@ -158,6 +158,61 @@ test('the exported workbook marks supplemented rows in the remark column',async(
  assert.ok(rows.some(([name,remark])=>name==='合成甲'&&!String(remark||'').includes('补录')),'普通行不应标注');
 });
 
+test('the supplement view carries the position and all three hour fields',async()=>{
+ // 进行中页与终审页共用这一个视图。曾经各写一份，其中一份漏了时长字段，
+ // 界面就只剩「服务 undefined · 培训 undefined · 交通 undefined」。
+ const finalRows=new Map([
+  ['reg-1',{id:'reg-1',studentId:'00654321',serviceHours:4,trainingHours:1,travelHours:0,manual:true,manualApproval:'pending',addedBy:'director'}],
+  ['reg-2',{id:'reg-2',studentId:'00777777',serviceHours:2,trainingHours:0,travelHours:1,manual:true,manualApproval:'revoked',addedBy:'director'}],
+ ]);
+ const registrations=[
+  {_id:'reg-1',姓名:'合成乙',学号:'00654321',院系:'合成学院',岗位:'第二打卡点',活动ID:'p-code-2',报名状态:'已签到'},
+  {_id:'reg-2',姓名:'合成丁',学号:'00777777',院系:'合成学院',岗位:'第一打卡点',活动ID:'p-code',报名状态:'已撤回'},
+ ];
+ // 两个岗位共用同一个地点，只有「岗位」能区分。
+ const jobs=[{活动ID:'p-code',岗位:'第一打卡点',地点:'南京大学仙林校区'},{活动ID:'p-code-2',岗位:'第二打卡点',地点:'南京大学仙林校区'}];
+ const rows=supplementRowsOf(finalRows,registrations,jobs,'director');
+ assert.equal(rows.length,1,'已撤回的行不进补录列表');
+ assert.equal(rows[0].position,'第二打卡点','岗位取报名行自己记录的那一个，不是项目第一个岗位');
+ assert.equal(rows[0].serviceHours,4);
+ assert.equal(rows[0].trainingHours,1);
+ assert.equal(rows[0].travelHours,0);
+ assert.equal(rows[0].canRevoke,true);
+ // 其他人不能撤回：撤回只限补录人本人。
+ assert.equal(supplementRowsOf(finalRows,registrations,jobs,'someone-else')[0].canRevoke,false);
+});
+
+test('confirming a supplement works when its row is merged with a normal registration',async()=>{
+ const f=fixture({phase:'submitted'});
+ const {id}=await f.service.addSupplement('p',body(),'director',{accountId:'member'});
+ // 同一人另一场次的普通报名行：合并后前端只拿到组内排序第一行的 id。
+ f.data.registrations.push({_id:'r2',活动ID:'p-code',姓名:'合成乙',学号:'00654321',账号ID:'member',院系:'合成学院',
+  报名日期:'2030-01-02',报名时段:'13:00—16:00',报名状态:'已签到',签到照片ID:'photo-2'});
+ const config=JSON.parse(f.event['报名页配置']);
+ config.runningReview.entries.push({id:'r2',serviceHours:2,trainingHours:0,travelHours:0,decision:'pass',reason:'',evidenceChecked:true});
+ config.runningReview.sourceDigest=runningSourceDigest(f.data.events,f.data.registrations,f.data.checkins,f.data.ledger);
+ f.event['报名页配置']=JSON.stringify(config);
+ const sheet=await f.service.finalHours('p','chair');
+ const merged=sheet.rows.find(item=>item.studentId==='00654321');
+ assert.equal(merged.manual,true);
+ assert.notEqual(merged.id,id,'合并行 id 不等于补录行 id，正是报「补录记录不存在」的前提');
+ // 前端传的是合并行 id：必须回查到同组的补录行，而不是 404。
+ const confirmed=await f.service.confirmSupplement('p',{rowId:merged.id},'chair');
+ assert.equal(confirmed.approval,'approved');
+ const after=await f.service.finalHours('p','chair');
+ assert.equal(after.rows.find(item=>item.studentId==='00654321').manualApproval,'approved');
+});
+
+test('the same slot written in two formats is not listed twice',async()=>{
+ // 岗位行配置 `14:00:00-16:00:00`，报名页写 `14:00—16:00`：同一场，日期列只能出现一次。
+ const [group]=groupFinalHoursRows([
+  {id:'a',studentId:'001',dates:'2030-01-01 14:00—16:00',serviceHours:1,trainingHours:1,travelHours:1,decision:'pass',position:'第一打卡点'},
+  {id:'b',studentId:'001',dates:'2030-01-01 14:00:00-16:00:00',serviceHours:1,trainingHours:1,travelHours:1,decision:'pass',position:'第一打卡点'},
+ ]);
+ assert.equal(group.merged.dates,'2030-01-01 14:00—16:00');
+ assert.equal(group.merged.serviceHours,2);
+});
+
 test('merged rows inherit the pending approval instead of hiding it behind a normal row',async()=>{
  const f=fixture({phase:'submitted'});
  const {id}=await f.service.addSupplement('p',body(),'director',{accountId:'member'});
@@ -174,4 +229,34 @@ test('merged rows inherit the pending approval instead of hiding it behind a nor
  assert.equal(merged.manual,true);
  assert.equal(merged.manualApproval,'pending');
  await assert.rejects(f.service.exportFinalHours('p',{token:sheet.token},'chair'),/待主席团确认/);
+});
+
+test('a supplement records the position chosen at entry, not the project default',async()=>{
+ const f=fixture({phase:'submitted'});
+ // 两个岗位必须挂在同一个项目下才算同一次活动：项目键认 `ordinary.groupId`。
+ const config=JSON.parse(f.event['报名页配置']);
+ config.ordinary={groupId:'synthetic-project'};
+ f.event['报名页配置']=JSON.stringify(config);
+ // 第二岗位与第一岗位共用同一个地点和时段——只靠「岗位」区分，正是现场最容易记错的情形。
+ const second={...f.event,_id:'p2',活动ID:'p-code-2',岗位:'第二打卡点'};
+ f.data.events.push(second);
+ delete f.event['批准摘要'];delete second['批准摘要'];
+ f.event['批准摘要']=workflowApprovalHash(f.event);
+ second['批准摘要']=workflowApprovalHash(second);
+ // 来源摘要覆盖项目内全部岗位行，新增行后必须按两行重算，否则终审会报「依据已改变」。
+ config.runningReview.sourceDigest=runningSourceDigest(f.data.events,f.data.registrations,f.data.checkins,f.data.ledger);
+ f.event['报名页配置']=JSON.stringify(config);
+ const {id}=await f.service.addSupplement('p',body({eventId:'p2'}),'director',{accountId:'member'});
+ const list=await f.service.hoursSupplementList('p','director');
+ const row=list.items.find(item=>item.id===id);
+ assert.equal(row.position,'第二打卡点','补录行必须记在所选的岗位上');
+ // 三项时长是补录台账的真实字段：漏带会让人数核对时只看到 undefined。
+ assert.equal(row.serviceHours,4);
+ assert.equal(row.trainingHours,1);
+ assert.equal(row.travelHours,0);
+ // 同一份字段也要出现在终审视图里，两处界面口径一致。
+ const sheet=await f.service.finalHours('p','chair');
+ const finalRow=sheet.rows.find(item=>item.id===id);
+ assert.equal(finalRow.position,'第二打卡点');
+ assert.equal(finalRow.serviceHours,4);
 });

@@ -66,16 +66,28 @@ export function manualHoursDialog({key,positions,token,submit,loadLatest,onSaved
   searchTimer=setTimeout(()=>{void runSearch();},250);
  });
  const feedback=h('div',{role:'status'}),detailsHost=h('div');let details;
- const position=field({label:'实际服务班次',required:true,value:draft?.eventId||positions[0]?.id,options:positions.map(row=>({value:row.id,label:row.name})),onInput:()=>resetDetails()});
+ // 分岗位活动必须显式选择岗位：默认落在第一岗位会让整批补录人员记到同一个岗位上。
+ // 单岗位项目没有第二选项，直接绑定该岗位，不额外要求操作人再点一次。
+ const multiplePositions=positions.length>1;
+ const position=field({label:multiplePositions?'实际服务岗位':'实际服务班次',required:true,value:draft?.eventId||(multiplePositions?'':positions[0]?.id||''),options:[...(multiplePositions?[{value:'',label:'请选择实际岗位'}]:[]),...positions.map(row=>({value:row.id,label:row.name}))],onInput:()=>resetDetails()});
  const reason=field({label:'补录依据',required:true,multiline:true,maxlength:500,value:draft?.reason||'',hint:'说明实际服务情况及核对依据。'});
  const checked=h('input',{type:'checkbox',checked:!!draft?.evidenceChecked,'aria-label':'已核对实际服务及补录依据'});
  checked.style.accentColor='var(--success, #23834b)';
- function resetDetails(){const event=positions.find(row=>row.id===position.control.value)?.event||{},values=draft?.details||entryValues(null,{报名日期:event['报名日期'],报名时段:event['报名时段']},event);if(integerTraining&&Number.isFinite(Number(values.trainingHours)))values.trainingHours=finalTrainingHours(values.trainingHours);details=hoursFields(values);if(integerTraining)details.node.querySelector('[data-hour-field="trainingHours"] input')?.setAttribute('step','1');draft=null;detailsHost.replaceChildren(details.node);}
+ function resetDetails(){
+  const selected=positions.find(row=>row.id===position.control.value);
+  if(!selected){
+   // 未选岗位就没有可用的预设时长与工作内容：给一句提示，不留一份空字段让人以为要手填。
+   details=null;
+   detailsHost.replaceChildren(notice('先选择实际岗位，系统会带出该岗位的预设时长与工作内容。',{tone:'neutral'}));
+   return;
+  }
+  const event=selected.event||{},values=draft?.details||entryValues(null,{报名日期:event['报名日期'],报名时段:event['报名时段']},event);if(integerTraining&&Number.isFinite(Number(values.trainingHours)))values.trainingHours=finalTrainingHours(values.trainingHours);details=hoursFields(values);if(integerTraining)details.node.querySelector('[data-hour-field="trainingHours"] input')?.setAttribute('step','1');draft=null;detailsHost.replaceChildren(details.node);
+ }
  const payload=()=>{
   const identity=identityValue()||{};
   return {requestId,eventId:position.control.value,...(identity.accountId?{accountId:identity.accountId}:{}),
    name:identity.name||'',studentId:identity.studentId||'',department:identity.department||'',email:identity.email||'',
-   details:details.values(),reason:reason.control.value.trim(),evidenceChecked:checked.checked,...(token?{token}: {})};
+   details:details?details.values():{},reason:reason.control.value.trim(),evidenceChecked:checked.checked,...(token?{token}: {})};
  };
  const remember=()=>{try{sessionStorage.setItem(storageKey,JSON.stringify({...payload(),...(submitted?{submitted}: {})}));}catch{/* Preserve the open form even when browser storage is unavailable. */}};
  function lock(){for(const node of body.querySelectorAll('input,select,textarea,button'))node.disabled=saving||uncertain;save.disabled=saving;save.querySelector('span').textContent=uncertain?'核对并重试':'添加人员';cancel.disabled=saving;}
@@ -85,7 +97,13 @@ export function manualHoursDialog({key,positions,token,submit,loadLatest,onSaved
   if(!submitted){
    if(searchPeople&&!picked){feedback.replaceChildren(notice('请先搜索并选择一名已注册成员',{tone:'warning'}));searchInput.focus();return;}
    if(!searchPeople&&!Object.values({manualName,manualStudent,manualDepartment}).every(node=>node.control.reportValidity()))return;
-   if(!details.valid()||!reason.control.reportValidity())return;
+   if(!positions.some(row=>row.id===position.control.value)){
+    // 岗位是补录的核心归属：没选就不能提交，否则会默认记到某个岗位上。
+    feedback.replaceChildren(notice('请选择实际服务岗位后再提交',{tone:'warning'}));
+    position.querySelector('.select-menu__trigger')?.focus();
+    return;
+   }
+   if(!details||!details.valid()||!reason.control.reportValidity())return;
    if(!checked.checked){feedback.replaceChildren(notice('请先核对实际服务及补录依据',{tone:'warning'}));return;}
    submitted=payload();remember();
   }
