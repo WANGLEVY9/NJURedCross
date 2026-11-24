@@ -22,6 +22,7 @@ import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import showcaseAdminPage from './showcase.js';
 import { protectDrawerDraft } from '../../ui/drawer-draft.js';
+import { memberPicker, memberLookupHint } from '../../ui/member-picker.js';
 import { makeThumbnail } from '../../core/image-thumb.js';
 
 const CHANNELS = [
@@ -325,7 +326,7 @@ function openReviewDrawer({
     const queryField = field({
       label: '美编登记（初审含美编招募）', name: 'editorQuery',
       placeholder: '输入姓名或学号，如 汤艺暄 / 251880248',
-      hint: '按姓名或学号在名册中精确匹配；重名时请改填学号。名册查不到说明还未入册。',
+      hint: '按姓名或学号在名册中精确匹配；同名会列出候选人，按学号选人。名册查不到即「未注册」，需先补录名册。',
     });
     const resultsNode = h('div', { class: 'stack-2' });
     const selectedNode = h('div', { class: 'stack-2' });
@@ -339,13 +340,18 @@ function openReviewDrawer({
       ));
     }
 
-    function pick(member) {
+    function setEditor(member) {
       manualEditor = {
         name: member.name, studentId: member.studentId,
         faculty: member.faculty || '', email: member.email || '',
       };
-      clear(resultsNode);
       renderSelected();
+    }
+
+    // 唯一命中：直接选中并收起候选区；同名候选则保留卡片并高亮，方便看清选的是哪一位、也能改选。
+    function pick(member) {
+      setEditor(member);
+      clear(resultsNode);
     }
 
     async function search() {
@@ -360,17 +366,20 @@ function openReviewDrawer({
         const payload = await consoleApi.outreach.members(query);
         const members = Array.isArray(payload?.members) ? payload.members : [];
         clear(resultsNode);
-        if (!members.length) {
-          resultsNode.append(notice('名册中没有找到，请核对姓名或学号；新成员需先补录名册。', { tone: 'warning' }));
+        // 名册查无此人 ⇒ 明确告诉对接人「未注册」，而不是笼统的「没找到」：
+        // 新成员没入册时，无论怎么改写法都查不出来，必须先去补录名册。
+        const hint = memberLookupHint(query, payload);
+        if (hint) {
+          resultsNode.append(notice(hint.text, { tone: hint.tone, title: hint.title, iconName: 'alert' }));
           return;
         }
         if (members.length === 1) { pick(members[0]); return; }
-        resultsNode.append(h('p', { class: 't-caption', text: `匹配到 ${members.length} 人，请选择：` }));
-        for (const member of members) {
-          resultsNode.append(button({
-            label: `${member.name} · ${member.studentId}${member.faculty ? ` · ${member.faculty}` : ''}`,
-            variant: 'secondary', size: 'sm', block: true,
-            onClick: () => pick(member),
+        // 同名多人：横向可滑动卡片，按学号选人（竖排按钮在抽屉里会顶掉正文）。
+        resultsNode.append(memberPicker(members, { query, onPick: setEditor }));
+        if (payload?.truncated) {
+          resultsNode.append(h('p', {
+            class: 't-caption t-faint',
+            text: `结果较多，只显示前 ${members.length} 条；直接填完整学号可一步定位。`,
           }));
         }
       } catch (error) {
