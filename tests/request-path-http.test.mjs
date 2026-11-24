@@ -2,63 +2,41 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { once } from 'node:events';
-import { readFile } from 'node:fs/promises';
-import vm from 'node:vm';
 import { assertApiRequestPath } from '../lib/http/request-path.js';
 import { requestBudgetMsFor, withHttpRequestBudget } from '../lib/http/request-budget.js';
-import { apiFailure } from '../lib/http/errors.js';
 import { json } from '../lib/http/response.js';
 import { isDisplayRequest } from '../lib/http/display-reads.js';
-
-const source = (
-  await readFile(new URL('../server.js', import.meta.url), 'utf8')
-).replace(/\r\n/g, '\n');
-
-const start = source.indexOf('const server = http.createServer(');
-const end = source.indexOf("server.on('error'", start);
-assert.ok(start >= 0 && end > start, 'HTTP entry markers must exist');
+import { createRequestMiddleware } from '../lib/http/request-middleware.js';
+import { createRequestConcurrencyGate } from '../lib/http/request-limits.js';
 
 async function fixture(t) {
   let businessCalls = 0;
-
-  const context = {
-    http,
-    observer: {http: (_req, _res, action) => action()},
-    latencyLedger: {start() {}},
-    URL,
-    assertApiRequestPath,
-    isDisplayRequest,
-    invalidateWrittenSnapshots() {},
-    // 入口按方法+路径申领预算，夹具必须给出同名实现，否则 vm 里会抛 ReferenceError。
-    requestBudgetMsFor,
-    withHttpRequestBudget,
-    apiFailure,
-    json,
-    publicReadCache: { clear() {} },
-    clearDisplayReads() {},
-    invalidateDisplayReads() {},
-    invalidatePublicSnapshots() {},
-    createWriteJournal: () => new Set(),
-    withWriteJournal: (_journal, operation) => operation(),
-    withDisplayReads: operation => operation(),
+  const middleware = createRequestMiddleware({
     api: async (_req, res) => {
       businessCalls++;
       json(res, 200, { ok: true });
     },
-    staticFile: async (_req, res) => {
-      json(res, 404, { ok: false });
-    },
-    // 后台任务让路：入口每次请求都标记一次活动，这里只需要空实现。
+    staticFile: async (_req, res) => json(res, 404, { ok: false }),
+    pdfAssets: async () => false,
     backgroundGate: { mark() {} },
-  };
-
-  vm.createContext(context);
-  vm.runInContext(
-    `${source.slice(start, end)}\nglobalThis.testServer = server;`,
-    context,
-  );
-
-  const server = context.testServer;
+    requestGate: createRequestConcurrencyGate({ limit: 8, queueLimit: 8 }),
+    assertApiRequestPath,
+    isDisplayRequest,
+    invalidateWrittenSnapshots: () => {},
+    requestBudgetMsFor,
+    withHttpRequestBudget,
+    withDisplayReads: operation => operation(),
+    createWriteJournal: () => new Set(),
+    withWriteJournal: (_journal, operation) => operation(),
+    clientTelemetry: async (_req, res) => json(res, 204, { ok: true }),
+    enforcePublicLimit: () => {},
+    handleGame: async (_req, res) => json(res, 200, { ok: true }),
+    latency: { start() {}, snapshot: () => ({ requests: 0, overBudget: 0,
+      overBudgetRate: 0, trackedRoutes: 0, slowest: [] }) },
+  });
+  const server = http.createServer((req, res) => {
+    void middleware(req, res).catch(() => { if (!res.writableEnded) res.destroy(); });
+  });
   t.after(async () => {
     const closed = new Promise(resolve => server.close(resolve));
     server.closeAllConnections();

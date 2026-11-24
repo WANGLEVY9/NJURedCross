@@ -78,6 +78,8 @@ HTTP 层已抽出为无业务依赖的模块，长运行连接的认证入口已
 
 **HTTP**（`lib/http/`）—— `errors.js` 把上游 SeaTable 认证失败映射为数据服务不可用，与普通鉴权错误区分开，避免上游故障被当作用户会话失效；`display-reads.js` 让展示读共享一次查询，鉴权与写入始终直连权威源。前端 `core/api.js` 配合处理上游错误与 CSRF 重试。
 
+**请求中间件**（`lib/http/request-middleware.js`）—— 入口按固定顺序执行探针、请求体上限、请求并发闸门、观测、写表记账、请求预算、展示读上下文、业务派发和错误归一。`request-limits.js`、`probes.js` 分别封装请求体/并发约束与脱敏运维输出。UNO 的 SSE 长连接绕过全局并发闸门，仍受房间上限、每 IP 限流和席位令牌桶约束。新增 API 沿用这条内部管线，不引入 Express/Koa 一类全量接管框架。
+
 **缓存与队列**（`lib/cache/`、`lib/queue/`）—— 展示投影按表打标签，写请求结束后只失效依赖被写表的部分，公共快照按依赖表级联丢弃；后台副作用进入 `jobs.sqlite`，由单进程 worker 按租约执行、退避重试，重启后继续。边界与理由见 [读缓存与后台队列](CACHE_AND_QUEUE.md)。
 
 **内容投稿附件**（`lib/attachment/`）—— `api.js` 是域路由的现役范例：`attachmentRoutes(req, res, url, ctx)` 在 `/api/public/` 兜底之前拦截，`ctx` 注入 json/行存储/会话守卫/审计/限流/归属校验；投稿绑定时序为「先投稿行、后回填附件」，不引入事务假设。表契约与状态机见 [投稿附件专项](SUBMISSION_ATTACHMENTS.md)。

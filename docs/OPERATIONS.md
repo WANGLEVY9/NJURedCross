@@ -162,6 +162,8 @@ main，并在 Actions 部署失败或延迟时调用同一个发布接收器。�
 
 生产环境默认启用 `PLATFORM_TELEMETRY`（显式 `false` 关闭）；非生产需显式 `true`。JSON 日志写标准输出，由 `njuredcross.service` 的 journald 接收，不新增第三方上报服务，不写 NJUTable。应用使用独立 journal，目标保留 7 天并限制为 256 MiB。安装、查询和质量门禁见 [链路观测与保留策略](TELEMETRY.md)。Nginx timing 日志另按既有 14 份日轮转。
 
+应用提供三个脱敏运维端点：`/healthz` 只报告进程存活；`/readyz` 报告配置、私有状态目录、任务队列和监听状态；`/metrics` 输出固定的 Prometheus 文本指标，仅响应本机回环地址。探针与指标不调用业务数据源，不返回账号、Token、Cookie、查询参数或业务行内容。`PLATFORM_HTTP_CONCURRENCY` 与 `PLATFORM_HTTP_QUEUE_LIMIT` 控制普通 HTTP 请求的并发与等待队列，默认 32 / 64；队列满时返回明确的 503，UNO SSE 长连接不占该闸门。
+
 - `http`：所有入口的脱敏路由、方法、状态、总耗时、断开标志、活动请求数、依赖次数/累计耗时。返回 `X-Request-ID`，Nginx 配置同步更新后亦记录该 ID。
 - `dependency`：SeaTable SDK 请求（包括认证）、SMTP、NJUBox、OSS、外部内容、队列等待、密码计算及后台任务分类。默认最多 10000 条诊断记录/分钟/进程，丢弃数量进入下一条 runtime；并行调用的累计耗时可能大于请求墙钟耗时，不要相减计算网络时间。
 - `browser`：共享 JSON API 边界的完成耗时、失败类型、服务端请求 ID 与每次尝试独立的 clientTrace。超过 1 秒及错误尝试优先上报，快速成功抽样 5%，每标签最多 20 条/分钟；写入仍只执行一次，日志不会自动重发业务操作。文件下载、原生导航、渲染耗时不在该浏览器指标内，服务端仍覆盖所有入口。

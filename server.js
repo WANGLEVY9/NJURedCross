@@ -156,6 +156,8 @@ import {
 import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { collectRequestBody } from './lib/http/request-body.js';
 import { readJsonObject } from './lib/http/json-body.js';
+import { createRequestConcurrencyGate, DEFAULT_JSON_BODY_LIMIT_BYTES, DEFAULT_UPLOAD_BODY_LIMIT_BYTES } from './lib/http/request-limits.js';
+import { createRequestMiddleware } from './lib/http/request-middleware.js';
 import { openMaterialReceiptStore } from './lib/materials/receipt-store.js';
 import { openPublicMaterialRequestStore } from './lib/materials/public-request-store.js';
 import { createPublicMaterialsPortal, assertMaterialRequestAsset, materialLinkedIds } from './lib/materials/public-portal.js';
@@ -2685,7 +2687,7 @@ function assertPublicEmail(email) {
   return email;
 }
 
-async function readJson(req, maxBytes) {
+async function readJson(req, maxBytes = DEFAULT_JSON_BODY_LIMIT_BYTES) {
   return readJsonObject(req, maxBytes);
 }
 
@@ -5146,7 +5148,7 @@ async function portalRoutes(req, res, url) {
       return json(res, 200, { ok: true, penName: current || null, bound: Boolean(current) });
     }
 
-    requireCsrf(req, session);
+    if (!requireCsrf(req, res, session)) return;
     // 已绑定：一律拒绝（无改名审核流，D1）
     if (current) {
       return json(res, 409, { ok: false, code: 'pen_name_locked', penName: current, message: `笔名已绑定为「${current}」，绑定后不可更改。` });
@@ -7122,77 +7124,48 @@ const staticFile = createStaticHandler(publicDir);
 const pdfAssets = createPdfAssets();
 // 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
 const backgroundGate = createIdleGate();
-const server = http.createServer((req, res) => observer.http(req,res,async () => {
-  // 时延记账独立于 telemetry：关掉日志也要能验收「≤1 秒」。
-  latencyLedger.start(req, res);
-  // 桌游房间使用独立的内存状态，不占 SeaTable 请求预算。
-  if (String(req.url || '').startsWith('/api/games/uno/')) {
-    if (req.method === 'POST') {
-      let trusted = false;
-      try { const origin = new URL(req.headers.origin); trusted = origin.host === req.headers.host && ['https:', 'http:'].includes(origin.protocol); } catch {}
-      if (!trusted || !/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) {
-        return json(res, 403, { ok: false, message: '请求来源不受信任。' });
-      }
-      try { enforcePublicLimit(req, 'uno-write', 2000); }
-      catch (error) { return json(res, 429, { ok: false, message: error.message, retryAfterSeconds: error.retryAfterSeconds }); }
-    }
-    const gameUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    // 已登录则把平台账号身份带给房间（昵称取自账号）；未登录仍可匿名游玩。
-    const unoSession = getSession(req);
-    const unoUser = unoSession
-      ? { username: unoSession.username, name: accountsByUsername.get(unoSession.username)?.displayName || unoSession.username }
-      : null;
-    void handleUnoRequest(req, res, gameUrl, unoUser).then((handled) => {
-      // 未匹配的路径必须显式 404，否则响应永远不发、连接被占住。
-      if (!handled && !res.writableEnded && !res.destroyed) {
-        json(res, 404, { ok: false, code: 'route_not_found', message: '接口不存在或请求方法不受支持。' });
-      }
-    }).catch(() => { if (!res.writableEnded) res.destroy(); });
-    return;
-  }
-  const requestHandled = (async () => {
-  backgroundGate.mark();
-  try {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (url.pathname.startsWith('/api/')) {
-      assertApiRequestPath(url.pathname);
-      if(url.pathname==='/api/telemetry/client'){
-        return await clientTelemetry(req,res,{json,limit:r=>enforcePublicLimit(r,'telemetry',12000)});
-      }
-      const display = isDisplayRequest(req.method, url.pathname);
+const concurrencyLimit = Number.parseInt(process.env.PLATFORM_HTTP_CONCURRENCY || '32', 10);
+const queueLimit = Number.parseInt(process.env.PLATFORM_HTTP_QUEUE_LIMIT || '64', 10);
+const requestGate = createRequestConcurrencyGate({
+  limit: concurrencyLimit >= 1 && concurrencyLimit <= 1024 ? concurrencyLimit : 32,
+  queueLimit: queueLimit >= 0 && queueLimit <= 4096 ? queueLimit : 64,
+});
 
-      // 写表记账：请求内记录被写入的表，结束后只失效依赖这些表的投影。
-      const journal = createWriteJournal();
-      try {
-        return await withWriteJournal(journal, () => withHttpRequestBudget(req, res, () =>
-          display
-            ? withDisplayReads(() => api(req, res, url))
-            : api(req, res, url),
-        // 上传类接口单独放宽：字节要过本机中转，30 秒会在「写表」那一步把请求掐掉。
-        { timeoutMs: requestBudgetMsFor(req.method, url.pathname) }));
-      } finally {
-        if (journal.size) for (const table of journal) invalidateWrittenSnapshots(table);
-      }
+async function handleUno(req, res, url) {
+  if (req.method === 'POST') {
+    let trusted = false;
+    try { const origin = new URL(req.headers.origin); trusted = origin.host === req.headers.host && ['https:', 'http:'].includes(origin.protocol); } catch {}
+    if (!trusted || !/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) {
+      return json(res, 403, { ok: false, message: '请求来源不受信任。' });
     }
-    if (await pdfAssets(req, res, url)) return;
-    return await staticFile(req, res, url);
-  } catch (error) {
-    if(res.destroyed||res.writableEnded)return;
-    if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error, { method: req.method }); json(res, failure.status, failure.payload); }
-    else res.destroy();
+    try { enforcePublicLimit(req, 'uno-write', 2000); }
+    catch (error) { return json(res, 429, { ok: false, message: error.message, retryAfterSeconds: error.retryAfterSeconds }); }
   }
-  })();
-  // 子路由用 `false` 表示「这个前缀下没有匹配的处理」。
-  // 直接把它 return 出去，响应就永远不会发出：客户端一直等到自己超时，连接被占住。
-  // 这类请求正确的语义是 404（路径或方法不存在），不是挂起。
-  return requestHandled.then((result) => {
-    if (result === false && !res.writableEnded && !res.destroyed) {
-      json(res, 404, { ok: false, code: 'route_not_found', message: '接口不存在或请求方法不受支持。' });
-    }
-  }).catch(() => {
-    if (!res.writableEnded && !res.destroyed) res.destroy();
-  });
-}));
+  const unoSession = getSession(req);
+  const unoUser = unoSession
+    ? { username: unoSession.username, name: accountsByUsername.get(unoSession.username)?.displayName || unoSession.username }
+    : null;
+  const handled = await handleUnoRequest(req, res, url, unoUser);
+  if (!handled && !res.writableEnded && !res.destroyed) return false;
+  return undefined;
+}
+
+const requestMiddleware = createRequestMiddleware({
+  api, staticFile, pdfAssets, backgroundGate, requestGate,
+  createWriteJournal, withWriteJournal, withHttpRequestBudget, withDisplayReads,
+  isDisplayRequest, invalidateWrittenSnapshots, requestBudgetMsFor,
+  assertApiRequestPath, clientTelemetry, enforcePublicLimit, handleGame: handleUno,
+  latency: latencyLedger, cacheStats: displayReadCacheStats, queueStats: () => jobQueue.stats(),
+  runtimeStats: () => observer.runtime(), telemetryStats: () => observer.runtime(),
+  readinessChecks: { sessionSecret: () => Boolean(sessionSecret),
+    writeState: () => Boolean(writeStateDir), jobQueue: () => Boolean(jobQueue),
+    server: () => server.listening },
+  metricsAccess: req => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket?.remoteAddress),
+  bodyLimitFor: (req, url) => requestBudgetMsFor(req.method, url.pathname) > 30_000
+    ? { uploadMaxBytes: DEFAULT_UPLOAD_BODY_LIMIT_BYTES, allowNonMultipartUpload: true }
+    : undefined,
+});
+const server = http.createServer((req, res) => observer.http(req, res, () => requestMiddleware(req, res)));
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
   else console.error('HTTP server failed; check service configuration and runtime status.');
