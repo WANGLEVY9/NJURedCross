@@ -1284,7 +1284,7 @@ export default async function materialsPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide material-management-page' },
+    { class: 'view wspad wspad--wide operations-module material-management-page console-operations-redesign' },
     materialServices('loan', { console: true }),
     pageHead({
       label: '物资中心',

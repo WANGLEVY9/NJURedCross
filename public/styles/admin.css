@@ -1,6 +1,7 @@
 @import './activity-review.css';
 @import './activity-publication.css';
 @import './activity-workspace.css';
+@import './console-ui-hardening.css';
 
 /* ===================================================================   Operations console — application-grade workspace
    Left navigation · centre workspace · right context inspector
