@@ -35,9 +35,10 @@
 .activity-running-modal .modal__foot{justify-content:flex-end}.activity-running-review-table th{white-space:nowrap}.activity-running-review-table td:nth-child(3){min-width:220px;max-width:300px;overflow-wrap:anywhere}.activity-running-workspace .activity-registration-table table{min-width:650px}.activity-running-workspace .activity-registration-table td:first-child{min-width:75px}.activity-running-workspace .activity-registration-table td:last-child{min-width:180px}.activity-running-evidence{max-width:100%;max-height:60vh;object-fit:contain}
 /* Final-hours tables share one layout in the workspace and in the preview dialog.
    The dialog is mounted outside .activity-v2, so these rules must stay global. */
-.activity-final-hours-table{width:100%;max-width:100%;overflow-x:auto;overflow-y:clip;overscroll-behavior-x:contain;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface)}
-.activity-final-hours-table>table{width:var(--final-hours-table-width,1786px);min-width:var(--final-hours-table-width,1786px);table-layout:fixed;border-collapse:collapse}
-.activity-final-hours-table caption{padding:10px 12px;font-size:var(--fs-title);font-weight:var(--fw-semibold);line-height:1.4;text-align:left}
+.activity-final-hours-table{width:100%;max-width:100%;min-height:0;max-height:min(58vh,620px);overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface)}
+.activity-final-hours-table>table thead th{position:sticky;top:0;z-index:2;background:var(--surface-muted,#f7f6fa);border-bottom:1px solid var(--border)}
+.activity-final-hours-table>table{width:var(--final-hours-table-width,1786px);min-width:var(--final-hours-table-width,1786px);table-layout:fixed;border-collapse:separate;border-spacing:0}
+.activity-final-hours-table caption{padding:10px 12px;background:var(--surface);font-size:var(--fs-title);font-weight:var(--fw-semibold);line-height:1.4;text-align:left}
 .activity-final-hours-table th,.activity-final-hours-table td{box-sizing:border-box;min-width:0;max-width:none;padding:10px 12px;font-size:var(--fs-body);line-height:1.5;vertical-align:middle;white-space:normal;overflow-wrap:anywhere;border-bottom:1px solid var(--border)}
 .activity-final-hours-table th{background:var(--surface-muted,#f7f6fa);color:var(--text-primary);font-size:var(--fs-secondary);font-weight:var(--fw-semibold);text-align:left}
 .activity-final-hours-table tbody tr:last-child>td{border-bottom:0}
@@ -820,5 +821,5 @@ details.service-tools:not([open])>:not(summary){display:none}
 .hours-supplement-results:empty{display:none}
 .hours-supplement-results>button{width:100%;justify-content:flex-start;text-align:left}
 
-/* The final table scrolls horizontally; vertical gestures belong to the detail pane. */
-.activity-registration-table.activity-final-hours-table{overflow-y:clip}
+/* Keep the final table's own viewport: long rosters must scroll inside the table. */
+.activity-registration-table.activity-final-hours-table{max-height:min(58vh,620px);overflow:auto}

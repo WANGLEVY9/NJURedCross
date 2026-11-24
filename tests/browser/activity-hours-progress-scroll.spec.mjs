@@ -38,7 +38,16 @@ test('expanded posting progress stays compact and preserves final-table vertical
  expect(await scroller.evaluate(node=>node.scrollHeight>=node.clientHeight)).toBe(true);
  expect(await scroller.locator('.activity-final-hours-table').evaluate(node=>node.getBoundingClientRect().height>0)).toBe(true);
  const table=page.locator('.activity-final-hours-table');
- expect(await table.evaluate(node=>({y:getComputedStyle(node).overflowY,x:getComputedStyle(node).overflowX}))).toEqual({y:'clip',x:'auto'});
+ const tableScroll=await table.evaluate(node=>({y:getComputedStyle(node).overflowY,x:getComputedStyle(node).overflowX,scroll:node.scrollHeight,client:node.clientHeight}));
+ expect(tableScroll).toMatchObject({y:'auto',x:'auto'});
+ expect(tableScroll.scroll).toBeGreaterThan(tableScroll.client+30);
+ await table.hover({position:{x:Math.min(300,Math.floor((await table.boundingBox()).width/2)),y:Math.min(240,Math.floor((await table.boundingBox()).height/2))}});
+ await page.mouse.wheel(0,450);
+ await expect.poll(()=>table.evaluate(node=>node.scrollTop)).toBeGreaterThan(50);
+ await expect(table.locator('thead th').first()).toBeInViewport();
+ await table.evaluate(node=>{node.scrollTop=node.scrollHeight;});
+ await expect(page.locator('.activity-final-hours-table tbody tr').last()).toBeInViewport();
+ await expect(table.locator('thead th').first()).toBeInViewport();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('hours-progress-and-table-scroll.png'),animations:'disabled'});
 });

@@ -83,7 +83,10 @@ test('final hours columns keep readable type, stable classes and aligned review 
   assert.match(source, /data:\{tone:toneOf\(row\)\}/);
   assert.match(css, /\.activity-hours-progress__body\{[^}]*max-height/);
   assert.match(css, /\.activity-hours-progress__row\{[^}]*grid-template-columns/);
-  assert.match(css, /\.activity-final-hours-table\{[^}]*overflow-y:clip/);
+  assert.match(css, /\.activity-final-hours-table\{[^}]*max-height/);
+  assert.match(css, /\.activity-final-hours-table\{[^}]*overflow:auto/);
+  assert.match(css, /\.activity-final-hours-table>table thead th\{[^}]*position:sticky/);
+  assert.match(css, /\.activity-registration-table\.activity-final-hours-table\{[^}]*overflow:auto/);
 });
 
 test('workspace marks one primary action and separates destructive menu actions', async () => {
