@@ -1,4 +1,5 @@
 import {registryHours} from '../../shared/special-activity.js';
+import {normalizeTimeRange} from '../../shared/activity-running.js';
 import { h } from '../../core/dom.js';
 import { field } from '../../ui/primitives.js';
 import { serviceDateFields } from './service-date-fields.js';
@@ -23,5 +24,5 @@ export function entryValues(entry, registration, event) {
   const defaults=registryHours(event);
   return { serviceHours: entry?.['服务时长'] ?? (defaults?.serviceHours??event['服务时长']), trainingHours: entry?.['培训时长'] ?? defaults?.trainingHours ?? event['培训时长'],
     travelHours: entry?.['交通时长'] ?? defaults?.travelHours ?? event['交通时长'], work: entry?.['工作内容'] ?? event['工作内容'],
-    location: entry?.['具体工作地点'] ?? registration['地点'] ?? event['地点'], dates: entry?.['正式工作日期'] ?? [registration['报名日期'], registration['报名时段']].filter(Boolean).join(' '), remark: entry?.['备注'] ?? '' };
+    location: entry?.['具体工作地点'] ?? registration['地点'] ?? event['地点'], dates: entry?.['正式工作日期'] ?? [registration['报名日期'], registration['报名时段']].filter(Boolean).map(normalizeTimeRange).join(' '), remark: entry?.['备注'] ?? '' };
 }

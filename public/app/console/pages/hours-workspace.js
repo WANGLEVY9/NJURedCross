@@ -14,6 +14,7 @@ import { searchField } from '../../ui/search-field.js';
 import { recordTable } from '../lib.js';
 import {canReviewHours} from './activity-approval.js';
 import {supportsHoursSubmission} from '../../shared/hours-submission.js';
+import {positionOptionLabel} from '../../shared/activity-running.js';
 import {manualHoursDialog} from './manual-hours-dialog.js';
 
 // The review page groups displayed rows; all edits and approvals retain individual ledger identities.
@@ -274,7 +275,7 @@ export function hoursWorkspace({ event, actor, superAdmin, state, onSaved, blood
   const addPerson=button({label:'手动添加人员',onClick:()=>{
     if(busy||!review)return;
     const events=bloodBoard?.events||review.events;
-    manualHoursDialog({key:event._id,resume:review.pendingManual?.[0],positions:events.filter(row=>{try{return JSON.parse(row['报名页配置']||'{}').bookingMode!=='grouped';}catch{return false;}}).map(row=>({id:row._id,name:`${row['地点']||row['岗位']||row['活动名称']} · ${row['报名日期']} ${row['报名时段']}`,event:row})),submit:body=>request(`${root}/hours-participants`,{method:'POST',body:{...body,...(state.month?{month:state.month}:{})}}),onSaving:value=>{busy=value;addPerson.disabled=value;updateSelected();},onSaved:async()=>{state.filter='todo';filter.control.value='todo';await onSaved?.();await load(true);}});
+    manualHoursDialog({key:event._id,resume:review.pendingManual?.[0],positions:events.filter(row=>{try{return JSON.parse(row['报名页配置']||'{}').bookingMode!=='grouped';}catch{return false;}}).map(row=>({id:row._id,name:positionOptionLabel(row),event:row})),submit:body=>request(`${root}/hours-participants`,{method:'POST',body:{...body,...(state.month?{month:state.month}:{})}}),onSaving:value=>{busy=value;addPerson.disabled=value;updateSelected();},onSaved:async()=>{state.filter='todo';filter.control.value='todo';await onSaved?.();await load(true);}});
   }});addPerson.hidden=bloodWeekArchived(event)||!canReviewHours(event,actor,superAdmin)||event['状态']==='已结束'&&!blood;
   const node = h('section', { class: 'service-workspace stack-4'+(bloodBoard?' blood-hours-list':''), 'aria-label': '时长审核与导出' },
     h('header', { class: 'service-heading service-review-heading' }, h('div', { class: 'stack-2' }, h('h3', { text: '时长审核与导出' })),
