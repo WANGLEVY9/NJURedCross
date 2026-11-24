@@ -57,3 +57,25 @@ test('phone layout uses one column, 44px-safe controls and a scrollable action r
   assert.match(css, /env\(safe-area-inset-bottom\)/);
   assert.match(css, /overscroll-behavior-x: contain/);
 });
+
+test('people pickers keep checkbox semantics while gaining search and selected count', async () => {
+  const source = await read('public/app/console/pages/activity-project-people.js');
+  const css = await read('public/styles/activity-workspace-redesign.css');
+  assert.match(source, /class:'input activity-people-search',type:'search'/);
+  assert.match(source, /class:'t-caption activity-people-count'/);
+  assert.match(source, /h\('input',\{type:'checkbox'/);
+  assert.match(source, /class:'activity-person-choice'/);
+  assert.match(css, /\.activity-people-tools/);
+  assert.match(css, /\.activity-responsible-choices \{[\s\S]*display: grid/);
+});
+
+test('phone position rows become labelled cards without a horizontal table', async () => {
+  const [source, css] = await Promise.all([
+    read('public/app/console/pages/activity-draft-workspace.js'),
+    read('public/styles/activity-workspace-redesign.css'),
+  ]);
+  assert.match(source, /const headings=\['岗位与人数','日期与时间','地点与工作','时长（小时）','操作'\]/);
+  assert.match(source, /headings\.map\(label=>h\('td',\{data:\{label\}\}\)\)/);
+  assert.match(css, /\.activity-v2 \.activity-draft-table thead \{\s*display: none/);
+  assert.match(css, /td\[data-label\]::before/);
+});

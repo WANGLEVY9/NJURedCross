@@ -10,12 +10,36 @@ export function activityProjectPeople({ownerId,getContent,load,onChange,editable
   const owner=field({label:'立项负责人（本人）',value:(user.accountId||user.username)===ownerId?user.realName||user.label||ownerId:ownerId,readonly:true});
   const picker=label=>h('fieldset',{class:'field activity-responsible-picker'},h('legend',{class:'field__label',text:label}));
   const collaborators=picker('协作负责人（可选择）'),reviewers=picker('审批人（可多选）'),message=h('p',{class:'t-caption','aria-live':'polite'});
+  const searches=new WeakMap(),filters=new WeakMap();
+  for(const [host,label] of [[collaborators,'搜索协作负责人'],[reviewers,'搜索审批人']]){
+    const search=h('input',{class:'input activity-people-search',type:'search',placeholder:`${label}…`,'aria-label':label,autocomplete:'off',disabled:true});
+    const count=h('span',{class:'t-caption activity-people-count',text:'已选 0 人','aria-live':'polite'});
+    searches.set(host,search);filters.set(host,'');
+    host.append(h('div',{class:'activity-people-tools'},search,count));
+    search.addEventListener('input',()=>{
+      filters.set(host,String(search.value||'').trim().toLowerCase());
+      const choices=host.querySelector('.activity-responsible-choices');
+      if(choices){
+        for(const row of choices.querySelectorAll('.activity-person-choice')){
+          row.hidden=Boolean(filters.get(host))&&!row.textContent.toLowerCase().includes(filters.get(host));
+        }
+      }
+    });
+  }
   const node=h('div',{class:'activity-draft-field-wide activity-project-people'},owner,collaborators,reviewers,message);
   const name=id=>[options?.self,...options?.collaborators||[],...options?.reviewers||[]].find(person=>person?.id===id)?.name||((user.accountId||user.username)===id?user.realName||user.label||id:id);
   function choices(host,list,selected,onSelect){
     host.disabled=!editable||!options;host.querySelector('.activity-responsible-choices')?.remove();
+    const search=searches.get(host),count=host.querySelector('.activity-people-count');
+    if(search)search.disabled=!editable||!options||!list.length;
+    if(count)count.textContent=`已选 ${selected.length} 人`;
     const rows=[...list,...selected.filter(id=>!list.some(row=>row.id===id)).map(id=>({id,name:id+'（已不在有效名单）'}))];
-    host.append(h('div',{class:'activity-responsible-choices'},...rows.map(row=>h('label',{},h('input',{type:'checkbox',value:row.id,checked:selected.includes(row.id),on:{change:ev=>onSelect(row.id,ev.target.checked)}}),h('span',{text:rows.filter(other=>other.name===row.name).length>1?`${row.name}（${row.id}）`:row.name}))),!rows.length?h('span',{class:'t-caption',text:options?'暂无候选人员':'请先选择活动地区和类别'}):null));
+    const filter=filters.get(host)||'';
+    const choiceRows=rows.map(row=>{
+      const text=rows.filter(other=>other.name===row.name).length>1?`${row.name}（${row.id}）`:row.name;
+      return h('label',{class:'activity-person-choice',hidden:Boolean(filter)&&!text.toLowerCase().includes(filter)},h('input',{type:'checkbox',value:row.id,checked:selected.includes(row.id),on:{change:ev=>onSelect(row.id,ev.target.checked)}}),h('span',{text}));
+    });
+    host.append(h('div',{class:'activity-responsible-choices','aria-label':host.querySelector('legend')?.textContent||'候选人员'},...choiceRows,!rows.length?h('span',{class:'t-caption',text:options?'暂无候选人员':'请先选择活动地区和类别'}):null));
   }
   function sync(){
     const d=getContent(),selected=workspaceResponsibleIds(d).filter(id=>id!==ownerId);owner.control.value=name(ownerId);
@@ -27,6 +51,8 @@ export function activityProjectPeople({ownerId,getContent,load,onChange,editable
   }
   async function refresh({reset=false}={}){
     const current=++sequence,d=getContent();options=null;
+    for(const search of [searches.get(collaborators),searches.get(reviewers)])if(search)search.value='';
+    filters.set(collaborators,'');filters.set(reviewers,'');
     if(reset){d.responsibleId='';d.responsibleIds=[];delete d.projectOwnerId;delete d.reviewerIds;}
     sync();if(!d.region||!d.category){message.textContent='请选择活动地区和类别后配置协作负责人及审批人。';return;}
     message.textContent='正在加载当前地区和中心的人员…';
