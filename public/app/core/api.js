@@ -542,6 +542,8 @@ export const console_ = {
     // v3 多级审核工作流（按栏目选人 / 清单 / 审核链 / 逐级推进 / 意见 Word）
     assignees: (category = '') => request(`/api/outreach/assignees${category ? `?category=${encodeURIComponent(category)}` : ''}`),
     checklist: () => request('/api/outreach/checklist'),
+    // 初审「含美编招募」：按姓名或学号精确检索名册（只返回 姓名/学号/院系/邮箱）
+    members: (query) => request(`/api/outreach/members?q=${encodeURIComponent(String(query || '').trim())}`),
     reviewChain: (contentId) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}/chain`),
     reviewStep: (contentId, body) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}/step`, { method: 'POST', body }),
     // 意见 Word：走 requestBlob 以自动注入会话 CSRF（不可用裸 fetch 读 meta[name="csrf-token"]
