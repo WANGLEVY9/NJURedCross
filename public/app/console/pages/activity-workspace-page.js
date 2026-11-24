@@ -125,7 +125,8 @@ export default async function activityWorkspacePage(context){
     return directoryRows=[...drafts.filter(d=>!(d.stage==='草稿'&&!d.activityId&&!d.submissionStatus&&isManagedDutyContent(d.content))&&!activityIds.has(d.activityId)).map(d=>({id:d.id,name:d.content.name,stage:d.stage,statusLabel:d.stage,region:d.content.region,category:canonicalActivityCategory(d.content.category),date:d.content.date,endDate:d.content.endDate,draft:d})),...projectRows];
   }
   function renderList(){
-    const rows=records().filter(r=>(context.query.get('history')==='1'?r.stage==='已结束':r.stage!=='已结束'||stage.control.value==='已结束')&&(!search.control.value||r.name?.includes(search.control.value))&&(!stage.control.value||r.stage===stage.control.value)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
+    const history=context.query.get('history')==='1';
+    const rows=records().filter(r=>(history?r.stage==='已结束':true)&&(!search.control.value||r.name?.includes(search.control.value))&&(!stage.control.value||r.stage===stage.control.value)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
     count.textContent=`${rows.length} 项`;
     const cards=rows.map(row=>{
       const sessionCount=row.sessionCount??1;
@@ -462,7 +463,8 @@ export default async function activityWorkspacePage(context){
    */
   function resolveSelection(){
     const all=records();
-    const available=all.filter(row=>context.query.get('history')==='1'?row.stage==='已结束':row.stage!=='已结束'||stage.control.value==='已结束');
+    const history=context.query.get('history')==='1';
+    const available=all.filter(row=>history?row.stage==='已结束':true);
     if(!selected&&!mobile.matches)selected=available[0]?.id||'';
     const linkedDraft=drafts.find(d=>d.id===selected),linkedEvent=events.find(e=>e['活动ID']===linkedDraft?.activityId);
     if(linkedEvent)selected=linkedEvent._id;
