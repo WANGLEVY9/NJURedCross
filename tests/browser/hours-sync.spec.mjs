@@ -38,7 +38,7 @@ test('ended activity keeps the final table and exposes the same posting progress
   const initial={status:'exported',rows:[row],canEdit:false,mailStatus:'sent',hoursProgress:[{...row,code:'profile_pending',label:'已入账 · 待同步个人主页',summarySynced:true,profileSynced:false,hours:{totalHours:5}}]};
   const ui=activityFinalHoursWorkspace({initial,downloadUrl:'/synthetic-unused.xlsx',actionsNode:document.createElement('span'),loadInformation:async()=>({})});document.getElementById('main').replaceChildren(ui.node);
  });
- await expect(page.getByText(/时长已入账 1\/1 条/)).toBeVisible();await page.getByText('查看人员入账进度',{exact:true}).click();await expect(page.getByText('合成甲 · 000001 · 已入账 · 待同步个人主页',{exact:true})).toBeVisible();await expect(page.getByRole('caption')).toHaveText('分工时长表');
+ await expect(page.getByText(/时长已入账 1\/1 条/)).toBeVisible();await page.getByText('查看人员入账进度',{exact:true}).click();await expect(page.locator('.activity-hours-progress__row')).toHaveAttribute('aria-label','合成甲 · 000001 · 已入账 · 待同步个人主页');await expect(page.getByRole('caption')).toHaveText('分工时长表');
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });
 

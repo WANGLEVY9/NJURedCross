@@ -35,7 +35,7 @@
 .activity-running-modal .modal__foot{justify-content:flex-end}.activity-running-review-table th{white-space:nowrap}.activity-running-review-table td:nth-child(3){min-width:220px;max-width:300px;overflow-wrap:anywhere}.activity-running-workspace .activity-registration-table table{min-width:650px}.activity-running-workspace .activity-registration-table td:first-child{min-width:75px}.activity-running-workspace .activity-registration-table td:last-child{min-width:180px}.activity-running-evidence{max-width:100%;max-height:60vh;object-fit:contain}
 /* Final-hours tables share one layout in the workspace and in the preview dialog.
    The dialog is mounted outside .activity-v2, so these rules must stay global. */
-.activity-final-hours-table{width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface)}
+.activity-final-hours-table{width:100%;max-width:100%;overflow-x:auto;overflow-y:clip;overscroll-behavior-x:contain;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface)}
 .activity-final-hours-table>table{width:var(--final-hours-table-width,1786px);min-width:var(--final-hours-table-width,1786px);table-layout:fixed;border-collapse:collapse}
 .activity-final-hours-table caption{padding:10px 12px;font-size:var(--fs-title);font-weight:var(--fw-semibold);line-height:1.4;text-align:left}
 .activity-final-hours-table th,.activity-final-hours-table td{box-sizing:border-box;min-width:0;max-width:none;padding:10px 12px;font-size:var(--fs-body);line-height:1.5;vertical-align:middle;white-space:normal;overflow-wrap:anywhere;border-bottom:1px solid var(--border)}
@@ -62,6 +62,41 @@
 .activity-final-hours-review__flag{color:var(--text-muted);font-size:var(--fs-caption);line-height:1.3;white-space:nowrap}
 .activity-final-hours-review__actions{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:6px;min-width:0}
 .activity-final-hours-review__actions .btn{min-height:32px;padding:0 var(--s3);font-size:var(--fs-caption);line-height:1.4;white-space:nowrap}
+
+/* Ended-activity posting progress stays bounded so the final table remains scrollable. */
+.activity-hours-progress{display:grid;gap:var(--s2);padding:var(--s3) var(--s4);border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);min-width:0}
+.activity-hours-progress__head{display:flex;align-items:center;justify-content:space-between;gap:var(--s3);min-width:0}
+.activity-hours-progress__title{display:grid;gap:2px;min-width:0}
+.activity-hours-progress__title strong{font-size:var(--fs-secondary);font-weight:var(--fw-semibold);line-height:1.35}
+.activity-hours-progress__title .t-caption{color:var(--text-secondary);font-size:var(--fs-caption);line-height:1.4}
+.activity-hours-progress__count{flex:none;padding:3px var(--s2);border-radius:var(--r-xs);background:var(--surface-muted,#f7f6fa);color:var(--text-primary);font-size:var(--fs-caption);font-weight:var(--fw-semibold);font-variant-numeric:tabular-nums}
+.activity-hours-progress__bar{height:6px;overflow:hidden;border-radius:var(--r-full);background:var(--surface-muted,#f7f6fa)}
+.activity-hours-progress__bar>span{display:block;width:var(--activity-hours-progress,0%);height:100%;border-radius:inherit;background:var(--success)}
+.activity-hours-progress__details{min-width:0}
+.activity-hours-progress__toggle{display:flex;align-items:center;justify-content:space-between;gap:var(--s2);min-height:32px;padding:0;list-style:none;color:var(--text-secondary);font-size:var(--fs-secondary);font-weight:var(--fw-medium);cursor:pointer}
+.activity-hours-progress__toggle::-webkit-details-marker{display:none}
+.activity-hours-progress__toggle:hover{color:var(--accent)}
+.activity-hours-progress__toggle:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.activity-hours-progress__chevron{width:7px;height:7px;flex:none;border-right:1.5px solid currentColor;border-bottom:1.5px solid currentColor;transform:rotate(45deg);transition:transform var(--dur-1) var(--ease-out)}
+.activity-hours-progress__details[open] .activity-hours-progress__chevron{transform:rotate(-135deg)}
+.activity-hours-progress__body{max-height:min(44vh,320px);margin-top:var(--s2);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border-top:1px solid var(--border)}
+.activity-hours-progress__list{display:grid;gap:0;margin:0;padding:0;list-style:none}
+.activity-hours-progress__row{display:grid;grid-template-columns:minmax(0,1fr) minmax(130px,auto);align-items:center;column-gap:var(--s3);row-gap:2px;padding:var(--s2) var(--s1);border-bottom:1px solid var(--border)}
+.activity-hours-progress__row:last-child{border-bottom:0}
+.activity-hours-progress__row[data-tone=warning]{background:var(--warning-soft)}
+.activity-hours-progress__row[data-tone=success] .activity-hours-progress__state{color:var(--success)}
+.activity-hours-progress__row[data-tone=warning] .activity-hours-progress__state{color:var(--warning)}
+.activity-hours-progress__person{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--s2);min-width:0}
+.activity-hours-progress__person strong{font-size:var(--fs-secondary);font-weight:var(--fw-medium);line-height:1.4}
+.activity-hours-progress__student{color:var(--text-muted);font-family:var(--font-mono);font-size:var(--fs-caption);font-variant-numeric:tabular-nums}
+.activity-hours-progress__state{justify-self:end;color:var(--text-primary);font-size:var(--fs-secondary);font-weight:var(--fw-medium);line-height:1.4;text-align:right}
+.activity-hours-progress__reason{grid-column:1/-1;color:var(--text-muted);font-size:var(--fs-caption);line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(max-width:720px){
+ .activity-hours-progress{padding:var(--s3)}
+ .activity-hours-progress__row{grid-template-columns:minmax(0,1fr);row-gap:var(--s1)}
+ .activity-hours-progress__state{justify-self:start;text-align:left}
+}
+@media(prefers-reduced-motion:reduce){.activity-hours-progress__chevron{transition:none}}
 
 /* Shared density and alignment for all six activity phases. */
 .activity-v2,.activity-v2 button,.activity-v2 input,.activity-v2 textarea{letter-spacing:normal}
@@ -784,3 +819,6 @@ details.service-tools:not([open])>:not(summary){display:none}
 .hours-supplement-results{max-height:220px;overflow:auto;border:1px solid var(--border,#d7dbe0);border-radius:10px;padding:6px}
 .hours-supplement-results:empty{display:none}
 .hours-supplement-results>button{width:100%;justify-content:flex-start;text-align:left}
+
+/* The final table scrolls horizontally; vertical gestures belong to the detail pane. */
+.activity-registration-table.activity-final-hours-table{overflow-y:clip}

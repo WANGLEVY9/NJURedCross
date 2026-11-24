@@ -189,10 +189,28 @@ export function activityFinalHoursWorkspace({adminEditInformation,initial,load,s
    const rows=state.hoursProgress.filter(row=>row.hours);
    const posted=rows.filter(row=>row.summarySynced).length;
    const failed=rows.filter(row=>row.code==='summary_failed');
-   const block=h('div',{class:'stack-2'},
-    h('p',{class:'t-caption',text:`时长已入账 ${posted}/${rows.length} 条`}),
-    h('details',{},h('summary',{text:'查看人员入账进度'}),
-     ...state.hoursProgress.map(row=>h('p',{class:'t-caption',text:`${row.name} · ${row.studentId} · ${row.label}${row.reason?` · ${row.reason}`:''}`}))));
+   const pending=state.hoursProgress.length-posted;
+   const toneOf=row=>row.code==='summary_failed'||row.code==='conflict'?'warning':row.summarySynced?'success':'info';
+   const progressRow=row=>h('li',{class:'activity-hours-progress__row',data:{tone:toneOf(row)},attrs:{'aria-label':`${row.name} · ${row.studentId} · ${row.label}${row.reason?` · ${row.reason}`:''}`}},
+    h('span',{class:'activity-hours-progress__person'},
+     h('strong',{text:row.name||'未填写姓名'}),h('span',{class:'activity-hours-progress__student',text:row.studentId||'—'})),
+    h('span',{class:'activity-hours-progress__state',text:row.label||'待核对'}),
+    row.reason?h('span',{class:'activity-hours-progress__reason',title:row.reason,text:row.reason}):null);
+   const summary=h('div',{class:'activity-hours-progress'},
+    h('div',{class:'activity-hours-progress__head'},
+     h('div',{class:'activity-hours-progress__title'},
+      h('strong',{text:'时长入账进度'}),
+      h('span',{class:'t-caption',text:`时长已入账 ${posted}/${rows.length} 条 · ${pending} 条待处理`})),
+     h('span',{class:'activity-hours-progress__count',text:`${posted}/${state.hoursProgress.length}`})),
+    h('div',{class:'activity-hours-progress__bar',role:'progressbar',aria:{label:'时长入账进度',valuemin:'0',valuemax:String(state.hoursProgress.length),valuenow:String(posted)}},
+     h('span',{vars:{'--activity-hours-progress':`${state.hoursProgress.length?posted/state.hoursProgress.length*100:0}%`}})),
+    h('details',{class:'activity-hours-progress__details'},
+     h('summary',{class:'activity-hours-progress__toggle'},
+      h('span',{text:'查看人员入账进度'}),
+      h('span',{class:'activity-hours-progress__chevron','aria-hidden':'true'})),
+     h('div',{class:'activity-hours-progress__body'},
+      h('ul',{class:'activity-hours-progress__list'},...state.hoursProgress.map(progressRow)))));
+   const block=h('div',{class:'stack-2'},summary);
    if(failed.some(row=>!row.needsPostingReview)&&openPosting)block.append(button({label:'核对并确认入账',variant:'secondary',size:'sm',onClick:()=>openPosting()}));
    content.append(block);
   }

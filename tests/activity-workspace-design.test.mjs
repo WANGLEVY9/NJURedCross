@@ -78,6 +78,12 @@ test('final hours columns keep readable type, stable classes and aligned review 
   assert.match(css, /\.activity-final-hours-col-studentId/);
   assert.doesNotMatch(css, /\.activity-final-hours-table[^{]*\{[^}]*width:1%/);
   assert.doesNotMatch(scoped, /\.activity-v2 \.activity-final-hours-table/);
+  assert.match(source, /activity-hours-progress__body/);
+  assert.match(source, /role:'progressbar'/);
+  assert.match(source, /data:\{tone:toneOf\(row\)\}/);
+  assert.match(css, /\.activity-hours-progress__body\{[^}]*max-height/);
+  assert.match(css, /\.activity-hours-progress__row\{[^}]*grid-template-columns/);
+  assert.match(css, /\.activity-final-hours-table\{[^}]*overflow-y:clip/);
 });
 
 test('workspace marks one primary action and separates destructive menu actions', async () => {

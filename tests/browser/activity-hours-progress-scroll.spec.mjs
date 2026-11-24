@@ -1,0 +1,44 @@
+import {test,expect} from '@playwright/test';
+
+test('expanded posting progress stays compact and preserves final-table vertical scrolling',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ await page.goto('/console/events');await expect(page.locator('.activity-v2-card').first()).toBeVisible();
+ await page.evaluate(async()=>{
+  const {h}=await import('/app/core/dom.js');
+  const {activityFinalHoursWorkspace}=await import('/app/console/pages/activity-final-hours-workspace.js');
+  const rows=Array.from({length:40},(_,i)=>({id:`row-${i}`,name:`合成同学${i}`,studentId:`0000${String(i).padStart(4,'0')}`,department:'合成学院',location:'合成场地',dates:'2030-01-01 上午',work:'合成服务',decision:'pass',serviceHours:3,trainingHours:1,travelHours:0}));
+  const progress=Array.from({length:45},(_,i)=>({...rows[i%rows.length],code:i%7?'synced':'summary_failed',label:i%7?'已入账 · 待同步个人主页':'汇总表同步待重试',summarySynced:i%7>0,profileSynced:false,hours:{totalHours:4},reason:i%7?'':'原汇总表已有同名活动'}));
+  const initial={status:'exported',rows,canEdit:false,mailStatus:'sent',hoursProgress:progress};
+  const ui=activityFinalHoursWorkspace({initial,downloadUrl:'/synthetic-unused.xlsx',actionsNode:h('span'),loadInformation:async()=>({})});
+  const detail=h('section',{class:'activity-v2-detail'},ui.node);
+  detail.style.height='100vh';
+  document.getElementById('main').replaceChildren(detail);
+  document.getElementById('main').style.height='100vh';
+ });
+ const progress=page.locator('.activity-hours-progress');
+ await expect(progress).toContainText('时长入账进度');
+ await expect(progress.getByRole('progressbar')).toHaveAttribute('aria-valuenow',/\d+/);
+ const toggle=progress.getByText('查看人员入账进度',{exact:true});
+ const collapsed=await progress.boundingBox();
+ await toggle.click();
+ const body=progress.locator('.activity-hours-progress__body');
+ await expect(body).toBeVisible();
+ expect(await body.evaluate(node=>({scroll:node.scrollHeight,client:node.clientHeight}))).toMatchObject({scroll:expect.any(Number),client:expect.any(Number)});
+ expect(await body.evaluate(node=>node.scrollHeight>node.clientHeight+20)).toBe(true);
+ expect((await progress.boundingBox()).height).toBeLessThan(collapsed.height+420);
+ await expect(progress.locator('.activity-hours-progress__row')).toHaveCount(45);
+ await expect(progress.locator('[data-tone=warning]')).toHaveCount(7);
+ await body.evaluate(node=>{node.scrollTop=node.scrollHeight;});
+ await expect.poll(()=>body.evaluate(node=>node.scrollTop)).toBeGreaterThan(20);
+ await expect(progress.getByText('合成同学44',{exact:true})).toHaveCount(0);
+ await expect(progress.getByText('合成同学2',{exact:true}).last()).toBeVisible();
+ const scroller=page.locator('.activity-registration-content');
+ const mobile=info.project.name.includes('mobile');
+ expect(await scroller.evaluate(node=>({overflow:getComputedStyle(node).overflowY,minHeight:getComputedStyle(node).minHeight}))).toMatchObject({overflow:mobile?'visible':'auto',minHeight:'0px'});
+ expect(await scroller.evaluate(node=>node.scrollHeight>=node.clientHeight)).toBe(true);
+ expect(await scroller.locator('.activity-final-hours-table').evaluate(node=>node.getBoundingClientRect().height>0)).toBe(true);
+ const table=page.locator('.activity-final-hours-table');
+ expect(await table.evaluate(node=>({y:getComputedStyle(node).overflowY,x:getComputedStyle(node).overflowX}))).toEqual({y:'clip',x:'auto'});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.screenshot({path:info.outputPath('hours-progress-and-table-scroll.png'),animations:'disabled'});
+});
