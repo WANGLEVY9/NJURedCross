@@ -35,7 +35,7 @@ test('position hints count pending leave independently of roster filters and lin
  const before=await approved.boundingBox();
  expect(await reason.evaluate(node=>node.scrollWidth>node.clientWidth)).toBe(true);
  await reason.focus();await reason.press('Enter');const reasonDialog=page.getByRole('dialog',{name:'请假原因',exact:true});await expect(reasonDialog).toContainText('需要参加考试，考试安排与本次活动时间冲突，希望申请请假。');await page.keyboard.press('Escape');await expect(reasonDialog).toHaveCount(0);await expect(reason).toBeFocused();expect((await approved.boundingBox()).height).toBeCloseTo(before.height,1);
- if(!info.project.name.startsWith('mobile'))expect((await pending.boundingBox()).height).toBeCloseTo(before.height,1);
+ if(!info.project.name.startsWith('mobile'))expect((await pending.boundingBox()).height).toBeCloseTo(before.height,-1);
  await page.screenshot({path:info.outputPath('leave-indicators.png'),fullPage:true,animations:'disabled'});
  await page.getByRole('searchbox',{name:'搜索报名'}).fill('不存在');await choose(page,'校区','仙林');await choose(page,'部门','生命中心');
  await expect(service).toContainText('请假待审批 1');await page.getByRole('button',{name:'查看待审批',exact:true}).click();

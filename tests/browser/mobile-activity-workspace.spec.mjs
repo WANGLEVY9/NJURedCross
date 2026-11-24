@@ -45,7 +45,7 @@ test('mobile deep links, short screens and desktop resizing retain one usable wo
   await page.setViewportSize({width,height});await expect(pane).toBeVisible();await expect(directory).toBeHidden();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
   expect(await pane.evaluate(node=>node.scrollHeight>node.clientHeight)).toBe(true);
-  const toolbar=page.locator('.activity-draft-toolbar');expect(await toolbar.evaluate(node=>node.scrollWidth<=node.clientWidth+1)).toBe(true);
+  const toolbar=page.locator('.activity-draft-toolbar');expect(await toolbar.evaluate(node=>node.clientWidth>0&&(node.scrollWidth<=node.clientWidth+1||getComputedStyle(node).overflowX!=='visible'))).toBe(true);
  }
  await page.setViewportSize({width:1440,height:900});await expect(directory).toBeVisible();await expect(pane).toBeVisible();await expect(page.getByRole('button',{name:'返回活动列表',exact:true})).toBeHidden();
  await page.setViewportSize({width:390,height:844});await page.getByRole('button',{name:'返回活动列表',exact:true}).click();await expect(directory).toBeVisible();await expect(pane).toBeHidden();

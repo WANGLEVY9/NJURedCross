@@ -1,3 +1,4 @@
+@scope (.activity-workspace-redesign) {
 /* 活动管理统一工作区：Operate 模式基线。只覆盖 activity-v2 作用域，
    保留既有主题 token、共享按钮与表单组件；旧 activity-center 样式不动。 */
 .activity-v2 {
@@ -782,4 +783,5 @@
   .activity-v2 :is(.btn, .select-menu__trigger) {
     transition: none;
   }
+}
 }

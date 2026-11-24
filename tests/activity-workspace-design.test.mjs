@@ -11,6 +11,7 @@ test('activity management loads one scoped design baseline', async () => {
     read('public/styles/activity-workspace-redesign.css'),
   ]);
   assert.match(html, /href="\/styles\/activity-workspace-redesign\.css"[^>]*data-surface="console"/);
+  assert.match(css, /@scope \(\.activity-workspace-redesign\)/);
   assert.match(css, /--workspace-control-h: 40px/);
   assert.match(css, /font-size: var\(--fs-body\)/);
   assert.match(css, /font-family: var\(--font-sans\)/);
@@ -43,6 +44,7 @@ test('workspace marks one primary action and separates destructive menu actions'
 
 test('activity directory uses explicit list semantics and category metadata', async () => {
   const source = await read('public/app/console/pages/activity-workspace-page.js');
+  assert.match(source, /activity-v2 activity-workspace-redesign/);
   assert.match(source, /class:'activity-v2-list',role:'list'/);
   assert.match(source, /role:'listitem'/);
   assert.match(source, /data:\{category:'献血车专项',region:'nanjing'\}/);
