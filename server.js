@@ -123,6 +123,8 @@ import * as reviewFlow from './lib/attachment/review.js';
 import * as digestFlow from './lib/attachment/digest.js';
 import {liaisonMailRecipients} from './lib/attachment/liaison-mail-recipients.js';
 import { applyReviewStep, authorizeOpinionExport } from './lib/attachment/review-policy.js';
+import { findDirectoryMembers, normalizeMemberQuery } from './lib/attachment/members.js';
+import { syncTemplateRow, isWrittenArticleSubmission } from './lib/attachment/template-sync.js';
 import * as taskApi from './lib/attachment/tasks.js';
 import { searchBusinessRecords } from './lib/console-search.js';
 import { agentRoutes } from './lib/agent/api.js';
@@ -2105,9 +2107,14 @@ function reviewShapeOf(source) {
     reviewTrail: String(source['审核轨迹'] ?? source.reviewTrail ?? ''),
     status: String(source['审核状态'] || source.status || submissionStatusPending),
     editor: String(source['美编人'] || source.editor || ''),
+    // 2026-11-24：初审登记的美编学号（「宣传投稿表」新增列）。终审写「新媒体审核表」要用。
+    editorStudentId: String(source['美编学号'] || source.editorStudentId || ''),
     articleCategory: String(source['推文类别'] || source.articleCategory || ''),
     // 2026-11-11：退回意见要直投投稿人，联系邮箱随形状一起带出，不再只留在表里。
     submitterEmail: String(source['联系邮箱'] || source.contactEmail || ''),
+    // 2026-11-24：终审要把「文编姓名/学号」写进「新媒体审核表」，投稿人信息随形状带出。
+    contactName: String(source['联系人'] || source.contactName || ''),
+    studentId: String(source['学号'] || source.studentId || ''),
   };
 }
 
@@ -2122,6 +2129,11 @@ function reviewChainView(source, assignees = []) {
   const picked = reviewFlow.assigneesForCategory(assignees, category);
   const trail = parseReviewTrail(shape.reviewTrail);
   const currentLevel = state.current?.level || state.total;
+  // 初审登记的美编（2026-11-24）：优先取轨迹快照（含院系/邮箱），
+  // 老数据没有快照时回落到投稿表的两列原文，让审核抽屉能回显已有值。
+  const initialApproval = trail.find((entry) => Number(entry?.level) === 1 && entry?.decision === 'approve');
+  const manualEditor = initialApproval?.manualEditor
+    || (shape.editor ? { name: shape.editor, studentId: shape.editorStudentId } : null);
   return {
     kind,
     kindLabel: REVIEW_KIND_LABELS[kind] || '审核链',
@@ -2135,6 +2147,7 @@ function reviewChainView(source, assignees = []) {
     passed: state.passed,
     total: state.total,
     done: state.done,
+    manualEditor: manualEditor || null,
     schedulable: canSchedule({ kind, reviewLevel: shape.reviewLevel, reviewTrail: shape.reviewTrail, status: shape.status }),
     // 同一层级最多退回一次（制度 §4.1）。已完成则无需退回。
     canReturn: !state.done && canReturnAtLevel(shape.reviewTrail, currentLevel).allowed,
@@ -6177,6 +6190,17 @@ if (url.pathname.startsWith('/api/public/')) {
     if (req.method === 'GET' && url.pathname === '/api/outreach/checklist') {
       return json(res, 200, { ok: true, checklist: await readChecklist(client) });
     }
+    // GET /api/outreach/members?q= —— 按姓名或学号**精确**检索名册（初审「含美编招募」用）
+    // 2026-11-24：只返回值域内的 姓名/学号/院系/邮箱，绝不返回身份证号、银行卡号等列；
+    // 精确等值匹配，避免任何持 outreach 权限的账号拿它枚举全会在册成员。
+    if (req.method === 'GET' && url.pathname === '/api/outreach/members') {
+      const query = String(url.searchParams.get('q') || '').trim();
+      if (!normalizeMemberQuery(query)) {
+        return json(res, 400, { ok: false, message: '请填写要检索的姓名或学号（不支持引号等特殊字符，最长 32 字）。' });
+      }
+      const found = await findDirectoryMembers(client, query);
+      return json(res, 200, { ok: true, ...found });
+    }
     // GET /api/outreach/reviews/:contentId/chain —— 审核链定义 + 当前进度
     const reviewChainMatch = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)\/chain$/);
     if (reviewChainMatch && req.method === 'GET') {
@@ -6218,11 +6242,14 @@ if (url.pathname.startsWith('/api/public/')) {
       const decision = String(body.decision || '').trim();
       if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
       return await withOutreachReview(async () => {
-        const { existing, shape, assignees, advance } = await applyReviewStep({
+        const reviewAccount = accountsByUsername.get(session.username);
+        const { existing, shape, assignees, advance, publishDate } = await applyReviewStep({
           client, table: outreachSubmissionTable, contentId, body: { ...body, decision },
-          account: accountsByUsername.get(session.username), reviewer: session.username,
+          account: reviewAccount, reviewer: session.username,
           readRows: readOutreachSubmissionRows, readAssignees: readOutreachAssignees,
           readChecklist, shapeOf: reviewShapeOf,
+          // 初审「含美编招募」：按姓名或学号精确命中名册唯一一人，服务端只认名册不认手填。
+          readMember: query => findDirectoryMembers(client, query),
         });
         const opinions = Array.isArray(body.opinions) ? body.opinions : [];
         // 2026-11-11：作用域只认「推文类别」（文创设计退化为内容类型）；缺失即空串，
@@ -6262,14 +6289,34 @@ if (url.pathname.startsWith('/api/public/')) {
         } else {
           deliveryStatus = 'digest';
         }
+        // 2026-11-24：文字稿件终审通过 → 自动在「新媒体审核表」建一行（免人工二次抄写）。
+        // 台账写入失败不回滚审核结果（用户已点通过），但必须把原因带回前端并留审计。
+        let templateSync = null;
+        if (decision === 'approve' && advance.done && isWrittenArticleSubmission(shape)) {
+          templateSync = await syncTemplateRow({
+            client,
+            trail: advance.patch.审核轨迹,
+            submission: shape,
+            publishDate,
+            finalReviewer: String(reviewAccount?.realName || '').trim(),
+          });
+          if (!templateSync.ok) {
+            console.warn(`[outreach] 新媒体审核表未写入 ${contentId}: ${templateSync.reason} ${templateSync.message || ''}`);
+          }
+        }
         await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
           level: advance.entry.level,
           done: advance.done,
           delivered: deliver.filter((item) => item.ok).length,
           deliveryStatus,
           category: reviewCategory,
+          templateSync: templateSync ? { ok: templateSync.ok, skipped: templateSync.skipped, reason: templateSync.reason } : null,
         });
         const returnSuffix = reviewFlow.deliverySummary(deliveryStatus);
+        const templateSuffix = !templateSync ? ''
+          : templateSync.ok
+            ? (templateSync.skipped ? '；新媒体审核表已有同一行，未重复写入' : '；已写入新媒体审核表')
+            : `；但新媒体审核表未写入（${templateSync.message || '原因未知'}）`;
         return json(res, 200, {
           ok: true,
           step: advance.entry,
@@ -6278,9 +6325,10 @@ if (url.pathname.startsWith('/api/public/')) {
           chain: reviewChainView({ ...existing, 审核状态: advance.status, 审核层级: advance.patch.审核层级, 审核轨迹: advance.patch.审核轨迹 }, assignees),
           delivered: deliver,
           deliveryStatus,
+          templateSync,
           message: decision === 'approve'
             ? (advance.done
-              ? '终审通过，内容可排期发布（对接人将在 08:00 / 20:00 汇总中收到排期提醒）'
+              ? `终审通过，内容可排期发布（对接人将在 08:00 / 20:00 汇总中收到排期提醒）${templateSuffix}`
               : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」（汇总提醒 08:00 / 20:00）`)
             : `第 ${advance.entry.level} 级已退回修改（${returnSuffix}）`,
         });
