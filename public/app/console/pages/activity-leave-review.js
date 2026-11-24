@@ -16,7 +16,7 @@ export function leaveReviewActions(row,{enabled,decide,refresh}){
 }
 /** A separate selection dialog keeps leave decisions independent of admission selection. */
 export function batchLeaveButton({getRows,refresh,onBusy=()=>{}}){
- return button({label:'批量请假审批',onClick:()=>{
+ return button({label:'批量请假审批',size:'sm',iconName:'checkCheck',onClick:()=>{
   const rows=getRows().filter(r=>r['请假状态']==='待审批'&&['待筛选','已确认'].includes(r['报名状态']));
   if(!rows.length){notify.info('暂无可审批的请假');return;}
   const selected=new Set(),list=h('div',{class:'stack-2'}),status=h('p',{role:'status'});

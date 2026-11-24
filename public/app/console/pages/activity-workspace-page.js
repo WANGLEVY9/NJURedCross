@@ -54,7 +54,7 @@ function warmLegacyWorkspace(){
 export default async function activityWorkspacePage(context){
   let drafts=[],events=[],selected=context.query.get('draft')||context.query.get('event')||'',editor=null,disposed=false,loadSequence=0,detailSequence=0,canSubmit=false,canCreate=true,creationScopes=null;
   const occupancy=new Map();
-  const list=h('div',{class:'activity-v2-list'}),pane=h('section',{class:'activity-v2-detail','aria-label':'活动操作工作区'}),message=h('div',{class:'activity-v2-message'}),count=h('span',{class:'t-caption'});
+  const list=h('div',{class:'activity-v2-list',role:'list','aria-label':'活动列表'}),pane=h('section',{class:'activity-v2-detail','aria-label':'活动操作工作区'}),message=h('div',{class:'activity-v2-message'}),count=h('span',{class:'t-caption'});
   let directoryCollapsed=false;
   const mobile=window.matchMedia('(max-width:960px)');
   const directoryKey=`${getSessionState().user?.username||''}:${context.path}:${context.query.get('history')||'active'}`;
@@ -129,14 +129,14 @@ export default async function activityWorkspacePage(context){
     const cards=rows.map(row=>{
       const sessionCount=row.sessionCount??1;
       const status=h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}),activityRegionTag(row));
-      return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},on:{click:()=>openActivity(row)}},h('strong',{title:row.name,text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},status,sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
+      return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},role:'listitem',on:{click:()=>openActivity(row)}},h('strong',{title:row.name,text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},status,sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
     });
     const blood=rows.filter(row=>config(row.event||{}).source?.kind==='generated_blood');count.textContent=`${rows.length-blood.length+(blood.length?1:0)} 项`;
     const schedules=new Map();for(const row of rows.filter(r=>scheduledSession(r.event))){const key=config(row.event).special.rootId;schedules.set(key,[...(schedules.get(key)||[]),row]);}
     list.replaceChildren(...cards.filter((_card,index)=>!blood.includes(rows[index])&&!scheduledSession(rows[index].event)));
-    for(const group of schedules.values()){const active=group.find(row=>row.id===selected)||group[0];list.append(h('button',{type:'button',class:'activity-v2-card','aria-pressed':String(group.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{title:active.name,text:active.name}),h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:context.query.get('history')==='1'?'已结束':active.statusLabel}),activityRegionTag(active)),h('small',{class:'t-caption',text:`${group.length} 周排班 · 进入后选择周次`})))}
+    for(const group of schedules.values()){const active=group.find(row=>row.id===selected)||group[0];list.append(h('button',{type:'button',class:'activity-v2-card',role:'listitem',data:{category:'排班专项',region:'nanjing'},'aria-pressed':String(group.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{title:active.name,text:active.name}),h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:context.query.get('history')==='1'?'已结束':active.statusLabel}),activityRegionTag(active)),h('small',{class:'t-caption',text:`${group.length} 周排班 · 进入后选择周次`})))}
     count.textContent=`${rows.length-blood.length+(blood.length?1:0)-[...schedules.values()].reduce((n,group)=>n+group.length-1,0)} 项`;
-    if(blood.length){const active=blood.find(row=>row.id===selected)||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
+    if(blood.length){const active=blood.find(row=>row.id===selected)||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',role:'listitem',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
     if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:'调整筛选或新建活动。'}));
   }
   function renderDetail(){
@@ -362,7 +362,7 @@ export default async function activityWorkspacePage(context){
       }});menu.append(reopenReview);
     }
     if(row.draft){
-      const removeButton=button({label:'删除活动',disabled:!(row.draft.access?.canEdit??row.draft.ownerId===currentActor)||row.draft.stage!=='草稿'||Boolean(row.draft.submissionStatus),onClick:async()=>{
+      const removeButton=button({label:'删除活动',data:{danger:'true'},disabled:!(row.draft.access?.canEdit??row.draft.ownerId===currentActor)||row.draft.stage!=='草稿'||Boolean(row.draft.submissionStatus),onClick:async()=>{
         if(busy||!await leave())return;
         busy=true;let modal,removing=false,removal=null;
         const cancel=button({label:'取消',onClick:()=>{if(!removing&&!removal)void modal.close();}});
@@ -381,7 +381,7 @@ export default async function activityWorkspacePage(context){
     if(row.event&&row.stage!=='已结束'&&!generated){
       let state=null,loading=false;
       const removalStatus=h('p',{class:'t-caption',role:'status',hidden:true});
-      const removeButton=button({label:'取消活动',onClick:async()=>{
+      const removeButton=button({label:'取消活动',data:{danger:'true'},onClick:async()=>{
         if(busy||!state?.canRemove||!await leave())return;busy=true;
         const reason=field({label:'原因（选填）',type:'textarea',maxlength:500});let modal,removing=false,pendingRemoval=null;
         const cancel=button({label:'取消',onClick:()=>{if(!removing&&!pendingRemoval)void modal.close();}});
@@ -510,7 +510,7 @@ export default async function activityWorkspacePage(context){
     modal=openModal({title:'新建活动',body:h('div',{class:'stack-3'},name,names,area,kind),dismissible:false,footer:[sourceButton,button({label:'取消',onClick:()=>{if(!busy)void modal.close();}}),createButton]});
     modal.setCloseGuard(()=>!busy);
   }
-  const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
+  const workspace=h('div',{class:'activity-v2-workspace'},h('aside',{class:'activity-v2-directory','aria-label':'活动筛选与目录'},h('div',{class:'row-between'},h('h2',{text:'活动列表'}),count),search,h('div',{class:'activity-v2-filters'},stage,region,category),list),pane);
   const createButton=button({label:'新建活动',variant:'primary',onClick:create});
   createButton.disabled=true;
   const tools=h('details',{class:'activity-page-tools'},h('summary',{text:'管理工具'}),h('div',{},
