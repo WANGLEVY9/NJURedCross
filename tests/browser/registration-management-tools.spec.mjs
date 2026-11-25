@@ -21,6 +21,7 @@ async function mount(page,mail=false){
  },mail);
 }
 async function choose(page,label,option){await page.getByRole('combobox',{name:label,exact:true}).click();await page.getByRole('option',{name:option,exact:true}).click();}
+function chooseStatus(page, name){return page.getByRole('radiogroup',{name:'报名状态'}).getByRole('radio',{name,exact:true}).click();}
 const names=page=>page.locator('.activity-registration-table tbody [data-roster-column="姓名"]').allTextContents();
 
 test('registration filters combine within one position, reset and clear hidden batch selections',async({page},info)=>{
@@ -31,7 +32,7 @@ test('registration filters combine within one position, reset and clear hidden b
  await choose(page,'校区','鼓楼');await choose(page,'部门','办公室');
  await page.getByRole('searchbox',{name:'搜索报名'}).fill('1003');
  expect(await names(page)).toEqual(['合成甲']);
- await choose(page,'报名状态','报名成功');await expect(page.getByText('暂无符合条件的报名',{exact:true})).toBeVisible();
+ await chooseStatus(page,'报名成功');await expect(page.getByText('暂无符合条件的报名',{exact:true})).toBeVisible();
  await page.getByRole('button',{name:'重置',exact:true}).click();expect(await names(page)).toEqual(['合成甲','合成乙','合成丙','合成丁']);
  await expect(page.getByRole('combobox',{name:'排序',exact:true})).toContainText('默认顺序');
  await page.getByRole('button',{name:'批量操作',exact:true}).click();await page.getByRole('checkbox',{name:'选择合成甲',exact:true}).check();
@@ -55,7 +56,7 @@ test('cancelled confirmation preserves compact roster buttons and keyboard focus
  const box=await button.boundingBox();expect(box.height).toBe(info.project.name.startsWith('mobile')?44:28);
  const cancelled=page.getByRole('row').filter({hasText:'合成丁'});await expect(cancelled.getByRole('button')).toHaveCount(0);
  if(!info.project.name.startsWith('mobile'))expect((await cancelled.boundingBox()).height).toBeCloseTo(after.height,2);
- await choose(page,'报名状态','已取消');expect(await names(page)).toEqual(['合成丁']);
+ await chooseStatus(page,'已取消');expect(await names(page)).toEqual(['合成丁']);
  expect(await page.evaluate(()=>window.registrationWrites)).toEqual([]);
 });
 

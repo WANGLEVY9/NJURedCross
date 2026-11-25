@@ -19,6 +19,28 @@ import {withRequestBudget} from '../lib/http/request-budget.js';
 import {planLegacyWorkspaceRecovery,extractLegacyWorkspaceEdit} from '../lib/events/workspace-legacy-recovery.js';
 import {workspaceEditDigest} from '../lib/events/workspace-live-edit.js';
 
+test('recycling a completed multi-job project hides the whole group from activity statistics until restoration',async t=>{
+ const f=await fixture(t),event=await publishFixture(f);
+ const rows=f.tables[WF.events];
+ for(const row of rows)row['状态']='已结束';
+ f.tables[WF.registrations].push({_id:'registration',活动ID:rows[1]['活动ID'],报名状态:'已签到'});
+ f.tables[WF.checkins].push({_id:'checkin',活动ID:rows[1]['活动ID'],报名行ID:'registration'});
+ f.tables[WF.ledger].push({_id:'ledger',活动ID:rows[1]['活动ID'],报名行ID:'registration',状态:'已批准'});
+ const evidence=[WF.registrations,WF.checkins,WF.ledger].map(table=>structuredClone(f.tables[table]));
+ const before=await f.workflow.activityOverview(),snapshot=await f.workflow.workspaceRemoval(event._id,'sz-chair');
+ assert.equal(snapshot.canRecycle,true);
+ await f.workflow.removeWorkspace(event._id,{mode:'recycle',reason:'',requestId:'move-project-to-trash',token:snapshot.token},'sz-chair');
+ assert.equal((await f.workflow.catalog()).events.filter(row=>row['状态']==='已删除').length,rows.length);
+ assert.ok((await f.workflow.calendar()).events.every(row=>row['活动ID']!==event['活动ID']));
+ const after=await f.workflow.activityOverview();
+ assert.equal(after.events,before.events-rows.length);assert.equal(after.registrations,before.registrations-1);
+ const restore=await f.workflow.workspaceRestoration(event._id,'sz-chair');
+ await f.workflow.restoreWorkspace(event._id,{requestId:'restore-recycled-project',token:restore.token},'sz-chair');
+ assert.equal((await f.workflow.catalog()).events.filter(row=>row['状态']==='已结束').length,rows.length);
+ assert.deepEqual(await f.workflow.activityOverview(),before);
+ assert.deepEqual([WF.registrations,WF.checkins,WF.ledger].map(table=>f.tables[table]),evidence);
+});
+
 test('legacy recovery reconstructs only the signed completed edit, preserving all job and booking identities',async t=>{
  const f=await fixture(t),event=await publishFixture(f),previous=structuredClone(event),source=await f.bridge.content(event._id);
  const body={expectedVersion:source.version,token:source.token,content:{...source.content,name:'恢复的合成活动'}};
@@ -31,7 +53,7 @@ test('legacy recovery reconstructs only the signed completed edit, preserving al
  assert.equal(extractLegacyWorkspaceEdit(parent).pending.digest,pending.digest);
  const result=await planLegacyWorkspaceRecovery(data);
  assert.deepEqual(data,snapshot);assert.equal(result.parentPatch['活动ID'],parent['活动ID']);assert.equal(Number(result.parentPatch['申请版本']),source.version+1);assert.equal(workflowEventApproved({...parent,...result.parentPatch}),true);
- assert.deepEqual(result.receipt.plan.jobs.map(job=>job.id),children.map(row=>row._id));assert.deepEqual(result.registrationPatches,[{id:registration._id,patch:{活动名称:body.content.name,报名日期:children[0]['报名日期'],报名时段:children[0]['报名时段'],岗位:children[0]['岗位']}}]);assert.deepEqual(result.groupPatch,{});
+ assert.deepEqual(result.receipt.plan.jobs.map(job=>job.id),children.map(row=>row._id));assert.deepEqual(result.registrationPatches,[{id:registration._id,patch:{活动名称:body.content.name}}]);assert.deepEqual(result.groupPatch,{});
  const corrupted=structuredClone(data);corrupted.events[1]['容量']='99';corrupted.events[1]['批准摘要']=workflowApprovalHash(corrupted.events[1]);
  await assert.rejects(planLegacyWorkspaceRecovery(corrupted),/已批准岗位与原请求不一致/);
  await assert.rejects(planLegacyWorkspaceRecovery({...data,checkins:[{活动ID:children[0]['活动ID']}]}),/已有签到或时长证据/);
@@ -49,6 +71,25 @@ test('resuming an interrupted edit retains newer roster-review decisions and nev
  config.rosterReview={status:'updated-after-edit',entries:[{id:'booking',decision:'confirm'}],delivery:{key:'sent-once'}};child['报名页配置']=JSON.stringify(config);assert.equal(workflowEventApproved(child),true);
  const snapshot=structuredClone(child);
  await f.bridge.save(event._id,body,'sz-chair');assert.deepEqual(child,snapshot);assert.equal(JSON.parse(event['报名页配置']).workspaceEdit.status,'complete');
+});
+
+test('live edits keep booked jobs and only write the renamed job and its booking',async t=>{
+ const f=await fixture(t),parent=await publishFixture(f);
+ const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===parent['活动ID']);
+ const [first,second]=children;
+ for(const [i,child] of children.entries())f.tables[WF.registrations].push({_id:'booking-'+i,报名ID:'code-'+i,活动ID:child['活动ID'],账号ID:'user-'+i,报名状态:'已确认',活动名称:child['活动名称'],报名日期:child['报名日期'],报名时段:child['报名时段'],岗位:child['岗位']});
+ const writes=[],update=f.base.updateRow;
+ f.base.updateRow=async(table,id,patch)=>{writes.push({table,id,patch});return update(table,id,patch);};
+ const before=await f.bridge.content(parent._id);
+ assert.equal(before.content.positions[0].id,'jobref-'+first['活动ID']);
+ const secondSnapshot=structuredClone(second);
+ const change={...before.content,positions:before.content.positions.map((p,i)=>i?p:{...p,name:'保留报名身份的岗位'})};
+ await f.bridge.save(parent._id,{expectedVersion:before.version,token:before.token,content:change},'sz-chair');
+ assert.deepEqual(writes.filter(w=>w.table===WF.events&&w.id!==parent._id).map(w=>w.id),[first._id]);
+ assert.deepEqual(writes.filter(w=>w.table===WF.registrations).map(({id,patch})=>({id,patch})),[{id:'booking-0',patch:{岗位:change.positions[0].name}}]);
+ assert.deepEqual(second,secondSnapshot);
+ assert.equal(f.tables[WF.registrations][0]['活动ID'],first['活动ID']);
+ assert.deepEqual((await f.bridge.content(parent._id)).content.positions.map(p=>p.id),before.content.positions.map(p=>p.id));
 });
 
 test('recovery retains newer project contact information without discarding the original edits own contact change',async t=>{

@@ -2923,3 +2923,5 @@ body:has(.form-workspace:not([data-closing])) .toast-root { top:16px; bottom:aut
 .activity-calendar-events .calendar-rows-30{grid-row-end:span 30}
 .activity-calendar-events .calendar-rows-31{grid-row-end:span 31}
 .activity-calendar-events .calendar-rows-32{grid-row-end:span 32}
+.activity-status-scroll { min-width: 0; overflow-x: auto; padding: 3px; }
+.activity-status-scroll .segmented { width: max-content; }

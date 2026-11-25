@@ -63,7 +63,7 @@ node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 
 ```json
 [
-  { "username": "local-admin", "password": "ChangeMe-Local-Only-123!", "role": "platform_admin", "label": "本地测试管理员" },
+  { "username": "local-admin", "password": "ChangeMe-Local-Only-123!", "role": "platform_admin", "label": "本地测试管理员", "permissions": ["events", "materials"] },
   { "username": "local-member", "password": "ChangeMe-Local-Only-456!", "role": "member", "label": "模拟成员" }
 ]
 ```

@@ -58,6 +58,9 @@ test('workspace returns the catalogue and the selected activity detail in one ca
   assert.deepEqual(result.events.map(e => e._id), ['a'], '目录仍按权限过滤');
   assert.ok(result.detail, '选中活动的详情随目录一起返回');
   assert.deepEqual(result.detail.events.map(e => e._id), ['a'], '详情同样按权限过滤');
+  assert.equal(result.events[0].groupId, 'event:a');
+  assert.equal(result.detail.events[0].groupId, result.events[0].groupId);
+  assert.deepEqual(result.detail.registrations.map(row => row._id), ['r1']);
   assert.deepEqual(calls, ['catalog', 'detail:a']);
 });
 

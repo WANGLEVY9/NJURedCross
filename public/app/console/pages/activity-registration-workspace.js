@@ -5,7 +5,7 @@ import {leaveReviewActions,leaveStatus,canReviewLeave,batchLeaveButton} from './
 import {rosterColumns} from '../roster-columns.js';
 import {activityInformationPreview} from './activity-information-preview.js';
 import {h} from '../../core/dom.js';
-import {button,field,definitionList,badge} from '../../ui/primitives.js';
+import {button,field,definitionList,badge,segmented} from '../../ui/primitives.js';
 import {openModal,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
 import {registrationCapacity} from '../../shared/activity-registration.js';
@@ -17,18 +17,21 @@ export function activityRegistrationWorkspace({adminEditInformation,event,data,a
  const todo=h('aside',{class:'activity-pending-tasks',role:'region','aria-label':'待办事项','aria-live':'polite',hidden:true});
  const root=h('div',{class:'activity-registration-workspace'}),content=h('div',{class:'activity-registration-content'});
  let activePosition='',batchMode=false;
- const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','校区','岗位与时间','报名状态','操作'],key:'registration-'+event._id});
+ const columns=rosterColumns({columns:['序号','选择','姓名','学号','部门','校区','岗位与时间','报名状态','操作'],key:'registration-'+event._id,defaultHidden:['部门']});
  const tableHead=h('tr'),batchCount=h('span',{class:'t-caption','aria-live':'polite'});
  const positionTabs=h('div',{class:'activity-registration-positions',role:'tablist','aria-label':'活动岗位'});
  function positions(){return snapshot.events.filter(e=>{try{return JSON.parse(e['报名页配置']||'{}').bookingMode!=='grouped';}catch{return false;}});}
  const rowsForPosition=id=>snapshot.registrations.filter(r=>parent(r)?.['活动ID']===id);
  const positionRows=()=>rowsForPosition(activePosition);
  const leaveHintText=h('span'),leaveHint=h('div',{class:'activity-registration-leave-hint',role:'status'});
- const viewLeaves=button({label:'查看待审批',size:'sm',variant:'ghost',onClick:()=>{search.control.value='';campus.value='';department.value='';status.control.value='leave-pending';selected.clear();render();status.querySelector('[role=combobox]')?.focus();}});
+ const viewLeaves=button({label:'查看待审批',size:'sm',variant:'ghost',onClick:()=>{search.control.value='';campus.value='';department.value='';setStatus('leave-pending',true);selected.clear();render();}});
  leaveHint.append(leaveHintText,viewLeaves);
  function switchPosition(id){if(busy)return;activePosition=id;selected.clear();render();}
 
- const status=field({label:'报名状态',options:[{value:'',label:'全部状态'},{value:'待筛选',label:'待判定'},{value:'已确认',label:'报名成功'},{value:'未入选',label:'报名失败'},{value:'已请假',label:'已请假'},{value:'已取消',label:'已取消'},{value:'leave-pending',label:'请假待审批'}]});
+ let statusValue='';
+ const status=segmented({role:'radiogroup',ariaLabel:'报名状态',items:[{value:'',label:'全部状态'},{value:'待筛选',label:'待判定'},{value:'已确认',label:'报名成功'},{value:'未入选',label:'报名失败'},{value:'已请假',label:'已请假'},{value:'已取消',label:'已取消'},{value:'leave-pending',label:'请假待审批'}],value:statusValue,
+  onChange:value=>{setStatus(value);selected.clear();render();}});
+ const setStatus=(value,focus=false)=>{statusValue=value;status.setValue(value,{focus});};
  const search=field({label:'搜索报名',placeholder:'姓名或学号',type:'search'});
  const order=field({label:'排序',options:[{value:'original',label:'默认顺序'},{value:'name',label:'姓名升序'},{value:'student',label:'学号升序'},{value:'student-desc',label:'学号降序'}]});
  const campusField=field({label:'校区',options:[{value:'',label:'全部校区'}]}),departmentField=field({label:'部门',options:[{value:'',label:'全部部门'}]});
@@ -40,14 +43,14 @@ export function activityRegistrationWorkspace({adminEditInformation,event,data,a
   control.replaceChildren(h('option',{value:'',text:label}),...options.map(value=>h('option',{value,text:value})));
   control.value=options.includes(previous)?previous:'';
  }
- const reset=button({label:'重置',size:'sm',onClick:()=>{search.control.value='';status.control.value='';campus.value='';department.value='';order.control.value='original';selected.clear();render();}});
+ const reset=button({label:'重置',size:'sm',onClick:()=>{search.control.value='';setStatus('');campus.value='';department.value='';order.control.value='original';selected.clear();render();}});
  const current=()=>snapshot.events.find(e=>e._id===event._id)||event;
  const manager=()=>current().approvalAccess?.canManageRegistration===true&&current()['状态']==='报名中';
  const parent=r=>{const matches=snapshot.events.filter(e=>{let c;try{c=JSON.parse(e['报名页配置']||'{}');}catch{return false;}return e['活动ID']===r['活动ID']||(Array.isArray(c.sourceActivityIds)?c.sourceActivityIds:[]).includes(r['活动ID']);});return matches.length===1?matches[0]:null;};
  const eligible=r=>manager()&&parent(r)?.['活动ID']===r['活动ID']&&parent(r)?.approvalAccess?.canManageRegistration===true&&parent(r)['状态']==='报名中'&&r['报名状态']==='待筛选'&&r['请假状态']!=='待审批';
  const visible=()=>{
   const query=search.control.value.trim().toLocaleLowerCase();
-  const rows=positionRows().filter(r=>(!status.control.value||(status.control.value==='leave-pending'?r['请假状态']==='待审批':status.control.value==='已确认'?['已确认','已签到'].includes(r['报名状态']):r['报名状态']===status.control.value))&&(!query||[r['姓名'],r['学号']].some(value=>String(value||'').toLocaleLowerCase().includes(query)))&&(!campus.value||r['校区']===campus.value)&&(!department.value||departmentOf(r)===department.value));
+  const rows=positionRows().filter(r=>(!statusValue||(statusValue==='leave-pending'?r['请假状态']==='待审批':statusValue==='已确认'?['已确认','已签到'].includes(r['报名状态']):r['报名状态']===statusValue))&&(!query||[r['姓名'],r['学号']].some(value=>String(value||'').toLocaleLowerCase().includes(query)))&&(!campus.value||r['校区']===campus.value)&&(!department.value||departmentOf(r)===department.value));
   const key=order.control.value==='name'?'姓名':'学号';
   if(order.control.value!=='original')rows.sort((a,b)=>String(a[key]||'').localeCompare(String(b[key]||''),'zh-CN',{numeric:true})*(order.control.value==='student-desc'?-1:1));
   return rows;
@@ -160,11 +163,11 @@ export function activityRegistrationWorkspace({adminEditInformation,event,data,a
  }});
  const batchToggle=button({label:'批量操作',onClick:()=>{if(busy||uncertain||!manager())return;batchMode=!batchMode;selected.clear();render();}});
  search.control.addEventListener('input',()=>{selected.clear();render();});
- for(const control of [status.control,order.control,campus,department])control.addEventListener('change',()=>{selected.clear();render();});
+ for(const control of [order.control,campus,department])control.addEventListener('change',()=>{selected.clear();render();});
  const capabilities=registrationCapabilities(event);
  const download=registrationDownloadButton(event,{canDownload:()=>capabilities.exportRegistration&&!busy&&!uncertain,onBusy:value=>{busy=value;if(!disposed)render();}});
  const leaveBatch=batchLeaveButton({getRows:()=>busy||uncertain||!manager()?[]:snapshot.registrations.filter(r=>parent(r)&&canReviewLeave(parent(r))),refresh:fresh,onBusy:value=>{busy=value;if(!disposed)render();}});
- content.append(todo,positionTabs,leaveHint,leaveBatch,h('div',{class:'activity-registration-filters'},search,status,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,renotify,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
+ content.append(todo,positionTabs,leaveHint,leaveBatch,h('div',{class:'activity-status-scroll'},status),h('div',{class:'activity-registration-filters'},search,campusField,departmentField,order,reset,summary),h('div',{class:'activity-registration-batch'},batchToggle,batchCount,success,failure,renotify,columns.control),h('div',{class:'activity-registration-table'},h('table',{},h('thead',{},tableHead),records)));
  root.append(h('div',{class:'activity-draft-toolbar'},view,edit,cutoff,download,actionsNode),h('p',{class:'t-caption',text:'如需修改入群信息、注意事项等通知内容，请点击右上角“通知信息编辑”。修改仅影响后续发送的邮件，已发送或已进入发送队列的邮件保持原内容。'}),content);render();void readMailStatuses();
  return {node:root,dispose:()=>{disposed=true;mailSequence++;liveEdit?.dispose();},hasUnsaved:()=>liveEdit?.hasUnsaved()||false,isSaving:()=>busy||liveEdit?.isSaving()||false};
 }

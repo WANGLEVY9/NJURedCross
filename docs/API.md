@@ -87,6 +87,8 @@
 
 物资与活动总览额外返回 `series`：按 Asia/Shanghai 逐日聚合的真实事件序列，供趋势图使用。
 
+活动工作区目录和详情的组 ID 见 [活动组 ID 联调说明](ACTIVITY_GROUP_ID.md)。
+
 物资扩展服务的本地预览契约见 [物资管理说明](MATERIALS_MANAGEMENT.md)。`lib/materials/service.js` 当前供隔离预览使用；生产继续使用入口中的既有物资接口和持久化回执，不将预览接口视为生产能力。
 
 ---

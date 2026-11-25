@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {activityProjects,projectEvents,activityProjectKey} from '../public/app/shared/activity-projects.js';
+import {activityProjects,projectEvents,activityProjectKey,activityGroupId} from '../public/app/shared/activity-projects.js';
+import {activityInformationView} from '../lib/events/activity-information-view.js';
 const event=(id,config={},date='2026-10-29')=>({_id:id,活动ID:id,活动名称:'同名活动',状态:'报名中',报名日期:date,报名页配置:JSON.stringify(config)});
 test('explicit ordinary group collapses 16 sessions without losing their identities',()=>{
  const rows=Array.from({length:16},(_,i)=>event(`s${i}`,{ordinary:{groupId:'week'}}));
@@ -17,6 +18,29 @@ test('blood project uses explicit blood marker and calendar week, not title',()=
 });
 test('same names and malformed configs are never merged, superseded rows are hidden',()=>{
  assert.equal(activityProjects([event('a'),{...event('b'),报名页配置:'broken'},{...event('c'),sourceSuperseded:true}]).length,2);
+});
+
+test('first position generation does not change the group ID already exposed for a grouped parent',()=>{
+ const draft=event('parent',{bookingMode:'grouped'});
+ const published=event('parent',{bookingMode:'grouped',positionPlan:{groupId:'PROJECT-parent'}});
+ const shift=event('shift',{ordinary:{groupId:'PROJECT-parent'},parentActivityId:'parent'});
+ assert.equal(activityGroupId(draft),activityGroupId(published));
+ assert.equal(activityGroupId(shift),activityGroupId(published));
+ assert.equal(activityGroupId(event('another')), 'event:another');
+ assert.equal(activityGroupId({...shift,relationshipError:true}),null);
+ assert.equal(activityGroupId({...shift,报名页配置:'null'}),null);
+});
+
+test('saved schedule and blood week identities take precedence over an edited display date',()=>{
+ const week='2026-10-26';
+ const schedule=event('shift',{special:{type:'schedule',rootId:'ROOT',week},ordinary:{groupId:'PROJECT-ROOT'}},'2026-11-02');
+ const blood=event('blood',{blood:{weekStart:week}},'2026-11-02');
+ for(const [row,expected] of [[schedule,'schedule:ROOT:2026-10-26'],[blood,'blood:2026-10-26']]){
+  assert.equal(activityGroupId(row),expected);
+  const readOnly=activityInformationView(row);
+  assert.equal(readOnly.groupId,expected);
+  assert.equal(activityProjectKey(readOnly),expected);
+ }
 });
 
 test('closed future source shifts keep the week manageable when its first shift already ended',()=>{

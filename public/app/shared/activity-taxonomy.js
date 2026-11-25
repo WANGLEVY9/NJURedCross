@@ -23,3 +23,18 @@ export function activityRegion(event) {
 export function categoryFacets(events, options = ACTIVITY_CATEGORY_OPTIONS) {
   return [...new Set(options.filter(value=>ACTIVITY_CATEGORY_OPTIONS.includes(value)))];
 }
+
+/** Business tags are distinct from the organizational categories above.
+ * Only labels confirmed in the task cards belong in the shared dictionary. */
+export const ACTIVITY_TAG_GROUPS = Object.freeze([
+  Object.freeze({name:'青年参与', tags:Object.freeze(['同伴教育','探索人道法','特殊儿童','气候防灾'])}),
+]);
+
+export function activityTagGroup(tag) {
+  return ACTIVITY_TAG_GROUPS.find(group=>group.tags.includes(tag));
+}
+
+export function activityFeedbackTemplate(tag, configured) {
+  if (activityTagGroup(tag)?.name==='青年参与') return 'ihl';
+  return ['simple-rating','short-summary'].includes(configured) ? configured : null;
+}

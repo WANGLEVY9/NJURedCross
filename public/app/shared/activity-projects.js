@@ -1,12 +1,14 @@
 // Group only explicit project identities, never display names.
 function legacyProjectConfig(event) {
-  try { return JSON.parse(event?.['报名页配置'] || '{}'); } catch { return {}; }
+  try {
+    const config = JSON.parse(event?.['报名页配置'] || '{}');
+    return config && typeof config === 'object' && !Array.isArray(config) ? config : null;
+  } catch { return null; }
 }
-export function legacyActivityRelation(event) {
-  const legacy=legacyProjectConfig(event);
+export function legacyActivityRelation(event, legacy=legacyProjectConfig(event)) {
   return {
-    groupId:String(legacy.ordinary?.groupId || legacy.positionPlan?.groupId || '').trim(),
-    parentId:String(legacy.parentActivityId || '').trim(),
+    groupId:String(legacy?.ordinary?.groupId || legacy?.positionPlan?.groupId || '').trim(),
+    parentId:String(legacy?.parentActivityId || '').trim(),
   };
 }
 export const activityProjectId=event=>legacyActivityRelation(event).groupId;
@@ -16,7 +18,7 @@ export function bloodWeekStart(date) {
   const value = String(date || '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return '';
   const day = new Date(`${value}T00:00:00Z`);
-  if (day.toISOString().slice(0, 10) !== value) return '';
+  if (!Number.isFinite(day.getTime()) || day.toISOString().slice(0, 10) !== value) return '';
   day.setUTCDate(day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
   return day.toISOString().slice(0, 10);
 }
@@ -54,17 +56,64 @@ export function projectEventsFrom(groups, event) {
   return groups.get(activityProjectKey(event)) || [event];
 }
 export function activityProjectKey(event) {
-  const special=legacyProjectConfig(event).special;
-  if(['schedule','hospital-examination','hospital-vaccination'].includes(special?.type)&&special.rootId&&special.week&&bloodWeekStart(event['报名日期'])===special.week)return `schedule:${special.rootId}:${special.week}`;
-  const id = activityProjectId(event);
+  return projectKey(event, legacyProjectConfig(event));
+}
+
+function projectKey(event, config) {
+  const stored = String(event?.['活动组ID'] || '').trim();
+  if (stored) {
+    if (!compatibleStoredActivityGroup(event)) return 'event:'+event._id;
+    return stored.startsWith('schedule:') || stored.startsWith('blood:') ? stored : 'ordinary:'+stored;
+  }
+  return historicalProjectKey(event, config);
+}
+
+function historicalProjectKey(event, config) {
+  const { special, blood } = config || {};
+  if (['schedule','hospital-examination','hospital-vaccination'].includes(special?.type) && special.rootId && special.week) {
+    if (bloodWeekStart(special.week) === special.week) return `schedule:${special.rootId}:${special.week}`;
+    return `event:${event._id}`;
+  }
+  const id = legacyActivityRelation(event, config).groupId;
   if (id) return `ordinary:${id}`;
-  try {
-    if (JSON.parse(event['报名页配置'] || '{}').blood) {
-      const start = bloodWeekStart(event['报名日期']);
-      if (start) return `blood:${start}`;
-    }
-  } catch { /* Unconfigured rows remain independent. */ }
+  if (blood) {
+    const start = blood.weekStart ?? bloodWeekStart(event['报名日期']);
+    if (start && bloodWeekStart(start) === start) return bloodWeekKey(start);
+  }
+  if (config?.bookingMode === 'grouped' && !config.parentActivityId && event['活动ID']) {
+    return `ordinary:PROJECT-${event['活动ID']}`;
+  }
   return `event:${event._id}`;
+}
+
+/** The ordinary value is a foreign key to the project table; weekly sources
+ * use their own namespaces. Never create a group for an independent row. */
+export function storedActivityGroup(event, { legacyDates = false } = {}) {
+  const config = legacyProjectConfig(event);
+  if (!config) return '';
+  if (config.blood && !config.blood.weekStart && !legacyDates) return '';
+  const key = historicalProjectKey(event, config);
+  if (key.startsWith('ordinary:')) return legacyActivityRelation(event, config).groupId;
+  return key.startsWith('schedule:') || key.startsWith('blood:') ? key : '';
+}
+
+export function compatibleStoredActivityGroup(event) {
+  const stored=event?.['活动组ID'];
+  if (!stored) return true;
+  const config=legacyProjectConfig(event);
+  if (!config || typeof stored!=='string') return false;
+  if (config.blood&&!config.blood.weekStart&&stored.startsWith('blood:')) {
+    const week=stored.slice(6);
+    return Boolean(week&&bloodWeekStart(week)===week);
+  }
+  return stored===storedActivityGroup(event);
+}
+
+/** Management API grouping follows the same scope as the roster. */
+export function activityGroupId(event) {
+  if (!event?._id || event.configurationError || event.relationshipError || event.sourceSuperseded || !compatibleStoredActivityGroup(event)) return null;
+  const config = legacyProjectConfig(event);
+  return config ? projectKey(event, config) : null;
 }
 export function bloodWeekKey(monday) {
   return `blood:${monday}`;
@@ -89,8 +138,9 @@ export function activityProjects(events) {
     const representative = parent || sessions.find(row => row['状态'] === '报名中') || sessions.find(row => row['状态'] === '进行中') || sessions.find(row => row['状态'] === '停点') || sessions[0];
     const damaged=sessions.find(row=>row.configurationError);
     const relationshipDamaged=sessions.find(row=>row.relationshipError);
-    const blood = activityProjectKey(representative).startsWith('blood:');
-    const weekName = blood ? bloodWeekName(bloodWeekStart(representative['报名日期'])) : '';
+    const key = activityProjectKey(representative);
+    const blood = key.startsWith('blood:');
+    const weekName = blood ? bloodWeekName(key.slice('blood:'.length)) : '';
     return { ...representative, sessions, ...(damaged?{configurationError:true,damagedEventId:damaged._id}:{}), ...(relationshipDamaged?{relationshipError:true,relationshipDamagedEventId:relationshipDamaged._id}:{}), projectName: weekName || (blood ? `${String(representative['报名日期']).slice(0,7)} 献血车志愿服务` : representative.registrationControl?.groupName || representative['活动名称']) };
   });
 }

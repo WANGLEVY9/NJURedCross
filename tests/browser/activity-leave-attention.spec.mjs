@@ -32,7 +32,7 @@ const kind='running';
     await first.click();
     await attention.getByRole('button',{name:'查看待审批请假',exact:true}).click();
     await expect(second).toHaveAttribute('aria-selected','true');
-    if(kind==='registration')await expect(page.getByRole('combobox',{name:'报名状态',exact:true})).toContainText('请假待审批');
+    if(kind==='registration')await expect(page.getByRole('radiogroup',{name:'报名状态',exact:true}).getByRole('radio',{name:'请假待审批',exact:true})).toBeChecked();
     await expect(page.getByRole('row').filter({hasText:'合成课程冲突甲'})).toBeVisible();await expect(page.getByRole('row').filter({hasText:'其他项目'})).toHaveCount(0);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
     await page.getByRole('row').filter({hasText:'合成课程冲突甲'}).getByRole('button',{name:'审核通过',exact:true}).click();

@@ -782,7 +782,6 @@ for (const account of accountLoad.accounts) {
     passwordHash,
     label: String(account.label || role.label).trim(),
     role: account.role,
-    permissions: normalizePermissions(account.permissions, account.role, account),
   });
 }
 if (!isProduction) {
@@ -3294,7 +3293,7 @@ async function getConsoleSearch(query, permissions) {
 }
 
 async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMISSION_SCOPES, session = null) {
-  const allowed = new Set(normalizePermissions(permissionValue, 'platform_admin'));
+  const allowed = new Set(permissionValue);
   const when = (scope, task, fallback = null) => allowed.has(scope) ? task() : Promise.resolve(fallback);
   const [materialsResult, eventsResult, outreachResult, volunteerResult, communityResult, publicSubmissionResult, warmthResult] = await Promise.allSettled([
     when('materials', () => getMaterialsOverview(client, { notificationsOnly: true })),
@@ -4151,12 +4150,12 @@ function requireConsoleAccess(req, res, requiredScope = null) {
     return null;
   }
   if (!consoleRoles.has(session.role)) {
-    json(res, 403, { ok: false, code: 'console_forbidden', message: '当前账号属于活动平台，没有管理平台权限。' });
+    json(res, 403, { ok: false, code: 'console_forbidden', requiredRole: 'console_admin', requiredRoles: ['platform_admin', 'super_admin'], message: '此操作需要管理平台管理员或超级管理员身份。' });
     return null;
   }
   const account = accountsByUsername.get(session.username);
   if (requiredScope && !hasPermission(account, requiredScope)) {
-    json(res, 403, { ok: false, code: 'permission_denied', requiredScope, message: `当前账号没有 ${requiredScope} 模块权限。` });
+    json(res, 403, { ok: false, code: 'permission_denied', requiredScope, message: `当前账号缺少 ${requiredScope} 模块权限。请核对账号的「权限范围」。` });
     return null;
   }
   return session;
