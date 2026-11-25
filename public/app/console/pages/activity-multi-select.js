@@ -27,9 +27,27 @@ export function activityMultiSelect({label,placeholder='请选择',options=[],se
     }
   }
   function close(focus=false){if(popup.matches(':popover-open'))popup.hidePopover();if(focus)trigger.focus();}
+  function position(){
+    const rect=trigger.getBoundingClientRect();
+    const margin=8;
+    const width=Math.min(Math.max(rect.width,260),340,innerWidth-2*margin);
+    const below=innerHeight-rect.bottom-margin;
+    const above=rect.top-margin;
+    const measured=popup.getBoundingClientRect().height||popup.scrollHeight;
+    const up=below<Math.min(measured,320)&&above>below;
+    const height=Math.max(120,Math.min(320,up?above:below));
+    const left=Math.max(margin,Math.min(rect.left,innerWidth-width-margin));
+    const top=up?Math.max(margin,rect.top-Math.min(measured,height)-6):rect.bottom+6;
+    popup.style.left=`${left}px`;
+    popup.style.top=`${top}px`;
+    popup.style.width=`${width}px`;
+    popup.style.maxHeight=`${height}px`;
+    popup.dataset.side=up?'top':'bottom';
+  }
   function open(){
     if(disabled)return;
     search.value='';filter();popup.showPopover();
+    position();
     trigger.setAttribute('aria-expanded','true');opened=true;
     search.focus({preventScroll:true});
   }
@@ -46,6 +64,9 @@ export function activityMultiSelect({label,placeholder='请选择',options=[],se
   popup.addEventListener('toggle',()=>{if(!popup.matches(':popover-open')){trigger.setAttribute('aria-expanded','false');opened=false;}});
   trigger.addEventListener('click',()=>opened?close():open());
   search.addEventListener('input',filter);
+  search.addEventListener('input',position);
+  window.addEventListener('resize',()=>{if(opened)position();});
+  document.addEventListener('scroll',()=>{if(opened)position();},true);
   search.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();close(true);}if(event.key==='Tab'&&!event.shiftKey&&!list.querySelector('input'))close();});
   trigger.addEventListener('keydown',event=>{if(['Enter',' ','ArrowDown'].includes(event.key)){event.preventDefault();open();}});
   root.setOptions=(next,nextValues=values)=>{choices=next;values=nextValues.filter(id=>choices.some(row=>row.id===id)||nextValues.includes(id));filter();sync();};
