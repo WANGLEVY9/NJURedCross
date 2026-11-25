@@ -1,6 +1,7 @@
 import { createPublicReadCache } from './public-read-cache.js';
 import { reportTiming } from './telemetry.js';
 import { UPLOAD_TIMEOUT_MS } from './upload-retry.js';
+import { combineSignals } from './abort-signals.js';
 /* ==========================================================================
    api.js — the single network boundary.
    The browser never holds a SeaTable token: every call goes to this origin's
@@ -167,7 +168,7 @@ async function timedRead(path,options){
  const controller=new AbortController();
  const timer=setTimeout(()=>controller.abort(new DOMException('Read deadline exceeded','TimeoutError')),12_000);
  try{
-  const signal=options.signal?AbortSignal.any([options.signal,controller.signal]):controller.signal;
+  const signal=options.signal?combineSignals([options.signal,controller.signal]):controller.signal;
   for(let attempt=0;attempt<2;attempt++){
    const attemptController=new AbortController();
    // Allow the server the overall budget before headers. Starting the stall
@@ -177,7 +178,7 @@ async function timedRead(path,options){
    // The six-second timer measures inactivity, not total transfer duration.
    // Headers and body chunks reset it; the outer 12-second budget never moves.
    const progress=()=>{if(attempt===0){clearTimeout(attemptTimer);attemptTimer=setTimeout(()=>attemptController.abort(new DOMException('Read attempt stalled','TimeoutError')),6_000);}};
-   try{const result=await performRequest(path,{...options,onProgress:progress,signal:AbortSignal.any([signal,attemptController.signal])});signal.throwIfAborted();return result;}
+   try{const result=await performRequest(path,{...options,onProgress:progress,signal:combineSignals([signal,attemptController.signal])});signal.throwIfAborted();return result;}
    catch(error){if(attempt||signal.aborted||(!attemptController.signal.aborted&&(!(error instanceof ApiError)||![0,502,504].includes(error.status))))throw error;}
    finally{clearTimeout(attemptTimer);}
   }

@@ -1,5 +1,6 @@
 import { h } from '../core/dom.js';
 import { requestBlob } from '../core/api.js';
+import { combineSignals } from '../core/abort-signals.js';
 import { reportTiming } from '../core/telemetry.js';
 import { button, iconButton } from '../ui/primitives.js';
 import { mountOverlay } from '../ui/overlay.js';
@@ -33,7 +34,7 @@ export function openPhotoPreview({ photo, thumbnail = '', onDownload }) {
     status.textContent = '正在加载高清预览…';
     figure.setAttribute('aria-busy', 'true');
     const start = performance.now();
-    const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(12_000)]);
+    const signal = combineSignals([abort.signal, AbortSignal.timeout(12_000)]);
     let outcome = 'success';
     try {
       const { blob } = await requestBlob(`/api/public/media/${encodeURIComponent(photo.id)}/preview`, { method: 'GET', signal });
