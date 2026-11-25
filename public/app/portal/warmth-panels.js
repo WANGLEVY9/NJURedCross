@@ -92,8 +92,8 @@ function collapsiblePanel({ id, title, description, count, rows, emptyTitle, emp
 /** 未审核与「需修改」可编辑；已通过只可删除；已拒绝只可重写。 */
 const EDITABLE_BLESSING_STATUSES = ['待审核', '需修改'];
 
-/** 「查看」为纯预览：不提供编辑 / 删除，操作统一放在行内按钮与编辑抽屉里。 */
-function openWrittenBlessingPreview(item) {
+/** 在预览中展示举报进度，编辑与删除沿用行内操作。 */
+function openWrittenBlessingPreview(item,onChanged) {
   let modal;
   modal = openModal({
     title: '生日祝福预览',
@@ -106,10 +106,12 @@ function openWrittenBlessingPreview(item) {
         ...(item.deliveryKey === 'friend' ? [['挚友昵称', item.friendNickname || '—'], ['挚友生日', birthdayLabel({birthdayCalendar:item.friendBirthdayCalendar,birthdayMonthDay:item.friendBirthday})], ['挚友邮箱', item.friendEmail || '—'],
           ['计划投递日期', item.scheduledDate || '—'], ['邮件投递', item.friendDeliveryStatus || '等待审核']] : []),
         ['提交时间', fmt.fullDateTime(item.submittedAt)],
+        item.reportStatus?['举报状态',item.reportStatus]:null,
+        item.reportResolution?['举报处理意见',item.reportResolution]:null,
         item.reviewNote ? ['审核意见', item.reviewNote] : item.previousReviewNote ? ['上一次审核意见', item.previousReviewNote] : null,
       ].filter(Boolean)),
     ],
-    footer: [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() })],
+    footer: [...(item.reportStatus==='待处理'?[]:[button({label:'举报',variant:'ghost',onClick:async()=>{await modal.close();openBlessingReportDialog({submissionId:item.id,onDone:onChanged});}})]),h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => modal.close() })],
   });
 }
 
@@ -148,7 +150,7 @@ export function buildWrittenBlessingsPanel(blessings = [], { id = 'member-warmth
         ].filter(Boolean).join(' · '),
         onClick: null,
         action: h('div', { class: 'row-2 row-wrap' },
-          button({ label: '查看', variant: 'ghost', size: 'sm', onClick: () => openWrittenBlessingPreview(item) }),
+          button({ label: '查看', variant: 'ghost', size: 'sm', onClick: () => openWrittenBlessingPreview(item,onChanged) }),
           editable ? button({ label: '编辑', variant: 'primary', size: 'sm', onClick: () => openBlessingDrawer({ blessing: item, onDone: onChanged }) }) : null,
           !editable && !rejected ? button({ label: '删除', variant: 'danger', size: 'sm', onClick: () => deleteWrittenBlessing(item, { onChanged }) }) : null,
           rejected ? button({ label: '重写', variant: 'primary', size: 'sm', iconName: 'sparkle', onClick: () => openBlessingDrawer({ onDone: onChanged }) }) : null,

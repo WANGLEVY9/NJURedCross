@@ -2,6 +2,8 @@ import { summaryMetric as metric } from '../lib.js';
 import { navigate, patchQuery } from '../../core/router.js';
 import { tableStateOptions } from '../table-state.js';
 import { batchApprovalControls } from '../community-review-controls.js';
+import {openBlessingReportDialog} from '../../portal/blessing-letter.js';
+import {moderationPhase} from '../../shared/community-moderation.js';
 /* ==========================================================================
    console/pages/community.js — warmth programme safety console.
    The emphasis is consent, review and the manual gate before anything is
@@ -217,11 +219,11 @@ function openInterestDrawer(interest, { onDone }) {
 }
 
 function openSubmissionReviewDrawer(submission, { onDone }) {
-  let decision = 'approve';
+  let decision = submission.blockedByReport?'return':'approve';
   let submitting = false;
   let reviewSaved = false;
-  const actionable = submission.status === '待审核';
-  const rejected = submission.status === '已拒绝';
+  const actionable = moderationPhase('submission',submission.status)==='pending';
+  const rejected = moderationPhase('submission',submission.status)==='rejected';
   const noteField = field({
     label: '审核意见',
     name: 'note',
@@ -232,7 +234,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
   });
   const decisionControl = segmented({
     items: [
-      { value: 'approve', label: '审核通过' },
+      ...(submission.blockedByReport?[]:[{ value: 'approve', label: '审核通过' }]),
       { value: 'return', label: '退回修改' },
       { value: 'reject', label: '直接拒绝' },
     ],
@@ -275,6 +277,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
         'div',
         { class: 'row-3 row-wrap' },
         statusFor(submission.status),
+        button({label:'举报此投稿',variant:'ghost',size:'sm',onClick:()=>openBlessingReportDialog({submissionId:submission.id,submitReport:consoleApi.community.flagSubmission})}),
         button({
           label: submission.actor || '查看投稿人',
           variant: 'ghost',
@@ -297,12 +300,13 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       h('div', { class: 'stack-2' }, h('p', { class: 't-label', text: '投稿内容' }), h('div', { class: 'content-preview t-secondary', text: submission.content })),
       actionable ? h('div', { class: 'field' }, h('p', { class: 'field__label', text: '审核结果' }), decisionControl) : null,
       actionable ? noteField : null,
-      !actionable ? notice(`当前状态为「${submission.status}」。${rejected ? '如需重新审核，请使用下方的撤销拒绝按钮。' : '该投稿已经完成审核，不能重复提交审核结果。'}`, { tone: rejected ? 'warning' : 'info' }) : null,
+      submission.blockedByReport?notice('此投稿有待处理或已受理的举报，处理举报后才能通过审核。',{tone:'warning'}):null,
+      !actionable ? notice(`当前状态为「${submission.status}」。${rejected&&!submission.blockedByReport ? '如需重新审核，请使用下方的撤销拒绝按钮。' : '当前不能提交审核结果。'}`, { tone: rejected ? 'warning' : 'info' }) : null,
       notice(submission.delivery === '写给挚友' ? '审核通过后将在计划生日当天自动发送一次邮件；当天投递时段已到时，可能很快发送。' : '审核通过不会立即触发匹配或发送。', { tone: 'info' }),
     ].filter(Boolean),
     footer: actionable
       ? [h('span', { class: 'spacer' }), button({ label: '取消', variant: 'ghost', onClick: () => drawer.close() }), submitButton]
-      : rejected
+      : rejected&&!submission.blockedByReport
         ? [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() }), reopenButton]
         : [h('span', { class: 'spacer' }), button({ label: '关闭', variant: 'ghost', onClick: () => drawer.close() })],
   });
@@ -343,7 +347,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       let payload;
       try {
         payload = await runWithLoading(submitButton, () =>
-          consoleApi.community.reviewSubmission(
+          consoleApi.community.moderateSubmission(
             submission.id,
             { decision, note },
           ));
@@ -387,7 +391,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
       let nextSubmission = reviewResult?.nextSubmission || null;
       if (reviewResult?.nextSubmissionKnown !== true) {
         try {
-          const list = await consoleApi.community.submissions({ view: 'active' });
+          const list = await consoleApi.community.moderation('submission',{ view: 'active' });
           nextSubmission = (list.submissions || []).find(
             (row) => row.status === '待审核' && row.id !== submission.id,
           ) || null;
@@ -448,7 +452,7 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
     });
     if (!confirmed) return;
     try {
-      const payload = await runWithLoading(reopenButton, () => consoleApi.community.reviewSubmission(submission.id, { decision: 'reopen', note: '' }));
+      const payload = await runWithLoading(reopenButton, () => consoleApi.community.moderateSubmission(submission.id, { decision: 'reopen', note: '' }));
       notify.success('已撤销拒绝', payload.message);
       drawer.close();
       await onDone?.({ decision: 'reopen', id: submission.id, status: '待审核', review: null });
@@ -464,6 +468,8 @@ function openSubmissionReviewDrawer(submission, { onDone }) {
 export default async function communityPage(context, shell) {
   const selectedSubmissionIds = new Set();
   let tab = context.query.get('tab') || 'interests';
+  let reviewSource=context.query.get('source')==='report'||tab==='reports'?'report':'submission';
+  if(tab==='reports'||tab==='review')tab='submissions';
   if (tab === 'pilot') {
     tab = 'interests';
     patchQuery({ tab });
@@ -528,8 +534,7 @@ export default async function communityPage(context, shell) {
   const tabControl = segmented({
     items: [
       { value: 'interests', label: '参与人员' },
-      { value: 'submissions', label: '投稿池审核' },
-      { value: 'reports', label: '举报处理' },
+      { value: 'submissions', label: '内容审核' },
       { value: 'library', label: '祝福库' },
       { value: 'matching', label: '匹配预览' },
     ],
@@ -540,7 +545,8 @@ export default async function communityPage(context, shell) {
       tab = value;
       communityTargetHandled = true;
       patchQuery({
-        tab: value,
+        tab: value==='submissions'?'review':value,
+        source: value==='submissions'?reviewSource:null,
         interest: null,
         submission: null,
       });
@@ -722,7 +728,7 @@ export default async function communityPage(context, shell) {
     lazy: true,
     skeleton: skeletonRows(6),
     errorTitle: '投稿池无法加载',
-    load: ({ fresh } = {}) => consoleApi.community.submissions({ view: submissionsView, fresh }),
+    load: ({ fresh } = {}) => consoleApi.community.moderation('submission',{ view: submissionsView, fresh }),
     render: (payload, { reload, redraw }) => {
       const all = payload.submissions || [];
       const stats = {
@@ -761,7 +767,7 @@ export default async function communityPage(context, shell) {
             label: '投稿',
             unit: '条',
             confirmationDescription: '通过后内容进入已审核祝福池；实际转达仍需管理员确认批次。',
-            onApprove: row => consoleApi.community.reviewSubmission(row.id, { decision: 'approve', note: '' }),
+            onApprove: row => consoleApi.community.moderateSubmission(row.id, { decision: 'approve', note: '' }),
             onDone: ({ succeeded = [] } = {}) => {
               let changed = false;
               for (const id of succeeded) {
@@ -779,7 +785,7 @@ export default async function communityPage(context, shell) {
       const approveRow = async (row, control) => {
         try {
           const result = await runWithLoading(control, () =>
-            consoleApi.community.reviewSubmission(row.id, { decision: 'approve', note: '' }),
+            consoleApi.community.moderateSubmission(row.id, { decision: 'approve', note: '' }),
           );
           notify.success('已通过审核', result.message);
           applyReview({
@@ -857,14 +863,15 @@ export default async function communityPage(context, shell) {
           }),
           onRowClick: reviewRow,
           buildRowAction: (row) => {
+            const canApprove=row.status==='待审核'&&!row.blockedByReport;
             let action;
             action = button({
-              label: row.status === '待审核' ? '通过' : '查看',
-              variant: row.status === '待审核' ? 'primary' : 'secondary',
+              label: canApprove ? '通过' : '查看',
+              variant: canApprove ? 'primary' : 'secondary',
               size: 'sm',
-              iconName: row.status === '待审核' ? 'check' : 'search',
-              ariaLabel: `${row.status === '待审核' ? '通过' : '查看'}投稿 ${row.id}`,
-              onClick: () => row.status === '待审核'
+              iconName: canApprove ? 'check' : 'search',
+              ariaLabel: `${canApprove ? '通过' : '查看'}投稿 ${row.id}`,
+              onClick: () => canApprove
                 ? approveRow(row, action)
                 : reviewRow(row),
             });
@@ -962,13 +969,13 @@ export default async function communityPage(context, shell) {
     lazy: true,
     skeleton: h('div', { class: 'stack-6' }, skeletonMetrics(4), skeletonRows(6)),
     errorTitle: '举报无法加载',
-    load: () => consoleApi.community.warmthReports(),
+    load: ({fresh}) => consoleApi.community.moderation('report',{fresh}),
     render: (payload, { reload, redraw }) => {
       const all = payload.reports || [];
-      const pendingRows = all.filter((row) => row.status === '待处理');
-      const handledRows = all.filter((row) => row.status !== '待处理');
+      const pendingRows = all.filter((row) => moderationPhase('report',row.status)==='pending');
+      const handledRows = all.filter((row) => moderationPhase('report',row.status)!=='pending');
       if (!all.length) {
-        return emptyState({ iconName: 'alert', title: '还没有举报', description: '成员在收到的祝福详情里举报后，会出现在这里等待处理。' });
+        return emptyState({ iconName: 'alert', title: '还没有举报', description: '祝福和未发布投稿的举报会出现在这里。' });
       }
       const rows = reportsView === 'handled' ? handledRows : pendingRows;
       const viewControl = segmented({
@@ -995,7 +1002,7 @@ export default async function communityPage(context, shell) {
           columns: [
             { key: 'id', label: '举报编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.id }) },
             { key: 'submissionId', label: '投稿编号', mono: true, render: (row) => h('code', { class: 't-data', text: row.submissionId }) },
-            { key: 'content', label: '被举报祝福', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content || '—' }) },
+            { key: 'content', label: '被举报内容', strong: true, render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.content || '—' }) },
             { key: 'reason', label: '举报理由', render: (row) => h('span', { class: 't-secondary t-clamp-2', text: row.reason }) },
             { key: 'reporterStudentId', label: '举报人学号', render: (row) => h('span', { class: 't-data', text: row.reporterStudentId || '—' }) },
             { key: 'status', label: '状态', sortable: false, render: (row) => statusFor(row.status) },
@@ -1310,10 +1317,10 @@ export default async function communityPage(context, shell) {
       if (action === 'handle' && !note) { noteField.setError('受理举报必须填写处理意见'); shake(noteField); return; }
       submitting = true;
       try {
-        await runWithLoading(action === 'handle' ? handleButton : dismissButton, () => consoleApi.community.decideWarmthReport(report.id, action, { note }));
+        await runWithLoading(action === 'handle' ? handleButton : dismissButton, () => consoleApi.community.moderateReport(report.id, action, { note }));
         actionSaved = true;
         draftProtection.markSaved();
-        notify.success(action === 'handle' ? '举报已受理' : '举报已驳回', action === 'handle' ? '该祝福已从祝福库撤下。' : '已记录驳回结论。');
+        notify.success(action === 'handle' ? '举报已受理' : '举报已驳回', action === 'handle' ? '已暂停该投稿的发布与投递。' : '已记录驳回结论。');
         try {
           await onDone?.();
         } catch (error) {
@@ -1321,12 +1328,12 @@ export default async function communityPage(context, shell) {
         }
         let nextReport = null;
         try {
-          const list = await consoleApi.community.warmthReports();
+          const list = await consoleApi.community.moderation('report',{fresh:true});
           nextReport = (list.reports || []).find((row) => row.status === '待处理' && row.id !== report.id) || null;
         } catch { nextReport = null; }
         draftProtection.release();
         drawer.setBody(
-          notice(`${action === 'handle' ? '已受理并撤下该祝福' : '已驳回该举报'}：举报 ${report.id}。${nextReport ? '还有待处理的举报，可以直接继续。' : '没有其他待处理的举报了，本次处理流程结束。'}`, { tone: 'success', title: '处理完成' }),
+          notice(`${action === 'handle' ? '已受理该举报' : '已驳回该举报'}：举报 ${report.id}。${nextReport ? '还有待处理的举报，可以直接继续。' : '没有其他待处理的举报了，本次处理流程结束。'}`, { tone: 'success', title: '处理完成' }),
         );
         drawer.setFooter(
           nextReport
@@ -1347,7 +1354,7 @@ export default async function communityPage(context, shell) {
       if (!note) { noteField.setError('请填写处理意见'); shake(noteField); return; }
       submitting = true;
       try {
-        const result = await runWithLoading(saveButton, () => consoleApi.community.decideWarmthReport(report.id, editAction, { note }));
+        const result = await runWithLoading(saveButton, () => consoleApi.community.moderateReport(report.id, editAction, { note }));
         draftProtection.markSaved();
         report.status = result?.report?.status || (editAction === 'handle' ? '已处理' : '已驳回');
         report.resolutionNote = result?.report?.resolutionNote ?? note;
@@ -1368,15 +1375,20 @@ export default async function communityPage(context, shell) {
       }
     }
 
-    if (report.status === '待处理') showPending();
+    if (moderationPhase('report',report.status)==='pending') showPending();
     else showProcessed();
   }
 
   function renderTab() {
     clear(bodySlot);
-    const current = tab === 'submissions' ? submissionsRegion : tab === 'reports' ? reportsRegion : tab === 'library' ? libraryRegion : tab === 'matching' ? matchingRegion : interestsRegion;
+    const current = tab === 'submissions' ? (reviewSource==='report'?reportsRegion:submissionsRegion) : tab === 'library' ? libraryRegion : tab === 'matching' ? matchingRegion : interestsRegion;
     current.ensureLoaded();
-    bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')), current);
+    bodySlot.append(h('div', { class: 'row-3 row-wrap' }, tabControl, h('span', { class: 'spacer' }), reloadAction(current, '刷新')));
+    if(tab==='submissions')bodySlot.append(segmented({items:[{value:'submission',label:'投稿审核'},{value:'report',label:'举报处理'}],value:reviewSource,ariaLabel:'审核来源',role:'radiogroup',onChange:value=>{
+      reviewSource=value;communityTargetHandled=true;patchQuery({tab:'review',source:value,submission:null});
+      void (value==='report'?reportsRegion:submissionsRegion).reload();renderTab();
+    }}));
+    bodySlot.append(current);
     requestAnimationFrame(() => tabControl.reposition?.());
   }
 

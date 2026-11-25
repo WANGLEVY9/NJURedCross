@@ -33,7 +33,7 @@ async function mount(page, succeeds = false, status = '待处理') {
   const requests = [];
   await page.route('**/api/**', (route) => route.abort());
 
-  await page.route('**/api/community/warmth-reports/synthetic-report/*',
+  await page.route('**/api/community/moderation/report/synthetic-report/*',
     async (route) => {
       const body = route.request().postDataJSON();
       requests.push(body);
@@ -51,7 +51,7 @@ async function mount(page, succeeds = false, status = '待处理') {
       });
     });
 
-  await page.route('**/api/community/warmth-reports', (route) =>
+  await page.route('**/api/community/moderation?source=report', (route) =>
     route.fulfill({ json: { ok: true, reports: [] } }));
 
   await page.route('**/app/console/pages/community-birthday.js*',

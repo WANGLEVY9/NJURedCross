@@ -12,7 +12,7 @@ export function batchApprovalControls({
   onApprove,
   onDone,
 }) {
-  const eligible = rows.filter(row => row.status === '待审核');
+  const eligible = rows.filter(row => row.status === '待审核'&&!row.blockedByReport);
   const eligibleIds = new Set(eligible.map(row => row.id));
   for (const id of selectedIds) if (!eligibleIds.has(id)) selectedIds.delete(id);
   const inputs = [];
@@ -85,7 +85,7 @@ export function batchApprovalControls({
       const input = h('input', {
         type: 'checkbox',
         checked: selectedIds.has(row.id),
-        disabled: row.status !== '待审核' || busy,
+        disabled: !eligibleIds.has(row.id) || busy,
         aria: { label: `选择${label} ${row.nickname || row.realName || row.id}` },
       });
       input.addEventListener('click', event => event.stopPropagation());

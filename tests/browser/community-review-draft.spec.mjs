@@ -17,7 +17,7 @@ async function mount(page, version, succeeds) {
 
   await page.route('**/api/**', (route) => route.abort());
 
-  await page.route('**/api/community/submissions/synthetic-submission/review',
+  await page.route(version==='legacy'?'**/api/community/submissions/synthetic-submission/review':'**/api/community/moderation/submission/synthetic-submission/decision',
     async (route) => {
       requests.push(route.request().postDataJSON());
       await route.fulfill({
@@ -28,7 +28,7 @@ async function mount(page, version, succeeds) {
       });
     });
 
-  await page.route('**/api/community/submissions*', (route) =>
+  await page.route(version==='legacy'?'**/api/community/submissions*':'**/api/community/moderation?source=submission*', (route) =>
     route.fulfill({ json: { ok: true, submissions: [] } }));
 
   await page.route(`**/app/console/pages/community-${version}.js`,

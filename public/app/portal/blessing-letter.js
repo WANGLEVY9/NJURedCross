@@ -68,7 +68,7 @@ export function openBlessingLetterModal({ title = '生日祝福', content, nickn
 }
 
 /** 举报某条已送达的祝福：填写理由后推送给管理端。 */
-export function openBlessingReportDialog({ submissionId, onDone } = {}) {
+export function openBlessingReportDialog({ submissionId, onDone, submitReport=publicApi.reportWarmthBlessing } = {}) {
   const reasonField = field({ label: '举报理由', name: 'reportReason', multiline: true, rows: 4, maxlength: 500, required: true, placeholder: '请说明这条祝福的问题，例如包含联系方式、语气不当或涉及隐私。' });
   const submitButton = button({ label: '提交举报', variant: 'danger', iconName: 'alert', onClick: () => submit() });
   let modal;
@@ -83,7 +83,7 @@ export function openBlessingReportDialog({ submissionId, onDone } = {}) {
     const reason = reasonField.control.value.trim();
     if (!reason) { reasonField.setError('请填写举报理由'); shake(reasonField); reasonField.control.focus(); return; }
     try {
-      await runWithLoading(submitButton, () => publicApi.reportWarmthBlessing(submissionId, { reason }));
+      await runWithLoading(submitButton, () => submitReport(submissionId, { reason }));
       notify.success('举报已提交', '管理员会核实并处理。');
       modal.close();
       onDone?.();

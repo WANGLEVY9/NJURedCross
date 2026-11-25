@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { STATE_SCHEMA } from '../lib/production-schema.js';
+import {MODERATION_STATES} from '../public/app/shared/community-moderation.js';
 
 const server = await readFile(new URL('../server.js', import.meta.url), 'utf8');
 const me = await readFile(new URL('../public/app/portal/pages/me-birthday.js', import.meta.url), 'utf8');
@@ -23,10 +24,10 @@ function slice(start, end) {
   assert.ok(a >= 0 && b > a, `missing source block: ${start}`);
   return server.slice(a, b);
 }
-const constantsBlock = slice('const submissionStatusPending', 'async function readWarmthBlessings');
+const constantsBlock = slice('const {pending:submissionStatusPending', 'async function readWarmthBlessings');
 const reviewBlock = slice('function reviewDecisionFromStatus', 'function stateRows');
 const cleanBlock = slice('function cleanText', 'function eventPayload');
-const context = vm.createContext({});
+const context = vm.createContext({MODERATION_STATES});
 vm.runInContext(
   `${constantsBlock}\n${reviewBlock}\n${cleanBlock}\nglobalThis.api = { isValidBirthdayMonthDay, isActiveEnrollmentStatus, isConfirmedEnrollmentStatus, reviewDecisionFromStatus, statusFromReviewDecision, cleanText, optionalCleanText };`,
   context,
@@ -133,7 +134,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('function resolveWarmthDelivery('), 'delivery target rules must be shared');
   assert.equal((server.match(/resolveWarmthDelivery\(\)/g) || []).length, 3, 'helper defined once and used by both the create and resubmit routes');
   assert.ok(server.includes('blessingReportTable') && server.includes('REPORT_STATUS_PENDING'), 'reports must be stored and start pending');
-  assert.ok(server.includes('只能举报已经送达给你的祝福。'), 'only the recipient may report a delivered blessing');
+  assert.ok(server.includes('只能举报你有权查看的内容。'), 'reports require recipient or author access');
   assert.ok(blessingLetter.includes('openBlessingReportDialog'), 'received blessing detail must offer a report action');
   assert.ok(!server.includes('文本文档') && !server.includes("accept: '.txt,.md"), 'document upload must be removed');
   assert.ok(server.includes('/api/community/blessing-library') && consolePage.includes("label: '祝福库'"), 'console must offer a read-only blessing library browser');
@@ -159,7 +160,7 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(server.includes('editableStatuses') && server.includes('public.warmth.blessing.delete'), 'own blessings must be status-gated for edit and delete');
   assert.ok(warmthPanels.includes('EDITABLE_BLESSING_STATUSES') && blessingActions.includes('deleteWarmthBlessing'), 'the written panel must offer status-aware edit/delete actions');
   assert.ok(blessingDrawer.includes('deleteWrittenBlessing'), 'the edit drawer must carry the delete action');
-  assert.ok(warmthPanels.includes('openWrittenBlessingPreview(item)') && !warmthPanels.includes("label: '重写一条'"), 'the preview modal must be view-only');
+  assert.ok(warmthPanels.includes('openWrittenBlessingPreview(item,onChanged)') && !warmthPanels.includes("label: '重写一条'"), 'the preview offers reporting without rewriting the original');
   assert.ok(warmthPanels.includes("button({ label: '去写祝福'") && warmthPanels.includes('openBlessingDrawer({ onDone: onChanged })'), 'the empty 去写祝福 action must open the blessing drawer when joined');
   assert.ok(warmthPanels.includes("button({ label: '加入生日祝福'") && warmthPanels.includes('goToJoinEntry'), 'the empty action must route to the join entry when not joined');
   assert.ok(server.includes('祝福仓库每人只能写一条') && blessingDrawer.includes('祝福仓库每个账号只能投稿一条'), 'repository blessings must be limited to one per account');
@@ -167,8 +168,8 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(warmthPanels.includes("button({ label: '编辑'") && warmthPanels.includes('EDITABLE_BLESSING_STATUSES'), 'the written panel must show an inline 编辑 button for editable blessings');
   assert.ok(warmthCss.includes('line-break: strict') && warmthCss.includes('overflow-wrap: anywhere'), 'the blessing block text must wrap safely on narrow screens');
   assert.ok(warmthCss.includes('warmth-report-banner'), 'report banner must have a prominent colour treatment');
-  assert.ok(consolePage.includes("label: '举报处理'"), 'console must offer a report-handling tab');
-  assert.ok(consolePage.includes('SUBMISSION_VIEW_BY_STATUS') && consolePage.includes('consoleApi.community.submissions({ view: submissionsView, fresh })'), 'submission pool must request only the selected one of the four views');
+  assert.ok(consolePage.includes("label:'举报处理'")&&consolePage.includes("ariaLabel:'审核来源'"), 'reports share the moderation entry');
+  assert.ok(consolePage.includes('SUBMISSION_VIEW_BY_STATUS') && consolePage.includes("consoleApi.community.moderation('submission',{ view: submissionsView, fresh })"), 'submission pool must request only the selected one of the four views');
   assert.ok(consolePage.includes('加入黑名单') && consolePage.includes('解除黑名单'), 'console must merge withdraw/kick/blacklist into join/leave blacklist');
   assert.ok(!consolePage.includes("label: '登记退出'") && !consolePage.includes("label: '确认参加'"), 'row actions must be unified to blacklist / release-blacklist');
   assert.ok(server.includes('warmth-blacklist/release') && apiClient.includes('releaseBlacklistByRef') && consolePage.includes('releaseBlacklist'), 'release must work by member ref (not only blacklist id)');
@@ -188,9 +189,9 @@ test('生日祝福关键闭环与限制仍在源码中', () => {
   assert.ok(consolePage.includes('blacklistAuthor'), 'console must offer blacklisting a repeatedly-reported author');
   assert.ok(server.includes('warmth-members'), 'console must expose a member profile endpoint');
   assert.ok(consolePage.includes('openMemberDrawer'), 'console must open member profiles from review/report drawers');
-  assert.ok(consolePage.includes('decideWarmthReport'), 'console must resolve reports through the API');
+  assert.ok(consolePage.includes('moderateReport'), 'console must resolve reports through the moderation API');
   assert.ok(server.includes("content: entry?.content"), 'report list must include the reported blessing content');
-  assert.ok(consolePage.includes("label: '被举报祝福'"), 'console must show the reported blessing content');
+  assert.ok(consolePage.includes("label: '被举报内容'"), 'console must show the reported content');
   assert.ok(server.includes('WARMTH-REPORT:'), 'report resolution must notify the reporter');
   assert.ok(consolePage.includes("decision: 'reopen'"), 'console must offer reopen for rejected submissions');
   assert.ok(consolePage.includes('confirmAction({'), 'console must confirm destructive decisions');

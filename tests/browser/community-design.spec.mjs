@@ -267,11 +267,11 @@ test('birthday submission pool approves directly from its action',async({page})=
   await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
   let reviewRequest;
   let listReads=0;
-  await page.route('**/api/community/submissions/CARE-UI-REVIEW/review',async route=>{
+  await page.route('**/api/community/moderation/submission/CARE-UI-REVIEW/decision',async route=>{
     reviewRequest=route.request().postDataJSON();
     await route.fulfill({json:{ok:true,message:'投稿审核通过'}});
   });
-  await page.route('**/api/community/submissions*',r=>{listReads+=1;return r.fulfill({json:{
+  await page.route('**/api/community/moderation?source=submission*',r=>{listReads+=1;return r.fulfill({json:{
     ok:true,
     stats:{total:1,pending:1,returned:0,approved:0,rejected:0},
     submissions:[{
@@ -303,13 +303,13 @@ test('birthday submission pool approves directly from its action',async({page})=
 test('birthday submissions share batch selection and cancel-all controls @visual',async({page})=>{
   await page.request.post('/api/auth/login',{data:{username:'synthetic-reviewer'}});
   await page.route('**/api/public/warmth/capabilities',r=>r.fulfill({json:{birthday:{enabled:true,ready:true}}}));
-  await page.route('**/api/community/submissions*',r=>r.fulfill({json:{
+  await page.route('**/api/community/moderation?source=submission*',r=>r.fulfill({json:{
     ok:true,stats:{total:1,pending:1,returned:0,approved:0,rejected:0},submissions:[{
       id:'CARE-BATCH-ONE',program:'birthday',content:'愿你新的一岁平安顺遂。',nickname:'合成投稿人',delivery:'随机匹配',actor:'合****人',status:'待审核',submittedAt:'2026-10-24T12:00:00.000Z',
     }],
   }}));
   let review;
-  await page.route('**/api/community/submissions/CARE-BATCH-ONE/review',async route=>{
+  await page.route('**/api/community/moderation/submission/CARE-BATCH-ONE/decision',async route=>{
     review=route.request().postDataJSON();
     await route.fulfill({json:{ok:true,message:'投稿审核通过'}});
   });

@@ -25,6 +25,7 @@ function harness(consoleBlock = null) {
     withWarmthLock: async (_client, _key, task) => task(),
     readWarmthInterests: async () => [{ program: 'birthday', participantRef: 'ACC-WRITER', status: '已确认' }],
     isConfirmedEnrollmentStatus: status => status === '已确认', readWarmthBlessings: async () => blessings,
+    readWarmthReports:async()=>[],
     accountsByUsername: new Map([['writer', { accountId: 'ACC-WRITER' }]]),
     requirePortalSession: () => ({ username: 'writer' }), friendDeliveryDate: shanghaiDate,
     readCommunityConsents: async () => ({ 'writer:birthday': { enabled: true }, 'writer:morning': { enabled: true } }),

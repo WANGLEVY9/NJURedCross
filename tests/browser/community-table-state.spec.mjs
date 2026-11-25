@@ -43,7 +43,7 @@ async function mount(page, version, query = '') {
   await page.route('**/api/community/warmth-blacklist', (route) =>
     route.fulfill({ json: { ok: true, entries: [] } }));
 
-  await page.route('**/api/community/submissions*', (route) =>
+  await page.route('**/api/community/moderation?source=submission*', (route) =>
     route.fulfill({
       json: {
         ok: true,
@@ -135,7 +135,7 @@ for (const version of ['legacy', 'birthday']) {
   test(`${version}: submission tab and its search survive a reload`, async ({ page }) => {
     await mount(page, version);
     await page.getByRole(version === 'legacy' ? 'tab' : 'radio', {
-      name: '投稿池审核',
+      name: '内容审核',
       exact: true,
     }).click();
 

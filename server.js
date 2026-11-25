@@ -5,6 +5,7 @@ import {createHoursPostingStore} from './lib/events/hours-posting-store.js';
 import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-store.js';
 import {createBloodWeekStore} from './lib/events/blood-week-store.js';
 import {createBloodNotificationReview} from './lib/events/blood-notification-review.js';
+import {MODERATION_STATES,moderationDecision,hasBlockingCommunityReports} from './public/app/shared/community-moderation.js';
 import {createActivityFeedbackStore} from './lib/events/activity-feedback.js';
 import {createActivityFeedbackManagement} from './lib/events/activity-feedback-management.js';
 import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
@@ -1091,10 +1092,7 @@ const auditTable = '操作审计表';
 const publicSubmissionSource = '公众投稿';
 const consoleEnrollmentSource = '控制台';
 const portalEnrollmentSource = '公众端';
-const submissionStatusPending = '待审核';
-const submissionStatusApproved = '已通过';
-const submissionStatusReturned = '需修改';
-const submissionStatusRejected = '已拒绝';
+const {pending:submissionStatusPending,accepted:submissionStatusApproved,changes:submissionStatusReturned,rejected:submissionStatusRejected}=MODERATION_STATES.submission;
 const COMMUNITY_SUBMISSION_VIEW_STATUSES = Object.freeze({
   active: Object.freeze([submissionStatusPending]),
   revision: Object.freeze([submissionStatusReturned]),
@@ -1169,9 +1167,7 @@ function shouldWithdrawReportedBlessing(status) {
 }
 /** 收件人对已送达祝福的举报：管理端受理成立后会把该祝福从祝福库撤下。 */
 const blessingReportTable = '温暖祝福举报表';
-const REPORT_STATUS_PENDING = '待处理';
-const REPORT_STATUS_HANDLED = '已处理';
-const REPORT_STATUS_DISMISSED = '已驳回';
+const {pending:REPORT_STATUS_PENDING,accepted:REPORT_STATUS_HANDLED,rejected:REPORT_STATUS_DISMISSED}=MODERATION_STATES.report;
 /** 拉黑与踢出：拉黑会同时把成员踢出计划，并在加入/投稿处拦截。 */
 const blacklistTable = '温暖连接黑名单表';
 const BLACKLIST_ACTIVE = '生效';
@@ -1392,6 +1388,15 @@ async function readWarmthReports(client, filter = null) {
     .sort(byDateDesc('submittedAt'));
 }
 
+async function createWarmthReport(client, submissionId, reporterRef, reason) {
+  const existing=await readWarmthReports(client,{投稿ID:submissionId,举报人标识:reporterRef});
+  if(existing.some(row=>row.status===REPORT_STATUS_PENDING))throw httpError(409,'你已经举报过这条内容，管理员正在处理。');
+  const id=eventIdentifier('RPT');
+  await client.appendRow(blessingReportTable,{举报ID:id,投稿ID:submissionId,举报人标识:reporterRef,原因:reason,
+    状态:REPORT_STATUS_PENDING,处理人:'',处理意见:'',处理时间:'',提交时间:new Date().toISOString()});
+  return {id,status:REPORT_STATUS_PENDING};
+}
+
 function pickRandom(list, count) {
   const pool = [...list];
   const picked = [];
@@ -1476,6 +1481,7 @@ async function runFriendBirthdayBatch(client, now = new Date()) {
     const id = String(candidate['投稿ID'] || '');
     if (!id) continue;
     await withWarmthLock(client, `warmth-blessing:${id}`, async () => {
+      if(hasBlockingCommunityReports(await readWarmthReports(client,{投稿ID:id})))return;
       const [submissions, library, deliveries] = await Promise.all([
         scopedWarmthRows(client, communitySubmissionTable, { 投稿ID: id }),
         scopedWarmthRows(client, blessingLibraryTable, { 投稿ID: id }),
@@ -1521,6 +1527,8 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
   const deliveries = [...existingRows];
 
   async function deliver({ blessing, recipient, studentId, account, source }) {
+    return withWarmthLock(client,`warmth-blessing:${blessing.submissionId}`,async()=>{
+    if(hasBlockingCommunityReports(await readWarmthReports(client,{投稿ID:blessing.submissionId})))return false;
     const existing = deliveries.find((row) => String(row['投稿ID'] || '') === blessing.submissionId
       && String(row['收件人学号'] || '') === studentId
       && String(row['触发日期'] || '') === day
@@ -1562,6 +1570,7 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
     if (mail.ok) summary.mailed += 1;
     summary.records.push({ submissionId: blessing.submissionId, studentId, source, mailStatus });
     return true;
+    });
   }
 
   for (const recipient of recipients) {
@@ -1604,6 +1613,8 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
     const studentId = String(row['收件人学号'] || '');
     const blessing = library.find((item) => item.submissionId === submissionId);
     if (!blessing) continue;
+    await withWarmthLock(client,`warmth-blessing:${submissionId}`,async()=>{
+    if(hasBlockingCommunityReports(await readWarmthReports(client,{投稿ID:submissionId})))return;
     const account = accountByBusinessRef(row['收件人标识']);
     const mail = await sendMail({
       to: mailRecipient(account),
@@ -1616,6 +1627,7 @@ async function runWarmthBirthdayDeliveryUnlocked(client, { now = new Date(), onl
       await client.updateRow(blessingDeliveryTable, row._id, { 邮件状态: '已发送', 失败原因: '' });
       summary.retried += 1;
     }
+    });
   }
   // Replay only today's receipts; the per-delivery mail key prevents repeat notices.
   for (const receipt of deliveries) {
@@ -2859,7 +2871,7 @@ const communityStateSchema = [
   { name: '温暖连接投稿表', purpose: '生日祝福与早安晚安内容投稿及审核结论', columns: ['投稿ID', '项目', '内容', '语气', '提交人', '状态', '审核意见', '审核人', '提交时间', '审核时间', '同意版本', '署名昵称', '投递方式', '目标学号', '投递条件', '附件', '挚友邮箱', '挚友生日', '计划投递日期', '挚友昵称', '挚友生日历法'] },
   { name: '温暖祝福库表', purpose: '审核通过的生日祝福按投递状态分类入库（祝福仓库 / 一对一随机 / 一对一已发过的 / 已下线的）', columns: ['入库ID', '投稿ID', '项目', '分类', '内容', '署名昵称', '目标学号', '来源投稿人', '状态', '审核人', '入库时间'] },
   { name: '温暖祝福投递表', purpose: '生日当天自动投递（邮件 + 站内）留痕', columns: ['投递ID', '投稿ID', '收件人标识', '收件人学号', '触发日期', '触发年份', '来源', '邮件状态', '站内状态', '投递时间', '失败原因'] },
-  { name: '温暖祝福举报表', purpose: '收件人举报已送达祝福的理由与处理结论（举报人只存账号标识，学号按需解析）', columns: ['举报ID', '投稿ID', '举报人标识', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间', '举报人确认时间'] },
+  { name: '温暖祝福举报表', purpose: '保存未发布投稿与已送达祝福的举报理由和处理结论（举报人只存账号标识，学号按需解析）', columns: ['举报ID', '投稿ID', '举报人标识', '原因', '状态', '处理人', '处理意见', '处理时间', '提交时间', '举报人确认时间'] },
   { name: '温暖连接黑名单表', purpose: '被拉黑的成员（拉黑同时踢出计划）', columns: ['黑名单ID', '参与者标识', '学号', '原因', '状态', '操作人', '拉黑时间', '解除时间'] },
   { name: '温暖连接操作锁表', purpose: '生日祝福写入、审核与投递的跨进程租约锁', columns: ['锁ID', '锁键', '持有者', '令牌', '状态', '过期时间', '创建时间', '更新时间'] },
   { name: '操作审计表', purpose: '登录、审批、出入库、签到核验、内容审核与公众端提交的操作留痕', columns: ['审计ID', '时间', '操作人', '角色', '动作', '对象', '结果', 'IP', '备注'] },
@@ -4761,6 +4773,8 @@ async function publicRoutes(req, res, url) {
       readWarmthInterests(client, { 参与者标识: [...actorKeys] }),
     ]);
     const myBlessings = mine.filter((item) => item.actor === session.username);
+    const ownReports=myBlessings.length?await readWarmthReports(client,{投稿ID:myBlessings.map(item=>item.id),举报人标识:actorRef}):[];
+    const latestReports=new Map([...ownReports].reverse().map(report=>[report.submissionId,report]));
     const friendIds = myBlessings.filter(item => item.deliveryKey === 'friend').map(item => item.id);
     const friendReceipts = friendIds.length ? await scopedWarmthRows(client, blessingDeliveryTable, { 投稿ID: friendIds }) : [];
     const myBirthdayEnrollment = enrollments.find((item) => item.program === 'birthday' && actorKeys.has(String(item.participantRef || '')));
@@ -4770,6 +4784,7 @@ async function publicRoutes(req, res, url) {
       ok: true,
       stats: { total: myBlessings.length, used: myBlessings.filter((item) => item.status !== submissionStatusRejected && item.deliveryKey !== 'friend' && item.delivery !== '写给挚友').length, limit: WARMTH_SUBMISSION_LIMIT, pending: myBlessings.filter((item) => item.status === submissionStatusPending).length, approved, revision: myBlessings.filter((item) => item.status === submissionStatusReturned).length, rejected: myBlessings.filter((item) => item.status === submissionStatusRejected).length, oneOnOneQuota: approvedEarn },
       blessings: myBlessings.map((item) => ({ ...item, campus: myBirthdayEnrollment?.campus || '', excerpt: item.content.slice(0, 60),
+        reportStatus:latestReports.get(item.id)?.status||'',reportResolution:latestReports.get(item.id)?.resolutionNote||'',
         ...(item.deliveryKey === 'friend' ? { friendDeliveryStatus:
           friendReceipts.some(row => row['投稿ID'] === item.id && row['来源'] === '写给挚友' && row['邮件状态'] === '已发送') ? '已发送'
             : friendReceipts.some(row => row['投稿ID'] === item.id && row['来源'] === '写给挚友' && row['邮件状态'] === '发送失败') ? '邮件待核对'
@@ -4846,7 +4861,7 @@ async function publicRoutes(req, res, url) {
     return json(res, 200, { ok: true, recipientName, blessings });
   }
 
-  // 举报：只有收到该祝福的人可以举报，必须填写理由；同一人对同一条只允许一次待处理举报。
+  // 收件人和投稿作者均可举报自己有权查看的内容。
   // 作者端：我写出的祝福已送出哪些（只暴露对方昵称，其他信息不公开）
   if (req.method === 'GET' && url.pathname === '/api/public/warmth/blessings/sent') {
     const session = requirePortalSession(req, res);
@@ -4880,28 +4895,16 @@ async function publicRoutes(req, res, url) {
     const reason = cleanText(body.reason, '举报理由', 500, { allowNewlines: true });
     const account = accountsByUsername.get(session.username);
     const myStudentId = String(account?.studentId || '').trim();
-    const outcome = await withWarmthLock(client, `warmth-report:${blessingId}:${actorRef}`, async () => {
+    const outcome = await withWarmthLock(client, `warmth-blessing:${blessingId}`, async () => {
       const received = (await readWarmthDeliveries(client, { 投稿ID: blessingId, 收件人学号: myStudentId })).some((row) => row.submissionId === blessingId
         && row.siteStatus === DELIVERY_SITE_DONE
         && myStudentId
         && row.studentId === myStudentId);
-      if (!received) return { code: 403, payload: { ok: false, message: '只能举报已经送达给你的祝福。' } };
-      const existing = (await readWarmthReports(client, { 投稿ID: blessingId, 举报人标识: actorRef })).find((row) => row.submissionId === blessingId && row.reporterRef === actorRef && row.status === REPORT_STATUS_PENDING);
-      if (existing) return { code: 409, payload: { ok: false, message: '你已经举报过这条祝福，管理员正在处理。' } };
-      const reportId = eventIdentifier('RPT');
-      await client.appendRow(blessingReportTable, {
-        举报ID: reportId,
-        投稿ID: blessingId,
-        举报人标识: actorRef,
-        原因: reason,
-        状态: REPORT_STATUS_PENDING,
-        处理人: '',
-        处理意见: '',
-        处理时间: '',
-        提交时间: new Date().toISOString(),
-      });
-      await recordAudit(req, session, 'public.warmth.blessing.report', reportId, 'success', { blessingId });
-      return { code: 201, payload: { ok: true, report: { id: reportId, status: REPORT_STATUS_PENDING }, message: '举报已提交，管理员会尽快处理。' } };
+      const own=received?null:await readCommunitySubmissionById(client,blessingId);
+      if(!received&&(!own||own['提交人']!==session.username&&own['提交人']!==actorRef))return {code:403,payload:{ok:false,message:'只能举报你有权查看的内容。'}};
+      const report=await createWarmthReport(client,blessingId,actorRef,reason);
+      await recordAudit(req,session,'public.warmth.blessing.report',report.id,'success',{blessingId});
+      return {code:201,payload:{ok:true,report,message:'举报已提交，管理员会尽快处理。'}};
     });
     return json(res, outcome.code, outcome.payload);
   }
@@ -6478,8 +6481,12 @@ if (url.pathname.startsWith('/api/public/')) {
     // POST /api/outreach/reviews/:contentId/step（审核链 + 21 项清单必填）。
     // 旧的 /api/outreach/public-submissions/:id/review 已于 v3 移除——
     // 它只写「审核状态」而漏写「审核层级/审核轨迹」，会让看板状态与审核链错位。
+    const moderationSource=url.pathname==='/api/community/moderation'?url.searchParams.get('source')||'submission':null;
+    const submissionReviewPath=url.pathname.match(/^\/api\/community\/(?:submissions\/([^/]+)\/review|moderation\/submission\/([^/]+)\/decision)$/);
     if (url.pathname.startsWith('/api/community/')) {
+      if(moderationSource&&!['submission','report'].includes(moderationSource))return json(res,400,{ok:false,message:'审核来源无效'});
       if (!birthdayRollout.enabled) {
+    if(moderationSource==='report')return json(res,200,{ok:true,reports:[],stats:{total:0,pending:0,handled:0,dismissed:0}});
     if (req.method === 'GET' && url.pathname === '/api/community/interests') {
       const interests = await readWarmthInterests(client);
       return json(res, 200, {
@@ -6541,7 +6548,7 @@ if (url.pathname.startsWith('/api/public/')) {
       const byProgram = ['birthday', 'morning'].map((program) => ({ program, eligible: eligible.filter((item) => item.program === program).length, weekly: eligible.filter((item) => item.program === program && item.frequency === 'weekly').length }));
       return json(res, 200, { ok: true, mode: 'preview-only', generatedAt: new Date().toISOString(), candidateCount: eligible.length, byProgram, pairs: [], requiresManualApproval: true, message: '当前仅生成候选统计，不创建匹配关系、不发送消息。' });
     }
-    if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
+    if (req.method === 'GET' && (url.pathname === '/api/community/submissions'||moderationSource==='submission')) {
       const submissions = await readCommunitySubmissions(client);
       return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats: { total: submissions.length, pending: submissions.filter((item) => item.status === submissionStatusPending).length, approved: submissions.filter((item) => item.status === submissionStatusApproved).length }, submissions: submissions.slice(0, 30).map(({ id, program, content, tone, status, submittedAt, actor, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), review: review || null })) });
     }
@@ -6570,9 +6577,9 @@ if (url.pathname.startsWith('/api/public/')) {
       await recordAudit(req, session, 'community.submission.create', submission.id, 'success', { program, contentLength: content.length });
       return json(res, 201, { ok: true, submission: { id: submission.id, program, status: submission.status, submittedAt: submission.submittedAt }, message: '投稿已进入人工审核队列' });
     }
-    const communitySubmissionReview = url.pathname.match(/^\/api\/community\/submissions\/([^/]+)\/review$/);
+    const communitySubmissionReview = submissionReviewPath;
     if (communitySubmissionReview && req.method === 'POST') {
-      const submissionId = decodeURIComponent(communitySubmissionReview[1]);
+      const submissionId = decodeURIComponent(communitySubmissionReview[1]||communitySubmissionReview[2]);
       const body = await readJson(req);
       const decision = String(body.decision || '').trim();
       if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
@@ -6688,7 +6695,18 @@ if (url.pathname.startsWith('/api/public/')) {
         }),
       });
     }
-    if (req.method === 'GET' && url.pathname === '/api/community/warmth-reports') {
+    const flagSubmission=url.pathname.match(/^\/api\/community\/moderation\/submission\/([^/]+)\/report$/);
+    if(req.method==='POST'&&flagSubmission){
+      const id=decodeURIComponent(flagSubmission[1]);
+      const reason=cleanText((await readJsonObject(req)).reason,'举报理由',500,{allowNewlines:true});
+      const report=await withWarmthLock(client,`warmth-blessing:${id}`,async()=>{
+        if(!await readCommunitySubmissionById(client,id))throw httpError(404,'投稿不存在');
+        return createWarmthReport(client,id,businessAccountRef(session),reason);
+      });
+      await recordAudit(req,session,'community.moderation.report.create',report.id,'success',{submissionId:id});
+      return json(res,201,{ok:true,report});
+    }
+    if (req.method === 'GET' && (url.pathname === '/api/community/warmth-reports'||moderationSource==='report')) {
       const reports = await readWarmthReports(client);
       const reportSubmissionIds = [...new Set(reports.map(item => item.submissionId).filter(Boolean))];
       const [library, submissions] = await Promise.all([
@@ -6726,32 +6744,39 @@ if (url.pathname.startsWith('/api/public/')) {
       });
     }
 
-    const warmthReportDecision = url.pathname.match(/^\/api\/community\/warmth-reports\/([^/]+)\/(handle|dismiss)$/);
+    const warmthReportDecision = url.pathname.match(/^\/api\/community\/(?:warmth-reports|moderation\/report)\/([^/]+)\/(handle|dismiss)$/);
     if (warmthReportDecision && req.method === 'POST') {
       const reportId = decodeURIComponent(warmthReportDecision[1]);
       const action = warmthReportDecision[2];
       const body = await readJsonObject(req);
       const note = optionalCleanText(body.note, '处理意见', 500, { allowNewlines: true });
       if (action === 'handle' && !note) return json(res, 400, { ok: false, message: '受理举报必须填写处理意见。' });
-      const outcome = await withWarmthLock(client, `warmth-report:${reportId}`, async () => {
+      const target=(await readWarmthReports(client,{举报ID:reportId})).find(item=>item.id===reportId);
+      if(!target)return json(res,404,{ok:false,message:'举报记录不存在'});
+      const outcome = await withWarmthLock(client, `warmth-blessing:${target.submissionId}`, async () => {
         const report = (await readWarmthReports(client, { 举报ID: reportId })).find((item) => item.id === reportId);
         if (!report) return { code: 404, payload: { ok: false, message: '举报记录不存在' } };
+        if(report.submissionId!==target.submissionId)return {code:409,payload:{ok:false,message:'举报对象已变化，请刷新后重试。'}};
         const isEdit = report.status !== REPORT_STATUS_PENDING;
-        const status = action === 'handle' ? REPORT_STATUS_HANDLED : REPORT_STATUS_DISMISSED;
+        const status=moderationDecision('report',report.status,action);
+        if(!status)return {code:409,payload:{ok:false,message:'该举报当前无法处理。'}};
         const rows = await scopedWarmthRows(client, blessingReportTable, { 举报ID: reportId });
         const row = rows.find((item) => String(item['举报ID'] || '') === reportId);
         if (!row) return { code: 404, payload: { ok: false, message: '举报记录不存在' } };
         const handledAt = new Date().toISOString();
         const patch = { 状态: status, 处理人: session.username, 处理意见: note, 处理时间: handledAt };
         if (isEdit) patch['举报人确认时间'] = '';
-        await client.updateRow(blessingReportTable, row._id, patch);
         const entry = (await scopedWarmthRows(client, blessingLibraryTable, { 投稿ID: report.submissionId })).find((item) => String(item['投稿ID'] || '') === report.submissionId);
-        if (action === 'handle') {
-          if (entry && shouldWithdrawReportedBlessing(entry['状态'])) {
-            await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_WITHDRAWN });
+        if(action==='handle'&&entry&&shouldWithdrawReportedBlessing(entry['状态'])){
+          await client.updateRow(blessingLibraryTable,entry._id,{状态:LIBRARY_STATUS_WITHDRAWN});
+        }
+        await client.updateRow(blessingReportTable,row._id,patch);
+        if(action==='dismiss'&&entry&&entry['状态']===LIBRARY_STATUS_WITHDRAWN){
+          const others=(await readWarmthReports(client,{投稿ID:report.submissionId})).filter(item=>item.id!==reportId);
+          const submission=await readCommunitySubmissionById(client,report.submissionId);
+          if(!hasBlockingCommunityReports(others)&&submission?.['状态']===submissionStatusApproved){
+            await client.updateRow(blessingLibraryTable,entry._id,{状态:LIBRARY_STATUS_ACTIVE});
           }
-        } else if (isEdit && report.status === REPORT_STATUS_HANDLED && entry && String(entry['状态'] || '') === LIBRARY_STATUS_WITHDRAWN) {
-          await client.updateRow(blessingLibraryTable, entry._id, { 状态: LIBRARY_STATUS_ACTIVE });
         }
         const reporter = accountByBusinessRef(report.reporterRef);
         const notified = await sendMail({
@@ -6762,7 +6787,7 @@ if (url.pathname.startsWith('/api/public/')) {
           text: isEdit
             ? `你举报的这条生日祝福，管理员更新了处理结果。\n\n当前处理结果：${status}\n\n处理意见：${note || '—'}\n\n南京大学红十字会`
             : action === 'handle'
-              ? `你举报的这条生日祝福已核实并处理。\n\n处理意见：${note || '管理员已受理你的举报。'}\n\n该祝福已从祝福库撤下，不会再被匹配或投递。\n\n南京大学红十字会`
+              ? `你举报的这条内容已核实并处理。\n\n处理意见：${note || '管理员已受理你的举报。'}\n\n该内容不能继续发布或投递。\n\n南京大学红十字会`
               : `你举报的这条生日祝福经核实后未予受理。\n\n处理意见：${note || '—'}\n\n如有疑问可联系管理员。\n\n南京大学红十字会`,
           kind: 'warmth-report',
           idempotencyKey: isEdit
@@ -6776,7 +6801,7 @@ if (url.pathname.startsWith('/api/public/')) {
             ok: true,
             report: { id: reportId, status, resolutionNote: note, handledBy: session.username, handledAt },
             notified: notified.ok,
-            message: isEdit ? '举报处理已更新，并已通知举报人。' : action === 'handle' ? '举报成立：该祝福已从祝福库撤下，并已通知举报人。' : '举报已驳回，并已通知举报人。',
+            message: isEdit ? '举报处理已更新。' : action === 'handle' ? '举报已受理，已暂停该内容的发布和投递。' : '举报已驳回。',
           },
         };
       });
@@ -6981,7 +7006,7 @@ if (url.pathname.startsWith('/api/public/')) {
         message: '按候选、已通过投稿额度和可用祝福池生成预计接收量；不创建真实配对关系，确认后才会产生投递记录。',
       });
     }
-    if (req.method === 'GET' && url.pathname === '/api/community/submissions') {
+    if (req.method === 'GET' && (url.pathname === '/api/community/submissions'||moderationSource==='submission')) {
       const requestedView = String(url.searchParams.get('view') || '').trim();
       if (requestedView && !COMMUNITY_SUBMISSION_VIEW_STATUSES[requestedView]) {
         return json(res, 400, { ok: false, message: '不支持的投稿视图。' });
@@ -6990,7 +7015,9 @@ if (url.pathname.startsWith('/api/public/')) {
         readCommunitySubmissions(client, { view: requestedView }),
         readCommunitySubmissionStats(client),
       ]);
-      const projected = submissions.map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review: review || null }));
+      const reports=moderationSource==='submission'&&submissions.length?await readWarmthReports(client,{投稿ID:submissions.map(row=>row.id)}):[];
+      const blocked=new Set(reports.filter(report=>hasBlockingCommunityReports([report])).map(report=>report.submissionId));
+      const projected = submissions.map(({ id, program, content, tone, status, submittedAt, actor, nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review }) => ({ id, program, content, tone, status, submittedAt, actor: maskedApplicant(actor), nickname, delivery, targetStudentId, deliveryState, friendEmail, friendBirthday, friendNickname, friendBirthdayCalendar, scheduledDate, review: review || null,blockedByReport:blocked.has(id) }));
       return json(res, 200, { ok: true, source: `seatable:${communitySubmissionTable}`, stats, submissions: requestedView ? projected : projected.slice(0, 30) });
     }
     if (req.method === 'POST' && url.pathname === '/api/community/submissions') {
@@ -7018,9 +7045,9 @@ if (url.pathname.startsWith('/api/public/')) {
       await recordAudit(req, session, 'community.submission.create', submission.id, 'success', { program, contentLength: content.length });
       return json(res, 201, { ok: true, submission: { id: submission.id, program, status: submission.status, submittedAt: submission.submittedAt }, message: '投稿已进入人工审核队列' });
     }
-    const communitySubmissionReview = url.pathname.match(/^\/api\/community\/submissions\/([^/]+)\/review$/);
+    const communitySubmissionReview = submissionReviewPath;
     if (communitySubmissionReview && req.method === 'POST') {
-      const submissionId = decodeURIComponent(communitySubmissionReview[1]);
+      const submissionId = decodeURIComponent(communitySubmissionReview[1]||communitySubmissionReview[2]);
       const body = await readJsonObject(req);
       const decision = cleanText(body.decision, '审核结果', 20);
       if (!['approve', 'return', 'reject', 'reopen'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve、return、reject 或 reopen' });
@@ -7030,6 +7057,11 @@ if (url.pathname.startsWith('/api/public/')) {
         const row = await readCommunitySubmissionById(client, submissionId);
         if (!row) return { code: 404, payload: { ok: false, message: '投稿不存在' } };
         const currentStatus = String(row['状态'] || submissionStatusPending);
+        const nextStatus=moderationDecision('submission',currentStatus,decision);
+        if(!nextStatus)return {code:409,payload:{ok:false,message:'当前投稿状态不支持此审核操作。'}};
+        if(['approve','reopen'].includes(decision)&&hasBlockingCommunityReports(await readWarmthReports(client,{投稿ID:submissionId}))){
+          return {code:409,payload:{ok:false,message:'该投稿存在待处理或已受理的举报，请先处理举报。'}};
+        }
         if (decision === 'reopen') {
           if (currentStatus !== submissionStatusRejected) return { code: 409, payload: { ok: false, message: '只有「已拒绝」的投稿可以撤销拒绝并重新审核。' } };
           // 撤销拒绝会让该稿重新占用额度：先复检额度与祝福仓库唯一性，避免绕过上限
@@ -7048,7 +7080,6 @@ if (url.pathname.startsWith('/api/public/')) {
         }
         if (currentStatus !== submissionStatusPending) return { code: 409, payload: { ok: false, message: '只有「待审核」的投稿可以审核；如需重审已拒绝投稿，请先撤销拒绝。' } };
         const review = { decision, note, reviewer: session.username, reviewedAt: new Date().toISOString() };
-        const nextStatus = decision === 'approve' ? submissionStatusApproved : decision === 'reject' ? submissionStatusRejected : submissionStatusReturned;
         await client.updateRow(communitySubmissionTable, row._id, { 状态: nextStatus, 审核意见: note, 审核人: review.reviewer, 审核时间: review.reviewedAt });
         if (decision === 'approve') await ingestApprovedBlessing(client, row, session.username, review.reviewedAt);
         await recordAudit(req, session, `community.submission.${decision}`, submissionId, 'success', { noteLength: note.length });

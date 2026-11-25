@@ -113,15 +113,19 @@ test('friend receipt invokes author notification after confirmed SMTP and replay
 });
 
 test('birthday review route emails the author for approve, return, reject and reopen; denied changes are silent', async () => {
+  const {moderationDecision,hasBlockingCommunityReports}=await import('../public/app/shared/community-moderation.js');
   const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
   const start = source.lastIndexOf('    const communitySubmissionReview =');
   const block = source.slice(start, source.indexOf("    if (req.method === 'POST' && url.pathname === '/api/community/consent')", start));
   for (const decision of ['approve', 'return', 'reject', 'reopen']) {
     const f = mailbox();
     const row = { _id: 'r1', 投稿ID: 'CARE-1', 项目: 'birthday', 提交人: 'author', 状态: decision === 'reopen' ? '已拒绝' : '待审核' };
+    let reports=[];
     const context = vm.createContext({
       readJsonObject: async () => ({ decision, note: '审核意见' }), cleanText: value => value, optionalCleanText: value => value,
       withWarmthLock: async (_client, _key, fn) => fn(), readCommunitySubmissionById: async () => row, readWarmthBlessings: async () => [],
+      readWarmthReports:async()=>reports,moderationDecision,hasBlockingCommunityReports,
+      submissionReviewPath:['','CARE-1'],
       client: { updateRow: async (_table, _id, patch) => Object.assign(row, patch) }, communitySubmissionTable: '投稿',
       submissionStatusPending: '待审核', submissionStatusApproved: '已通过', submissionStatusRejected: '已拒绝', submissionStatusReturned: '需修改',
       WARMTH_SUBMISSION_LIMIT: 3, WARMTH_DELIVERY_LABELS: { friend: '写给挚友', repository: '祝福仓库' },
@@ -130,10 +134,34 @@ test('birthday review route emails the author for approve, return, reject and re
       session: { username: 'reviewer' }, json: (_res, status, body) => ({ status, body }),
     });
     vm.runInContext(`globalThis.run = async (req, res, url) => { ${block} };`, context);
+    if(decision==='approve'||decision==='reopen'){
+      reports=[{status:'待处理'},{status:'已处理'}];
+      assert.equal((await context.run({method:'POST'},{},new URL('https://example.test/api/community/moderation/submission/CARE-1/decision'))).status,409);
+      assert.equal(f.messages.length,0);
+      reports=[{status:'已驳回'}];
+    }
     assert.equal((await context.run({ method: 'POST' }, {}, new URL('https://example.test/api/community/submissions/CARE-1/review'))).status, 200);
     assert.equal(f.messages.length, 1);
     assert.equal(f.messages[0].to, 'author@example.test');
     assert.equal((await context.run({ method: 'POST' }, {}, new URL('https://example.test/api/community/submissions/CARE-1/review'))).status, 409);
     assert.equal(f.messages.length, 1);
   }
+});
+
+test('report endpoint accepts the owner of an unpublished submission and rejects other users who did not receive it',async()=>{
+ const source=(await readFile(new URL('../server.js',import.meta.url),'utf8')).replaceAll('\r\n','\n');
+ const start=source.indexOf('  const warmthBlessingReport =');
+ const block=source.slice(start,source.indexOf('  // 举报人确认',start));
+ let actor='author',writes=0;
+ const context=vm.createContext({requirePortalWrite:()=>({username:actor}),businessAccountRef:()=>actor,enforcePublicLimit:()=>{},
+  readJsonObject:async()=>({reason:'合成理由'}),cleanText:value=>value,accountsByUsername:new Map(),
+  withWarmthLock:async(_client,key,work)=>{assert.equal(key,'warmth-blessing:CARE-1');return work();},
+  readWarmthDeliveries:async()=>[],readCommunitySubmissionById:async()=>({提交人:'author',状态:'待审核'}),
+  createWarmthReport:async()=>{writes++;return {id:'RPT-1',status:'待处理'};},recordAudit:async()=>{},client:{},
+  json:(_res,status,body)=>({status,body})});
+ vm.runInContext(`globalThis.run=async(req,res,url)=>{${block}};`,context);
+ const route=()=>context.run({method:'POST'},{},new URL('https://example.test/api/public/warmth/blessings/CARE-1/report'));
+ assert.equal((await route()).status,201);
+ actor='unrelated';assert.equal((await route()).status,403);
+ assert.equal(writes,1);
 });
