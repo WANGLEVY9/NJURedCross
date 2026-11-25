@@ -312,17 +312,19 @@ test('project owner stays the creator and collaborators persist without a separa
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content:{name:'合成负责人关联',region:'nanjing',category:'生命中心'}}});expect(created.ok()).toBe(true);const id=(await created.json()).result.id;
  await page.goto(`/console/events?workspace=v2&draft=${id}`);
- const picker=page.getByRole('group',{name:'协作负责人（可选择）',exact:true});
+ const picker=page.getByRole('combobox',{name:'协作负责人（可多选）',exact:true});
  await expect(page.getByLabel('立项负责人（本人）',{exact:true})).toHaveValue('合成生命主任');
- await expect(picker.getByRole('checkbox',{name:'合成生命主任',exact:true})).toBeEnabled();
- await expect(picker.getByRole('checkbox',{name:'合成主席团',exact:true})).toHaveCount(0);
- await picker.getByRole('checkbox',{name:'合成生命主任',exact:true}).check();
+ await picker.click();
+ await expect(page.getByRole('option',{name:'合成生命主任',exact:true}).locator('input')).toBeEnabled();
+ await expect(page.getByRole('option',{name:'合成主席团',exact:true})).toHaveCount(0);
+ await page.getByRole('option',{name:'合成生命主任',exact:true}).locator('input').check();
+ await picker.press('Escape');
  await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.reload();await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);
  const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${id}`)).json()).result;expect(saved.content.projectOwnerId).toBe('synthetic-organizer');expect(saved.content.responsibleId).toBe('synthetic-organizer');expect(saved.content.responsibleIds).toEqual(['synthetic-organizer','synthetic-life-director-two']);expect(saved.content.reviewerIds).toEqual(['synthetic-super']);
  await page.getByRole('combobox',{name:'活动地区',exact:true}).click();await page.getByRole('option',{name:'苏州地区',exact:true}).click();
- await expect(picker.getByRole('checkbox',{checked:true})).toHaveCount(0);await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
+ await expect(picker).toContainText('选择协作负责人');await expect(page.getByRole('button',{name:'查看个人资料档案',exact:true})).toHaveCount(0);await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('合成负责人关联');
 });
 
 test('copy creates a new draft card with every position and updates its generated notice without changing the source',async({page})=>{
@@ -643,7 +645,7 @@ test('saved grouped draft submits once retaining all jobs creator and collaborat
  const created=await page.request.post('/api/volunteer/workflow/workspace-drafts',{headers:{'x-csrf-token':'synthetic-ui'},data:{requestId:crypto.randomUUID(),content}});expect(created.ok()).toBe(true);const draft=(await created.json()).result;
  await page.request.post('/api/auth/login',{data:{username:'synthetic-life-director-two'}});
  await page.goto(`/console/events?workspace=v2&draft=${draft.id}`);await expect(page.getByRole('button',{name:'提交审批',exact:true})).toHaveCount(0);
- await expect(page.getByRole('group',{name:'审批人（可多选）',exact:true}).getByRole('checkbox',{checked:true})).toHaveCount(1);
+ await expect(page.getByRole('combobox',{name:'审批人（可多选）',exact:true})).toContainText('已选 1 人');
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
  await page.getByRole('button',{name:'预览并提交',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整活动预览',exact:true});await expect(preview).toContainText('签到岗');await preview.getByRole('button',{name:'提交审核',exact:true}).click();
  await expect(page.locator('.activity-v2-heading')).toContainText(content.name);await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');

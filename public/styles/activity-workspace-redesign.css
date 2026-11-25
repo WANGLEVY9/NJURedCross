@@ -1,4 +1,3 @@
-@scope (.activity-workspace-redesign) {
 /* 活动管理统一工作区：Operate 模式基线。只覆盖 activity-v2 作用域，
    保留既有主题 token、共享按钮与表单组件；旧 activity-center 样式不动。 */
 .activity-v2 {
@@ -275,6 +274,8 @@ body.is-resizing-activity-directory {
   background: var(--surface);
   min-width: 0;
   position: relative;
+  container-type: inline-size;
+  container-name: activity-detail;
 }
 
 .activity-v2-heading {
@@ -491,75 +492,101 @@ body.is-resizing-activity-directory {
 }
 
 .activity-v2 .activity-draft-table {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.activity-v2 .activity-position-columns {
+  display: none;
+}
+
+.activity-v2 .activity-position-card {
+  margin-bottom: var(--s2);
   border: 1px solid var(--workspace-line);
   border-radius: var(--workspace-radius-sm);
   background: var(--surface);
-  overflow: auto;
+  overflow: hidden;
 }
 
-.activity-v2 .activity-draft-table table {
-  min-width: 900px;
-  table-layout: fixed;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.activity-v2 .activity-draft-table th:nth-child(1),
-.activity-v2 .activity-draft-table td:nth-child(1) { width: 22%; }
-.activity-v2 .activity-draft-table th:nth-child(2),
-.activity-v2 .activity-draft-table td:nth-child(2) { width: 20%; }
-.activity-v2 .activity-draft-table th:nth-child(3),
-.activity-v2 .activity-draft-table td:nth-child(3) { width: 32%; }
-.activity-v2 .activity-draft-table th:nth-child(4),
-.activity-v2 .activity-draft-table td:nth-child(4) { width: 16%; }
-.activity-v2 .activity-draft-table th:nth-child(5),
-.activity-v2 .activity-draft-table td:nth-child(5) { width: 10%; }
-
-.activity-v2 .activity-draft-table th,
-.activity-v2 .activity-draft-table td {
-  padding: var(--s3);
+.activity-v2 .activity-position-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
   border-bottom: 1px solid var(--workspace-line);
-  vertical-align: top;
-}
-
-.activity-v2 .activity-draft-table th {
   background: var(--workspace-soft);
-  font-size: var(--fs-caption);
-  font-weight: var(--fw-semibold);
-  color: var(--workspace-muted);
-  text-align: left;
 }
 
-.activity-v2 .activity-draft-table tr.activity-position-heading th {
-  padding: var(--s3);
-  border-bottom: 0;
-  background: var(--surface);
-  font-size: var(--fs-title);
-  font-weight: var(--fw-semibold);
-  color: var(--text-primary);
-}
-
-.activity-v2 .activity-draft-table td[data-label="操作"] {
-  vertical-align: middle;
-}
-
-.activity-v2 .activity-draft-table td[data-label="操作"]>.btn {
-  min-height: 36px;
-  width: 100%;
-  padding: 0 var(--s3);
-  margin-bottom: var(--s1);
-}
-
-.activity-v2 .activity-draft-table .field {
+.activity-v2 .activity-position-card__title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
   min-width: 0;
 }
 
-.activity-v2 .activity-draft-table .field+.field {
+.activity-v2 .activity-position-card__title strong {
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  white-space: nowrap;
+}
+
+.activity-v2 .activity-position-card__title span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--workspace-muted);
+}
+
+.activity-v2 .activity-position-card__actions {
+  display: flex;
+  flex: none;
+  gap: var(--s2);
+}
+
+.activity-v2 .activity-position-card__body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s2) var(--s3);
+  padding: var(--s3);
+  align-items: start;
+}
+
+@media (min-width: 961px) {
+  .activity-v2 .activity-position-card__body>.activity-position-cell[data-label="地点与工作"] {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--s3);
+  }
+
+  .activity-v2 .activity-position-card__body>.activity-position-cell[data-label="操作"] {
+    display: none;
+  }
+}
+
+.activity-v2 .activity-position-cell {
+  min-width: 0;
+}
+
+.activity-v2 .activity-position-cell .field {
+  min-width: 0;
+}
+
+.activity-v2 .activity-position-cell .field+.field {
   margin-top: var(--s2);
 }
 
-.activity-v2 .activity-draft-table tr:not(.activity-position-heading):hover>td {
-  background: var(--workspace-soft);
+.activity-v2 .activity-position-cell[data-label="操作"] {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s2);
+  color: var(--workspace-muted);
+  font-size: var(--fs-caption);
 }
 
 .activity-v2 .activity-draft-workspace__form textarea {
@@ -598,71 +625,53 @@ body.is-resizing-activity-directory {
   accent-color: var(--accent);
 }
 
-.activity-v2 .activity-project-people>fieldset,
-.activity-v2 .activity-project-people>p:first-of-type {
-  min-width: 0;
-}
-
-.activity-v2 .activity-responsible-choices {
-  gap: var(--s2) var(--s3);
-  max-height: 168px;
-  padding: var(--s3);
-  border-color: var(--workspace-line);
-  border-radius: var(--workspace-radius-sm);
-  background: var(--surface);
-}
-
-.activity-v2 .activity-people-tools {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  margin: var(--s1) 0 var(--s2);
-}
-
-.activity-v2 .activity-people-tools>.activity-people-search {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 36px;
-  font-size: var(--fs-secondary);
-}
-
-.activity-v2 .activity-people-tools>.activity-people-count {
-  flex: none;
-  color: var(--workspace-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.activity-v2 .activity-responsible-choices {
+.activity-v2 .activity-project-people {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  align-content: start;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s3);
+  align-items: start;
 }
 
-.activity-v2 .activity-responsible-choices>.activity-person-choice {
-  min-height: 36px;
-  padding: var(--s1) var(--s2);
-  border: 1px solid transparent;
-  border-radius: var(--r-xs);
+.activity-v2 .activity-people-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s3) var(--s4);
+  min-width: 0;
 }
 
-.activity-v2 .activity-responsible-choices>.activity-person-choice:hover {
-  border-color: var(--workspace-line);
-  background: var(--workspace-soft);
+.activity-v2 .activity-multi-select { gap: var(--s1); }
+.activity-v2 .activity-multi-select__control { position: relative; min-width: 0; }
+.activity-v2 .activity-multi-select__trigger {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s2);
+  width: 100%; min-height: var(--workspace-control-h); padding: 0 var(--s3);
+  border: 1px solid var(--workspace-line); border-radius: var(--workspace-radius-sm);
+  background: var(--surface); color: var(--text-primary); font: inherit;
+  font-size: var(--fs-secondary); text-align: left; cursor: pointer;
 }
-
-.activity-v2 .activity-responsible-choices>.activity-person-choice:focus-within {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
+.activity-v2 .activity-multi-select__trigger>.ico { width: 16px; height: 16px; flex: none; color: var(--workspace-muted); }
+.activity-v2 .activity-multi-select__trigger[data-empty=true] { color: var(--workspace-muted); }
+.activity-v2 .activity-multi-select__trigger:disabled { opacity: .6; cursor: not-allowed; }
+.activity-v2 .activity-multi-select__value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-v2 .activity-multi-select__popup {
+  position: fixed; inset: auto; width: min(340px, calc(100vw - 24px)); max-height: min(320px, 60vh);
+  padding: var(--s1); border: 1px solid var(--workspace-line); border-radius: var(--r-md);
+  background: var(--surface-raised, var(--surface)); color: var(--text-primary);
+  box-shadow: var(--e2); overflow: auto;
 }
-
-.activity-v2 .activity-responsible-choices>.activity-person-choice[hidden] {
-  display: none;
+.activity-v2 .activity-multi-select__popup::backdrop { background: transparent; }
+.activity-v2 .activity-multi-select__search-wrap {
+  display: flex; align-items: center; gap: var(--s2); padding: var(--s1) var(--s1) var(--s2);
+  border-bottom: 1px solid var(--workspace-line);
 }
-
-.activity-v2 .activity-responsible-choices label {
-  min-height: 32px;
-  font-size: var(--fs-secondary);
+.activity-v2 .activity-multi-select__search { width: 100%; min-width: 0; min-height: 36px; font-size: var(--fs-secondary); }
+.activity-v2 .activity-multi-select__option {
+  display: flex; align-items: center; gap: var(--s2); min-height: 40px;
+  padding: var(--s1) var(--s2); border-radius: var(--r-xs); font-size: var(--fs-secondary); cursor: pointer;
 }
+.activity-v2 .activity-multi-select__option:hover,
+.activity-v2 .activity-multi-select__option[aria-selected=true] { background: var(--workspace-soft); }
+.activity-v2 .activity-multi-select__option input { width: 16px; height: 16px; accent-color: var(--accent); }
+.activity-v2 .activity-multi-select__empty { padding: var(--s3); color: var(--workspace-muted); font-size: var(--fs-caption); text-align: center; }
 
 .activity-v2 .activity-draft-table table {
   min-width: 0;
@@ -744,6 +753,7 @@ body.is-resizing-activity-directory {
   .activity-v2 .activity-draft-grid>.activity-project-people {
     grid-column: 1 / -1;
   }
+
 }
 
 @media (max-width: 1200px) {
@@ -887,68 +897,40 @@ body.is-resizing-activity-directory {
   }
 
   .activity-v2 .activity-draft-grid,
-  .activity-v2 .activity-project-people {
+  .activity-v2 .activity-people-pair {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .activity-v2 .activity-responsible-choices {
-    max-height: 192px;
-  }
-
-  .activity-v2 .activity-draft-table {
-    overflow: visible;
-  }
-
-  .activity-v2 .activity-draft-table table {
-    min-width: 0;
-  }
-
-  .activity-v2 .activity-draft-table table,
-  .activity-v2 .activity-draft-table tbody,
-  .activity-v2 .activity-draft-table tr,
-  .activity-v2 .activity-draft-table td {
-    display: block;
-    width: 100%;
-    min-width: 0;
-    box-sizing: border-box;
-  }
-
-  .activity-v2 .activity-draft-table thead {
-    display: none;
-  }
-
-  .activity-v2 .activity-draft-table tbody {
-    display: grid;
-    gap: var(--s3);
-  }
-
-  .activity-v2 .activity-draft-table tr:not(.activity-position-heading) {
-    display: grid;
+  .activity-v2 .activity-position-card__body {
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--s2);
-    padding: var(--s3);
-    border: 1px solid var(--workspace-line);
-    border-radius: var(--workspace-radius-sm);
-    background: var(--surface);
   }
 
-  .activity-v2 .activity-draft-table tr.activity-position-heading {
+  .activity-v2 .activity-position-card__body>.activity-position-cell[data-label="地点与工作"] {
+    grid-column: auto;
     display: block;
-    padding: 0;
-    border: 0;
   }
 
-  .activity-v2 .activity-draft-table .activity-position-heading th {
+  .activity-v2 .activity-position-cell[data-label]::before {
+    content: attr(data-label);
     display: block;
-    padding: 0;
-    border: 0;
+    margin-bottom: var(--s1);
+    padding-bottom: var(--s1);
+    border-bottom: 1px solid var(--workspace-line);
+    color: var(--workspace-muted);
+    font-size: var(--fs-caption);
+    font-weight: var(--fw-semibold);
   }
 
-  .activity-v2 .activity-draft-table td[data-label] {
-    padding: 0;
-    border: 0;
+  .activity-v2 .activity-position-cell .field>.field__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
   }
 
-  .activity-v2 .activity-draft-table td[data-label]::before {
+  .activity-v2 .activity-position-cell[data-label]::before {
     content: attr(data-label);
     display: block;
     margin-bottom: var(--s1);
@@ -957,28 +939,8 @@ body.is-resizing-activity-directory {
     font-weight: var(--fw-medium);
   }
 
-  .activity-v2 .activity-draft-table td[data-label]>.field+.field {
-    margin-top: var(--s2);
-  }
-
-  .activity-v2 .activity-draft-table td[data-label] :is(.input, .select, .textarea, input:not([type=checkbox]):not([type=radio]), textarea) {
-    width: 100%;
-  }
-
-  .activity-v2 .activity-draft-table td[data-label="操作"] {
-    display: flex;
+  .activity-v2 .activity-position-card__head {
     flex-wrap: wrap;
-    gap: var(--s2);
-    padding-top: var(--s2);
-    border-top: 1px solid var(--workspace-line);
-  }
-
-  .activity-v2 .activity-draft-table td[data-label="操作"]::before {
-    flex: 1 0 100%;
-  }
-
-  .activity-v2 .activity-draft-table td[data-label="操作"]>.btn {
-    flex: 1 1 120px;
   }
 
   .activity-v2 .activity-registration-batch {
@@ -1010,5 +972,4 @@ body.is-resizing-activity-directory {
   .activity-v2-card:active {
     transform: none;
   }
-}
 }

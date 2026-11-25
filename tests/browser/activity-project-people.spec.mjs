@@ -1,5 +1,16 @@
 import {test,expect} from '@playwright/test';
 
+async function pick(page,group,open,choices){
+ const combobox=page.getByRole('combobox',{name:group,exact:true});
+ if(open)await combobox.click();
+ for(const [name,checked] of choices){
+  const option=page.getByRole('option',{name,exact:true});
+  const input=option.locator('input[type=checkbox]');
+  if(checked)await input.check();else await input.uncheck();
+ }
+ if(open)await combobox.press('Escape');
+}
+
 test('project people defaults use one scoped load and saved reviewer choices survive refresh',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});await page.goto('/console/events');
  await page.evaluate(async()=>{
@@ -16,13 +27,12 @@ test('project people defaults use one scoped load and saved reviewer choices sur
    document.getElementById('root').replaceChildren(editor.node);window.projectPeopleEditor=editor;
   };window.mountProjectPeople();
  });
- const owner=page.getByLabel('立项负责人（本人）',{exact:true}),reviewers=page.getByRole('group',{name:'审批人（可多选）',exact:true});
- await expect(page.getByRole('group',{name:'协作负责人（可选择）',exact:true}).getByRole('checkbox',{name:'合成立项人',exact:true})).toHaveCount(0);
+ const owner=page.getByLabel('立项负责人（本人）',{exact:true}),reviewers=page.getByRole('combobox',{name:'审批人（可多选）',exact:true});
  await expect(owner).toHaveValue('合成立项人');await expect(owner).toHaveAttribute('readonly','');
- await expect(reviewers.getByRole('checkbox',{checked:true})).toHaveCount(3);
+ await expect(reviewers).toContainText('已选 3 人');
  expect(await page.evaluate(()=>window.projectPeopleEditor.hasUnsaved())).toBe(false);
- await reviewers.getByRole('checkbox',{name:'金中宸',exact:true}).uncheck();
- await page.getByRole('group',{name:'协作负责人（可选择）',exact:true}).getByRole('checkbox',{name:'合成协作人',exact:true}).check();
+ await pick(page,'审批人（可多选）',true,[['金中宸',false]]);
+ await pick(page,'协作负责人（可多选）',true,[['合成协作人',true]]);
  expect(await page.evaluate(()=>window.projectPeopleEditor.hasUnsaved())).toBe(true);
  await page.getByRole('button',{name:'保存草稿',exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>window.projectPeopleTest.saved?.reviewerIds)).toEqual(['chair','yuan']);
@@ -34,11 +44,10 @@ test('project people defaults use one scoped load and saved reviewer choices sur
  await expect(preview).toContainText('合成立项人');await expect(preview).toContainText('合成协作人');await expect(preview).toContainText('合成生命主席、袁金雨');
  await preview.getByRole('button',{name:'返回',exact:true}).click();
  await page.evaluate(()=>window.mountProjectPeople());
- await expect(reviewers.getByRole('checkbox',{name:'金中宸',exact:true})).not.toBeChecked();
+ await expect(reviewers).toContainText('已选 2 人');
  await page.getByRole('combobox',{name:'活动类别',exact:true}).click();await page.getByRole('option',{name:'博爱中心',exact:true}).click();
- await expect(reviewers.getByRole('checkbox',{name:'合成博爱主席',exact:true})).toBeChecked();
- await expect(reviewers.getByRole('checkbox',{name:'金中宸',exact:true})).toBeChecked();
- await expect(page.getByRole('group',{name:'协作负责人（可选择）',exact:true}).getByRole('checkbox',{checked:true})).toHaveCount(0);
+ await expect(reviewers).toContainText('已选 3 人');
+ await expect(page.getByRole('combobox',{name:'协作负责人（可多选）',exact:true})).toContainText('选择协作负责人');
  expect(await page.evaluate(()=>window.projectPeopleTest.loads.length)).toBe(3);
 });
 
@@ -49,10 +58,12 @@ test('late people responses cannot restore choices from a previous center',async
   const component=activityProjectPeople({ownerId:'owner',getContent:()=>content,editable:true,onChange:()=>{},load:({category})=>new Promise(resolve=>{pending[category]=()=>resolve({self:{id:'owner',name:'合成立项人'},collaborators:[],reviewers:[{id:category,name:category+'主席'}],defaultReviewerIds:[category],unavailableDefaults:[]});})});
   document.getElementById('root').replaceChildren(component.node);void component.refresh();content.category='博爱中心';void component.refresh({reset:true});pending['博爱中心']();
  });
- const reviewers=page.getByRole('group',{name:'审批人（可多选）',exact:true});
- await expect(reviewers.getByRole('checkbox',{name:'博爱中心主席',exact:true})).toBeChecked();
+ const reviewers=page.getByRole('combobox',{name:'审批人（可多选）',exact:true});
+ await expect(reviewers).toContainText('博爱中心主席');
  await page.evaluate(()=>window.peopleRace.pending['生命中心']());
- await expect(reviewers.getByRole('checkbox',{name:'生命中心主席',exact:true})).toHaveCount(0);
+ await reviewers.click();
+ await expect(page.getByRole('option',{name:'生命中心主席',exact:true})).toHaveCount(0);
+ await reviewers.press('Escape');
  expect(await page.evaluate(()=>window.peopleRace.content.reviewerIds)).toEqual(['博爱中心']);
 });
 
@@ -67,9 +78,13 @@ test('collaborator editing another creator draft can retain remove and reselect 
   const ui=activityProjectPeople({ownerId:'synthetic-organizer',getContent:()=>content,editable:true,load:async()=>options,onChange:()=>{}});
   document.getElementById('root').replaceChildren(ui.node);window.collaboratorEditor={ui,content};await ui.refresh();
  },options);
- const choices=page.getByRole('group',{name:'协作负责人（可选择）',exact:true});
- await expect(choices.locator('input[value="synthetic-organizer"]')).toHaveCount(0);
- const self=choices.locator('input[value="synthetic-life-director-two"]');await expect(self).toBeChecked();await expect(choices).not.toContainText('已不在有效名单');
+ const choices=page.getByRole('combobox',{name:'协作负责人（可多选）',exact:true});
+ await expect(choices).toContainText('已选 1 人');
+ await choices.click();
+ await expect(page.locator('.activity-multi-select__list input[value="synthetic-organizer"]')).toHaveCount(0);
+ const self=page.getByRole('option',{name:'合成生命主任',exact:true}).locator('input[type=checkbox]');
+ await expect(self).toBeChecked();await expect(choices).not.toContainText('已不在有效名单');
  await self.uncheck();await page.evaluate(()=>window.collaboratorEditor.ui.sync());await expect(self).toBeVisible();await self.check();
+ await choices.press('Escape');
  expect(await page.evaluate(()=>window.collaboratorEditor.content.responsibleIds)).toEqual(['synthetic-organizer','synthetic-life-director-two']);
 });

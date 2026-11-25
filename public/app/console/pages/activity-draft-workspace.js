@@ -80,18 +80,20 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     content.bookingMode=next;previousMode=next;renderDetails();update();
   });
   function positionTable(){
-    const tbody=h('tbody');
     const headings=['岗位与人数','日期与时间','地点与工作','时长（小时）','操作'];
-    for(const [index,p] of content.positions.entries()){
-      const row=h('tr'),cells=headings.map(label=>h('td',{data:{label}}));row.append(...cells);
-      tbody.append(h('tr',{class:'activity-position-heading'},h('th',{colspan:5},h('strong',{class:'activity-position-label',text:positionLabel(index+1)}))));
+    const cards=content.positions.map((p,index)=>{
+      const row=h('article',{class:'activity-position-card',data:{position:'true'}});
+      const cells=headings.map(label=>h('div',{class:'activity-position-cell',data:{label}}));
+      const head=h('header',{class:'activity-position-card__head'},h('div',{class:'activity-position-card__title'},h('strong',{class:'activity-position-label',text:positionLabel(index+1)}),h('span',{class:'t-caption',text:p.name||'未命名岗位'})),h('div',{class:'activity-position-card__actions'},button({label:'复制',size:'sm',onClick:()=>{content.positions.push({...p,id:crypto.randomUUID()});renderDetails();update();}}),button({label:'删除',variant:'ghost',size:'sm',onClick:()=>{content.positions=content.positions.filter(x=>x.id!==p.id);renderDetails();update();}})));
       for(const [key,label,type]of [['name','岗位名称','text'],['date','日期','date'],['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
         const f=field({label,value:p[key],type,required:false,step:type==='time'?60:'any',onInput:()=>{p[key]=f.control.value;update();}});cells[['name','capacity'].includes(key)?0:['date','start','end'].includes(key)?1:['location','work'].includes(key)?2:3].append(f);
       }
       const flexible=field({label:'弹性名额',name:'flexibleCapacity',value:p.flexibleCapacity||'0',...flexibleInput,onInput:()=>{p.flexibleCapacity=flexible.control.value;update();}});cells[0].append(flexible);
-      cells[4].append(button({label:'复制',size:'sm',onClick:()=>{content.positions.push({...p,id:crypto.randomUUID()});renderDetails();update();}}),button({label:'删除',variant:'ghost',size:'sm',onClick:()=>{content.positions=content.positions.filter(x=>x.id!==p.id);renderDetails();update();}}));tbody.append(row);
-    }
-    return h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...headings.map(text=>h('th',{text})))),tbody));
+      cells[4].hidden=true;
+      row.append(head,h('div',{class:'activity-position-card__body'},cells[0],cells[1],cells[2],cells[3],cells[4]));
+      return row;
+    });
+    return h('div',{class:'activity-draft-table activity-position-cards'},h('div',{class:'activity-position-columns','aria-hidden':'true'},...headings.map(text=>h('span',{text}))),...cards);
   }
   function renderDetails(){
     const special=content.special&&scheduleType(content.special.type);

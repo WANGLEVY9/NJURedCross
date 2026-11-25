@@ -11,7 +11,7 @@ test('activity management loads one scoped design baseline', async () => {
     read('public/styles/activity-workspace-redesign.css'),
   ]);
   assert.match(html, /href="\/styles\/activity-workspace-redesign\.css"[^>]*data-surface="console"/);
-  assert.match(css, /@scope \(\.activity-workspace-redesign\)/);
+  assert.match(css, /\.activity-v2 \{[\s\S]*--workspace-control-h/);
   assert.match(css, /--workspace-control-h: 40px/);
   assert.match(css, /font-size: var\(--fs-body\)/);
   assert.match(css, /font-family: var\(--font-sans\)/);
@@ -119,24 +119,29 @@ test('phone layout uses one column, 44px-safe controls and a scrollable action r
   assert.match(css, /overscroll-behavior-x: contain/);
 });
 
-test('people pickers keep checkbox semantics while gaining search and selected count', async () => {
-  const source = await read('public/app/console/pages/activity-project-people.js');
+test('people pickers use compact searchable multi-select menus', async () => {
+  const [source, menu] = await Promise.all([
+    read('public/app/console/pages/activity-project-people.js'),
+    read('public/app/console/pages/activity-multi-select.js'),
+  ]);
   const css = await read('public/styles/activity-workspace-redesign.css');
-  assert.match(source, /class:'input activity-people-search',type:'search'/);
-  assert.match(source, /class:'t-caption activity-people-count'/);
-  assert.match(source, /h\('input',\{type:'checkbox'/);
-  assert.match(source, /class:'activity-person-choice'/);
-  assert.match(css, /\.activity-people-tools/);
-  assert.match(css, /\.activity-responsible-choices \{[\s\S]*display: grid/);
+  assert.match(source, /activityMultiSelect/);
+  assert.match(menu, /role:'combobox'/);
+  assert.match(menu, /type:'checkbox'/);
+  assert.match(menu, /activity-multi-select__search/);
+  assert.match(css, /\.activity-multi-select__popup/);
+  assert.match(css, /\.activity-people-pair \{[^}]*grid-template-columns: repeat\(2/s);
 });
 
-test('phone position rows become labelled cards without a horizontal table', async () => {
+test('position rows become labelled cards across desktop and phone', async () => {
   const [source, css] = await Promise.all([
     read('public/app/console/pages/activity-draft-workspace.js'),
     read('public/styles/activity-workspace-redesign.css'),
   ]);
   assert.match(source, /const headings=\['岗位与人数','日期与时间','地点与工作','时长（小时）','操作'\]/);
-  assert.match(source, /headings\.map\(label=>h\('td',\{data:\{label\}\}\)\)/);
-  assert.match(css, /\.activity-v2 \.activity-draft-table thead \{\s*display: none/);
-  assert.match(css, /td\[data-label\]::before/);
+  assert.match(source, /class:'activity-position-card'/);
+  assert.match(source, /data:\{label\}/);
+  assert.match(css, /\.activity-position-card__body \{[^}]*grid-template-columns: repeat\(2/s);
+  assert.match(css, /\.activity-position-card__body \{[^}]*grid-template-columns: minmax\(0, 1fr\)/s);
+  assert.match(css, /activity-position-cell\[data-label\]::before/);
 });
