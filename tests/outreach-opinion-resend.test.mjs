@@ -150,6 +150,8 @@ test('重发幂等键带次数，附件原样随邮件发出', async () => {
   assert.notEqual(seen[0].idempotencyKey, seen[1].idempotencyKey);
   assert.equal(seen[1].attachments[0].filename, attachment.filename);
   assert.equal(seen[1].to, 's@example.invalid');
+  // 审核意见是凭证，不套通用 outreach 模板（模板可能不含 {原正文}）。
+  assert.equal(seen[1].templateRendered, true);
   // 附件只是副本：正文必须能独立读到全部意见。
   assert.match(seen[1].text, /人数不符/);
   assert.match(seen[1].text, /若附件未显示，上方正文即完整审核意见/);
