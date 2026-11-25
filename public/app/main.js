@@ -168,6 +168,7 @@ defineRoutes([
   { path: '/admin', guard: () => '/console/overview', handler: consolePage(() => import('./console/pages/overview.js')) },
   { path: '/console/admin', handler: consolePage(() => import('./console/pages/admin.js')), guard: requireConsoleSession },
   { path: '/console/feedback', handler: consolePage(() => import('./console/pages/feedback.js')), guard: requireConsoleSession },
+  { path: '/console/activity-feedback', handler: consolePage(() => import('./console/pages/activity-feedback.js')), guard: requireConsoleSession },
   { path: '/console/agent', handler: consolePage(() => import('./console/pages/agent.js')), guard: requireConsoleSession },
   { path: '/console/messages', handler: consolePage(() => import('./console/pages/messages.js')), guard: requireConsoleScope('community') },
   { path: '/console/gallery', handler: consolePage(() => import('./console/pages/gallery.js')), guard: requireConsoleSession },

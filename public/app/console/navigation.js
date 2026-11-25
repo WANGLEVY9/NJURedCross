@@ -2,6 +2,7 @@
 export const CONSOLE_SECTIONS = Object.freeze([
   { path:'/console/overview', label:'总览', iconName:'gauge', description:'待办队列、运营概况与最近操作' },
   { path:'/console/feedback', label:'问题反馈', iconName:'inbox', description:'查看活动平台用户提交的分类问题与建议' },
+  { path:'/console/activity-feedback', label:'活动反馈', iconName:'clipboard', description:'查看和导出部门活动的参与反馈' },
   { path:'/console/admin', label:'管理员中心', iconName:'user', description:'我的账号、工作区偏好、系统状态与数据维护' },
   { path:'/console/calendar', label:'活动日历', iconName:'calendar', scope:'events', sharedEntry:true, description:'已审批活动的月历与每周安排' },
   { path:'/console/events', label:'活动管理', iconName:'calendar', scope:'events', sharedEntry:true, description:'审批发布、名单结果、签到核验与志愿时长' },

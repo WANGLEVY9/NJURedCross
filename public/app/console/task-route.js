@@ -1,4 +1,5 @@
 const ROUTES = new Map([
+  ['activity-feedback', '/console/activity-feedback'],
   ['materials', '/console/materials'],
   ['activities', '/console/events'],
   ['events', '/console/events'],
@@ -11,6 +12,7 @@ const ROUTES = new Map([
 export function taskRoute(item) {
   const route = ROUTES.get(item?.view);
   if (!route) return null;
+  if(item.view==='activity-feedback'&&typeof item.target?.id==='string')return `${route}?${new URLSearchParams({feedback:item.target.id})}`;
 
   if (item.view === 'outreach') {
     const target = item.target;

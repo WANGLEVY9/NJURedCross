@@ -51,12 +51,14 @@ const NAV_MODULES = {
   '/console/outreach': () => import('./pages/outreach.js'),
   '/console/community': () => import('./pages/community.js'),
   '/console/feedback': () => import('./pages/feedback.js'),
+  '/console/activity-feedback': () => import('./pages/activity-feedback.js'),
   '/console/audit': () => import('./pages/audit.js'),
   '/console/agent': () => import('./pages/agent.js'),
   '/console/admin': () => import('./pages/admin.js'),
 };
 
 const VIEW_ROUTES = {
+  'activity-feedback': '/console/activity-feedback',
   materials: '/console/materials',
   activities: '/console/events',
   events: '/console/events',

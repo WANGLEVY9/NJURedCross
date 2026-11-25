@@ -6,6 +6,7 @@ import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-stor
 import {createBloodWeekStore} from './lib/events/blood-week-store.js';
 import {createBloodNotificationReview} from './lib/events/blood-notification-review.js';
 import {createActivityFeedbackStore} from './lib/events/activity-feedback.js';
+import {createActivityFeedbackManagement} from './lib/events/activity-feedback-management.js';
 import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
 import {openMailSettings,publicParticipationGuide} from './lib/mail/templates.js';
 import {workspaceNotificationItems} from './lib/events/workspace-notifications.js';
@@ -363,6 +364,7 @@ const jobQueue = await createJobQueue({
   handlers: {
     'registration.notifications': async () => runRegistrationNotificationsJob(),
     'approval.reminders': async () => reconcileApprovalReminders(),
+    'activity.feedback': async () => activityFeedbackManagement.deliver({send:sendMail,origin:publicBaseUrl}),
   },
   onError: (error, job) => console.warn(`Queued task ${job?.type || 'unknown'} deferred: ${error?.name || 'Error'}: ${String(error?.message || '').slice(0, 140)}`),
 });
@@ -877,6 +879,20 @@ async function getActivityFeedback(){
  const suffix=createHash('sha256').update(expected).digest('hex').slice(0,16);
  return activityFeedbackStore??=observer.dependency('storage','activity-feedback-open',()=>createActivityFeedbackStore(join(writeStateDir,`activity-feedback-${suffix}.sqlite`)))
   .catch(error=>{activityFeedbackStore=null;throw error;});
+}
+const activityFeedbackManagement=createActivityFeedbackManagement({getStore:getActivityFeedback,getRoster:getWorkspaceRoster,
+ getEvents:async()=>(await getWorkflow()).feedbackCatalog()});
+function queueActivityFeedback(){
+ if(process.env.PLATFORM_WORKFLOW_MODE!=='production'||!mailerStatus().configured)return;
+ try{jobQueue.enqueue({type:'activity.feedback',dedupeKey:'activity.feedback'});}catch{console.warn('Activity feedback notification enqueue deferred');}
+}
+async function recoverActivityFeedback(){
+ if(process.env.PLATFORM_WORKFLOW_MODE!=='production'||!mailerStatus().configured||!backgroundGate.allow())return;
+ try{
+  await observer.dependency('background','activity-feedback-recovery',async()=>{
+   if((await (await getActivityFeedback()).pending()).length)queueActivityFeedback();
+  });
+ }catch{console.warn('Activity feedback notification recovery deferred');}
 }
 const permitsBloodMail=async(event,row)=>(await getWorkflow()).permitsBloodMail(event,row);
 let registrationDeliveryRunning=false,registrationDeliveryQueued=false;
@@ -3460,8 +3476,12 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
       if(error.statusCode!==503)throw error;
     }
   }
+  if(session){
+    try{items.push(...await observer.dependency('content','activity-feedback-tasks',async()=>activityFeedbackManagement.tasks(await loadSessionAccount(session.username))));}
+    catch{/* Keep independent notification sources available when the feedback source is unavailable. */}
+  }
   const scopeByView = { materials: 'materials', activities: 'events', services: 'events', outreach: 'outreach', community: 'community' };
-  const visibleItems = items.filter((item) => allowed.has(scopeByView[item.view]));
+  const visibleItems = items.filter((item) => item.view==='activity-feedback'||allowed.has(scopeByView[item.view]));
   const priority = { high: 0, medium: 1, low: 2 };
   visibleItems.sort((a, b) => priority[a.priority] - priority[b.priority]);
   // 总览按板块聚合：把同类待办收成一行，避免几十条重复铺满屏幕。
@@ -3473,6 +3493,7 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
   const NOTIFICATION_BOARDS = [
     { key: 'materials', label: '物资', view: 'materials', types: ['物资逾期', '物资审批', '库存预警'] },
     { key: 'events', label: '活动', view: 'activities', types: ['活动待发布', '活动草稿待完善', '时长待核对'] },
+    { key: 'activity-feedback', label: '活动反馈', view: 'activity-feedback', types: ['活动反馈待阅'] },
     { key: 'outreach', label: '宣传', view: 'outreach', types: ['公众投稿待审核', '内容待审核', '内容待发布', '文创征集', '策划案'] },
     { key: 'community', label: '内建', view: 'community', types: ['温暖连接待审核', '温暖连接待确认'] },
   ];
@@ -5653,9 +5674,29 @@ async function dispatchApi(req, res, url) {
       });
     }
 
+    if(url.pathname==='/api/console/activity-feedback'){
+      const session=requirePortalSession(req,res);if(!session)return;
+      if(!['GET','HEAD','POST'].includes(req.method))return json(res,405,{ok:false,message:'请求方式无效'});
+      res.setHeader('Cache-Control','private, no-store');
+      const account=await loadSessionAccount(session.username);
+      if(req.method==='POST'){
+        if(!requireCsrf(req,res,session))return;
+        const {id}=await readJson(req,1024)||{};
+        if(typeof id!=='string'||!id||id.length>150)return json(res,400,{ok:false,message:'反馈编号无效'});
+        await activityFeedbackManagement.markRead(account,id);
+        return json(res,200,{ok:true});
+      }
+      if(url.searchParams.get('export')==='csv'){
+        const csv=await activityFeedbackManagement.list(account,url.searchParams,{exporting:true});
+        res.setHeader('Content-Type','text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition','attachment; filename="activity-feedback.csv"');
+        return res.end(req.method==='HEAD'?undefined:csv);
+      }
+      return json(res,200,{ok:true,...await activityFeedbackManagement.list(account,url.searchParams)});
+    }
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
       return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getActivityFeedback,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
-        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
+        ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,queueActivityFeedback,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,queueHoursSync,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:async session=>{
           const account=await findAccountByLogin(await getIdentityBase(),session.username);
@@ -7227,6 +7268,9 @@ server.listen(port, () => {
   registerShutdownCleanup(server, () => clearInterval(financeMailTimer));
   // 持久化任务队列：请求只入队，通知与投递在后台按租约执行。
   jobQueue.start();
+  const feedbackTimer=setInterval(recoverActivityFeedback,60_000);feedbackTimer.unref();
+  void recoverActivityFeedback();
+  registerShutdownCleanup(server,()=>clearInterval(feedbackTimer));
   registerShutdownCleanup(server, () => {
     void jobQueue.stop({ timeoutMs: 5_000 }).finally(() => {
       // 停机时把在途任务立即放回队列，重启后不必等租约过期。
