@@ -152,11 +152,7 @@ h1, h2, h3 { text-wrap: balance; }
   .feedback-item__foot { align-items:flex-start; flex-direction:column; }
 }
 
-/* Dual-viewport baseline: final cascade for brand marks and carousel targets. */
-.portal .plogo__text span,
-.console .nav__brand-text span {
-  font-size: max(12px, var(--fs-caption));
-}
+/* Carousel targets keep their own shared baseline below. */
 
 .home-redesign .home-banner__dots button,
 .events-hero__dots button {

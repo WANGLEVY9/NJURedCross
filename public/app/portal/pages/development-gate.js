@@ -2,6 +2,7 @@ import { h, icon } from '../../core/dom.js';
 import { getSessionState } from '../../core/api.js';
 import { developingPlaza } from '../development-access.js';
 import { managedImage } from '../image-source.js';
+import { brandLockup } from '../../ui/brand-lockup.js';
 
 // Deliberately tab-local presentation state: no request, approval record or
 // permission grant is created. Actual opening is controlled by the rollout map.
@@ -30,7 +31,7 @@ export default function page(context) {
   const next = context.path + location.search;
   const node = h('section', { class: 'development-gate', aria: { labelledby: 'development-gate-title' } },
     h('div', { class: 'development-gate__copy' },
-      h('div', { class: 'development-gate__brand' }, h('img', { src: '/assets/nju-red-cross-emblem-128.webp', alt: '南京大学红十字会会徽', width: 48, height: 48, decoding: 'async' }), h('span', { text: '南京大学红十字会 · 校园公益服务平台' })),
+      brandLockup({className:'development-gate__brand'}),
       h('p', { class: 'development-gate__eyebrow', text: 'NJU RED CROSS · 服务准备中' }),
       h('h1', { id: 'development-gate-title', text: plaza.name }),
       h('p', { class: 'development-gate__motto', text: '把善意，化作行动' }),

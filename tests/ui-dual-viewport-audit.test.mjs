@@ -23,7 +23,8 @@ test('console shared chrome and carousel controls meet legibility and touch floo
   ]);
   assert.match(admin, /@import '\.\/console-ui-hardening\.css';/);
   assert.match(css, /\.console \.nav__workspace-text small,[\s\S]*font-size: var\(--fs-caption\)/);
-  assert.match(shared, /\.portal \.plogo__text span,[\s\S]*font-size: max\(12px, var\(--fs-caption\)\)/);
+  const brand=await read('public/styles/brand-lockup.css');
+  assert.match(brand, /\.brand-lockup__en \{[\s\S]*font-family: "Helvetica Neue"/);
   assert.match(shared, /\.home-redesign \.home-banner__dots button,[\s\S]*width: 44px;[\s\S]*height: 44px/);
   assert.match(shared, /\.events-hero__dots button::after/);
   assert.match(shared, /@media \(max-width: 960px\) \{[\s\S]*width: 44px;[\s\S]*height: 44px/);

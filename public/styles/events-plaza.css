@@ -300,7 +300,6 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
 }
 
 /* Final cascade for plaza route bundle. */
-.portal .plogo__text span { font-size: max(12px, var(--fs-caption)); }
 .events-hero__dots { gap: 0; }
 .events-hero__dots button {
   display: grid;

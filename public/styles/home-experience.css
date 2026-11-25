@@ -138,7 +138,6 @@
 
 /* Final cascade: route bundle owns the composition, so the legibility and
    touch-target floor must also live here. */
-.portal .plogo__text span { font-size: max(12px, var(--fs-caption)); }
 .home-redesign .home-banner__dots { gap: 0; padding: 0; }
 .home-redesign .home-banner__dots button {
   display: grid;

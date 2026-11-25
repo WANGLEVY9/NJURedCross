@@ -43,14 +43,8 @@
   .filter-segments__indicator { transition:none; }
 }
 
-/* The supplied official emblem is displayed intact, independent of theme. */
-.brand-emblem { display:block; width:44px; height:44px; flex:none; object-fit:contain; border-radius:50%; background:#fff; }
-.portal .plogo__text .brand-wordmark,.console .nav__brand-text .brand-wordmark { font-family:"Times New Roman",serif; font-size:13px; font-weight:700; letter-spacing:.025em; text-transform:none; line-height:1.35; color:#21386b; }
-.portal .plogo__text { gap:3px; }
-@media(max-width:640px) {
-  .brand-emblem { width:36px; height:36px; }
-  .portal .plogo__text .brand-wordmark { font-size:11px; letter-spacing:.025em; }
-}
+/* The supplied official emblem and wordmark are owned by brand-lockup.css. */
+@media(max-width:640px) { .brand-emblem { width:36px; height:36px; } }
 
 /* The plaza borrows the home page's brand surface; browsing stays quiet. */
 .portal .event-browser--aligned .psection { padding-top:32px; }

@@ -177,9 +177,13 @@ body.page-ready > .root > .console-root {
   margin: 3px 0 0;
   overflow: hidden;
   color: #756a66;
-  font: 9px/1.4 "Times New Roman", serif;
-  letter-spacing: 0.075em;
+  font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  line-height: 1.4;
   text-overflow: ellipsis;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 

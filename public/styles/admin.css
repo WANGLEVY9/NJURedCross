@@ -59,13 +59,11 @@
   );
 }
 .console .nav__brand .brand-emblem { display: block; flex: none; object-fit: contain; border-radius: 50%; clip-path: circle(50%); background: transparent; }
-.nav__brand-text { display: grid; min-width: 0; }
+.nav__brand-text { min-width: 0; }
 .nav__brand > a { min-width: 0; flex: 1; }
 /* A wider rail plus single-line labels stops the brand/workspace names from
    breaking into three stacked lines; long names truncate with a tooltip. */
 .nav__brand-text b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nav__brand-text b { font-size: var(--fs-secondary); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-heading); }
-.nav__brand-text span { font-size: var(--fs-caption); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-faint); }
 
 .nav__workspace {
   display: flex;

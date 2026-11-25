@@ -48,8 +48,7 @@
 }
 @media (max-width: 360px) {
   .console .topbar > .icon-btn:not(.icon-btn--mobile):not(.theme-trigger) { display: none; }
-  .portal .plogo__text b { font-size: 14px; }
-  .portal .plogo__text > span { font-size: 8px; }
+  .portal .plogo__text { max-width: min(15em, 56vw); }
 }
 @media (hover: none), (pointer: coarse) {
   .btn, .icon-btn { min-height: 44px; }

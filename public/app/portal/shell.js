@@ -2,6 +2,7 @@ import {missingProfileFields} from '../shared/profile-completeness.js';
 import { attachPageArt } from './page-art.js';
 import { PORTAL_NAV, portalSection } from './navigation.js';
 import { themeButton } from '../ui/theme-picker.js';
+import { brandLockup } from '../ui/brand-lockup.js';
 /* ==========================================================================
    portal/shell.js — the public service shell.
    Kept intentionally light: one primary action per screen, navigation that
@@ -135,10 +136,9 @@ export function createShell() {
       'div',
       { class: 'phead__inner' },
       h(
-        'a',
-        { class: 'plogo', href: '/', attrs: { 'aria-label': '南京大学红十字会首页' } },
-        h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 44, height: 44 }),
-        h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' })),
+        'div',
+        { class: 'phead__brand' },
+        brandLockup({className:'plogo',href:'/'}),
       ),
       h('span', { class: 'spacer' }),
       menuButton,
@@ -161,9 +161,7 @@ export function createShell() {
     { class: 'pfoot' },
     h('div', { class: 'pfoot__inner' },
       h('div', { class: 'pfoot__brand' },
-        h('a', { class: 'plogo', href: '/', attrs: { 'aria-label': '南京大学红十字会首页' } },
-          h('img', { class: 'brand-emblem', src: '/assets/nju-red-cross-emblem-128.webp', alt: '', width: 44, height: 44 }),
-          h('span', { class: 'plogo__text' }, h('b', { text: '南京大学红十字会' }), h('span', { class: 'brand-wordmark', text: 'NJURedCross' }))),
+        brandLockup({className:'plogo',href:'/'}),
         h('p', { class: 'pfoot__motto', text: '让每一次参与，都有回应。' }),
         h('p', { class: 'pfoot__description', text: '从急救培训、无偿献血宣传到校园志愿服务，与我们一起，让关怀成为日常。' })),
       ...footerGroups.map((group) => h('nav', { class: 'pfoot__col', attrs: { 'aria-label': `页脚 · ${group.title}` } },

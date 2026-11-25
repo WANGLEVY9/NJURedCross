@@ -29,7 +29,7 @@ for (const width of [1440, 1920, 2200]) {
     expect(rail).toBeGreaterThanOrEqual(240);
     expect(rail).toBeLessThanOrEqual(264);
 
-    for (const selector of ['.nav__brand-text b', '.nav__workspace-text b']) {
+    for (const selector of ['.nav__brand-text .brand-lockup__cn', '.nav__workspace-text b']) {
       const label = await page.locator(selector).evaluate(node => ({
         height: node.getBoundingClientRect().height,
         whiteSpace: getComputedStyle(node).whiteSpace,

@@ -139,8 +139,7 @@
 @media(max-width:400px) {
  .phead__inner { gap: 4px; padding-inline: 12px; }
  .phead .plogo { gap: 6px; }
- .phead .plogo__text b { font-size: 12px; }
- .phead .plogo__text span { font-size: 7px; }
+ .phead .brand-lockup { --brand-lockup-emblem: 32px; --brand-lockup-cn: 13px; --brand-lockup-en: 8px; }
  .phead .brand-mark { width: 20px; height: 20px; }
  .phead .theme-trigger { margin-left: 0; }
 }

@@ -73,19 +73,8 @@
 .portal .phead .plogo { min-width: 0; flex-shrink: 1; }
 .portal .phead .plogo__text { min-width: 0; max-width: min(15em, 34vw); }
 .portal .phead .plogo__text b { overflow: hidden; text-overflow: ellipsis; }
-.portal :is(.phead,.pfoot) .plogo__text b {
-  font-family:'Events Running','STXingkai','KaiTi',cursive;
-  font-size:27px;font-weight:400;line-height:1.15;letter-spacing:.02em;-webkit-text-stroke:.25px currentColor;
-}
-.portal :is(.phead,.pfoot) .plogo__text .brand-wordmark { font-family:Georgia,'Times New Roman',serif;font-size:9px;letter-spacing:0;line-height:1.3; }
 .portal .phead :is(.pnav__link,.phead__auth [data-account]) { font-family:'NJU Heading','Microsoft YaHei',sans-serif; }
 .portal .phead .phead__auth [data-account] { font-weight:700; }
-@media(max-width:1150px) and (min-width:641px) {
-  .portal :is(.phead,.pfoot) .plogo__text b { font-size:24px; }
-}
-@media(max-width:640px) {
-  .portal :is(.phead,.pfoot) .plogo__text b { font-size:19px; }
-}
 .phead[data-stuck="true"] {
   border-bottom-color: var(--border);
   background: var(--surface);
@@ -102,9 +91,7 @@
 }
 .plogo { display: flex; align-items: center; gap: var(--s3); flex: none; }
 /* 英文全称只作为副标，限宽省略，任何视口都不会把页头顶宽。 */
-.plogo__text { display: grid; white-space: nowrap; max-width: min(15em, 34vw); }
-.plogo__text b { font-size: var(--fs-title); font-weight: var(--fw-semibold); letter-spacing: var(--tracking-heading); color: var(--accent); }
-.plogo__text span { font-size: 9px; letter-spacing: 0.1em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
+.plogo__text { max-width: min(18em, 38vw); }
 /* Leave room for navigation and appearance controls at narrow widths and zoom. */
 .portal .phead .plogo { flex:0 1 auto; min-width:0; }
 .portal .phead .plogo__text { min-width:0; max-width:100%; }
@@ -592,9 +579,7 @@
 /* Phone surfaces: stable masthead, comfortable forms, compact footer. */
 @media (max-width: 600px) {
   .plogo { gap: var(--s2); }
-  .plogo__text { gap: 3px; }
-  .plogo__text b { font-size: 15px; line-height: 1.35; }
-  .plogo__text span { font-size: 9px; letter-spacing: .16em; line-height: 1.2; }
+  .plogo__text { max-width: min(16em, 52vw); }
   .phead__inner > .spacer { min-width: 0; }
   .hero h1 { font-size: clamp(32px, 9vw, 40px); line-height: 1.15; }
   .hero__figures { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -629,8 +614,7 @@
   .pfoot__bar > .spacer { display: none; }
 }
 @media (max-width: 360px) {
-  .plogo__text b { font-size: 14px; }
-  .plogo__text span { font-size: 8px; letter-spacing: .12em; }
+  .plogo__text { max-width: min(15em, 56vw); }
   .phead__inner { gap: var(--s1); }
   .hero__cta { flex-direction: column; align-items: stretch; }
 }
@@ -901,7 +885,7 @@
 .workflow-event-detail, .workflow-detail-anchor { scroll-margin-top: 88px; }
 
 /* Keep the complete brand legible alongside touch controls on narrow phones. */
-@media (max-width: 400px) { .portal .phead .plogo__text b { font-size: 13px; } }
+@media (max-width: 400px) { .portal .phead .plogo__text { max-width: min(13em, 58vw); } }
 
 /* Development rollout: a calm branded waiting page, with no endless spinner. */
 .development-gate { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); align-items:center; gap:clamp(28px,5vw,76px); width:min(100%,1440px); margin:auto; padding:clamp(28px,5vw,76px); min-height:calc(100svh - 76px); background:radial-gradient(circle at 8% 10%,#b50b3008,transparent 50%); }

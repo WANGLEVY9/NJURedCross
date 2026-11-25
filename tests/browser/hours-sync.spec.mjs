@@ -65,8 +65,8 @@ for(const kind of ['revision'])test(`super ${kind} review requires a reason and 
 test('selecting a failed posting sends only the checked shift and its explanation', async ({page}) => {
   await page.request.post('/api/auth/login', { data: { username: 'synthetic-super' } });
   await page.goto('/console/overview');
-  await expect(page.locator('.nav__brand-text b')).toHaveText('南大红会管理端');
-  await expect(page.locator('.nav__brand .brand-emblem')).toHaveCSS('clip-path','circle(50%)');
+  await expect(page.locator('.nav__brand-text .brand-lockup__cn')).toHaveText('南京大学红十字会');
+  await expect(page.locator('.nav__brand .brand-lockup__emblem')).toHaveCSS('border-radius','50%');
   await page.evaluate(async () => {
     const { activityFinalHoursWorkspace } = await import('/app/console/pages/activity-final-hours-workspace.js');
     const row = { id: 'synthetic', name: '合成甲', studentId: '000001', department: '合成学院', location: '合成场地', dates: '2030-01-01 上午', work: '合成服务', decision: 'pass', serviceHours: 3, trainingHours: 1, travelHours: 1 };
