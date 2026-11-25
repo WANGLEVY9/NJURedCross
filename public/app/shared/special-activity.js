@@ -9,6 +9,7 @@ export const SPECIAL_ACTIVITY_TYPES=Object.freeze([
  {value:'component-donation',label:'成分献血',mode:'completion'},
 ]);
 export const DUTY_NAME='省红会组宣部值班';
+export const DUTY_CAPACITY=2;
 /** Reserved switch-managed project, never an ordinary manually-created draft. */
 export const isManagedDutyContent=content=>content?.category==='排班专项'&&content?.name?.trim()===DUTY_NAME;
 export const registryOpenStatus=status=>['报名中','进行中'].includes(status);

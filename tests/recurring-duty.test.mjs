@@ -1,22 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createWorkflow,WF,workflowEventApproved} from '../lib/events/workflow.js';
+import {createWorkflow,WF,workflowEventApproved,workflowApprovalHash} from '../lib/events/workflow.js';
 import {ORDINARY_GROUP_TABLE,ordinaryRegistrationOpen} from '../lib/events/ordinary-groups.js';
 import {projectWorkflowEvents} from '../lib/events/public-workflow.js';
 import {activityProjectKey} from '../public/app/shared/activity-projects.js';
 import {createWorkspaceApprovalRouting} from '../lib/events/workspace-approval-routing.js';
+import {createActivityLifecycleStore} from '../lib/events/activity-lifecycle-store.js';
+import {noticeTemplate} from '../public/app/shared/activity-management.js';
 
 function fixture(options={}){
  let seq=0,clock=Date.parse('2030-12-02T10:00:00+08:00');
  const tables=Object.fromEntries([...Object.values(WF),ORDINARY_GROUP_TABLE].map(name=>[name,[]]));
- const base={async listRows(name,_v,_o,_c,start=0,count=500){return structuredClone((tables[name]||[]).slice(start,start+count));},async getMetadata(){return {tables:[]};},async appendRow(name,row){options.beforeAppend?.(name,row);const saved={...row,_id:'duty-'+(++seq)};tables[name].push(saved);return {_id:saved._id};},async updateRow(name,id,patch){Object.assign(tables[name].find(row=>row._id===id),patch);}};
+ const base={async listRows(name,_v,_o,_c,start=0,count=500){options.beforeRead?.(name);return structuredClone((tables[name]||[]).slice(start,start+count));},async getMetadata(){return {tables:[]};},async appendRow(name,row){options.beforeAppend?.(name,row);const saved={...row,_id:'duty-'+(++seq)};tables[name].push(saved);return {_id:saved._id};},async updateRow(name,id,patch){Object.assign(tables[name].find(row=>row._id===id),patch);}};
  const routing=createWorkspaceApprovalRouting({getRoster:async()=>({complete:true,rows:[{accountId:'owner',region:'nanjing',role:'global',active:true,categories:[]}]})});
- return {w:createWorkflow(base,{now:()=>clock,approvalRouting:routing}),tables,time:value=>{clock=Date.parse(value);}};
+ const store=createActivityLifecycleStore();
+ return {w:createWorkflow(base,{now:()=>clock,approvalRouting:routing,activityLifecycleStore:store}),tables,store,time:value=>{clock=Date.parse(value);}};
 }
-test('recurring duty generates one-seat weekday shifts, same weekly board and native approval, and extends indefinitely',async()=>{
+test('recurring duty generates two-seat weekday shifts, same weekly board and native approval, and extends indefinitely',async()=>{
  const {w,tables,time}=fixture();await w.configureRecurringDuty({enabled:true},'owner');
  const events=(await w.read()).events;assert.ok(events.length>=20);assert.ok(events.every(workflowEventApproved));
- assert.ok(events.every(e=>e['组织类别']==='排班专项'&&e['容量']==='1'&&e['服务时长']==='3'&&e['培训时长']==='1'&&e['交通时长']==='1'));
+ assert.ok(events.every(e=>e['组织类别']==='排班专项'&&e['容量']==='2'&&e['服务时长']==='3'&&e['培训时长']==='1'&&e['交通时长']==='1'));
  assert.ok(events.every(e=>![0,6].includes(new Date(e['报名日期']+'T00:00:00Z').getUTCDay())));
  assert.ok(events.every(e=>['09:00-12:00','14:00-17:00'].includes(e['报名时段'])&&!e.relationshipError));
  assert.ok(activityProjectKey(events[0]).startsWith('schedule:PROVINCE-PUBLICITY-DUTY:'));
@@ -26,9 +29,11 @@ test('recurring duty generates one-seat weekday shifts, same weekly board and na
  assert.equal(ordinaryRegistrationOpen(event,Date.parse('2030-12-08T09:00:00+08:00')),false);
  const member={accountId:'synthetic-member',studentId:'999990001',realName:'合成同学',email:'999990001@smail.nju.edu.cn',emailVerified:true};
  const registration=await w.register(event._id,member);await w.confirm(registration._id);
- assert.equal(tables[WF.registrations].length,1);
+ const second=await w.register(event._id,{...member,accountId:'member-two',studentId:'999990002',email:'999990002@smail.nju.edu.cn'});await w.confirm(second._id);
+ await assert.rejects(w.register(event._id,{...member,accountId:'member-three',studentId:'999990003',email:'999990003@smail.nju.edu.cn'}),/名额已满/);
+ assert.equal(tables[WF.registrations].length,2);
  await w.configureRecurringDuty({enabled:false},'owner');assert.equal(ordinaryRegistrationOpen((await w.read()).events.find(e=>e._id===event._id),Date.parse('2030-12-03T00:00:00+08:00')),false);
- await w.runRecurringDuty();assert.equal(tables[WF.events].length,before);assert.equal(tables[WF.registrations].length,1);
+ await w.runRecurringDuty();assert.equal(tables[WF.events].length,before);assert.equal(tables[WF.registrations].length,2);
  await w.configureRecurringDuty({enabled:true},'owner');assert.equal(tables[WF.events].length,before);
  time('2031-01-06T10:00:00+08:00');await w.runRecurringDuty();assert.ok(tables[WF.events].length>before);
  assert.ok(projectWorkflowEvents((await w.read()).events,tables[WF.registrations],Date.parse('2031-01-06T10:00:00+08:00')).some(e=>e.name==='省红会组宣部值班'));
@@ -75,4 +80,68 @@ test('disabled duty creates no activity or placeholder until the administrator e
  await w.runRecurringDuty();assert.equal(tables[WF.events].length,0);assert.equal(tables[ORDINARY_GROUP_TABLE].length,0);
  await w.configureRecurringDuty({enabled:true},'owner');assert.ok(tables[WF.events].length>0);
  assert.ok(tables[WF.events].every(e=>e['状态']==='报名中'));
+});
+
+function legacySeat(row){
+ const c={...JSON.parse(row['报名页配置']),capacity:1,registrationLimit:1};
+ Object.assign(row,{容量:'1',报名页配置:JSON.stringify(c),通知草稿:noticeTemplate(c)});
+ row['批准摘要']=workflowApprovalHash(row);return row;
+}
+
+test('legacy settings and already-booked open shifts gain a second seat in place without changing registrations',async()=>{
+ const {w,tables,store}=fixture();await w.configureRecurringDuty({enabled:true},'owner');
+ const row=legacySeat(tables[WF.events].find(e=>e['报名日期']==='2030-12-09'));
+ const before={...row},member={accountId:'legacy-member',studentId:'999990011',realName:'合成同学',email:'999990011@smail.nju.edu.cn',emailVerified:true};
+ const first=await w.register(row._id,member);await w.confirm(first._id);
+ const registrations=structuredClone(tables[WF.registrations]),count=tables[WF.events].length;
+ const key='recurring:province-publicity-duty';store.setInformation(key,{...store.information(key),capacity:1});
+ assert.equal(w.recurringDutyStatus().capacity,2);
+ await w.runRecurringDuty();
+ assert.equal(row['容量'],'2');assert.equal(JSON.parse(row['报名页配置']).registrationLimit,2);
+ assert.equal(JSON.parse(row['报名页配置']).capacity,2);assert.equal(workflowEventApproved(row),true);
+ assert.match(row['通知草稿'],/【录取名额】：2 人/);
+ for(const field of Object.keys(before).filter(k=>!['容量','报名页配置','批准摘要','通知草稿'].includes(k)))assert.deepEqual(row[field],before[field]);
+ assert.deepEqual(tables[WF.registrations],registrations);assert.equal(tables[WF.events].length,count);
+ const once=structuredClone(row);await w.runRecurringDuty();assert.deepEqual(row,once);
+ const second=await w.register(row._id,{...member,accountId:'legacy-two',studentId:'999990012',email:'999990012@smail.nju.edu.cn'});await w.confirm(second._id);
+ await assert.rejects(w.register(row._id,{...member,accountId:'legacy-three',studentId:'999990013',email:'999990013@smail.nju.edu.cn'}),/名额已满/);
+});
+
+test('capacity upgrade preserves cutoff, archived weeks, hours evidence, custom sizes and invalid approvals',async()=>{
+ const {w,tables,store}=fixture();await w.configureRecurringDuty({enabled:true},'owner');
+ const retained=[];
+ for(const [index,kind] of ['cutoff','archive','checkin','ledger','tampered','custom','unmanaged'].entries()){
+  const date=kind==='cutoff'?'2030-12-03':kind==='archive'?'2030-12-16':'2030-12-09';
+  const row=legacySeat(tables[WF.events].find(e=>e['报名日期']===date&&e['报名时段']===(index%2?'14:00-17:00':'09:00-12:00')&&!retained.some(r=>r.id===e._id))||tables[WF.events].find(e=>e['报名日期']>'2030-12-03'&&e['报名日期']<'2030-12-16'&&!retained.some(r=>r.id===e._id)));
+  if(kind==='archive')store.save('schedule:PROVINCE-PUBLICITY-DUTY:2030-12-16:hours-archive',{archived:true});
+  if(kind==='checkin'||kind==='ledger')tables[kind==='checkin'?WF.checkins:WF.ledger].push({_id:kind,活动ID:row['活动ID']});
+  if(kind==='tampered')row['工作内容']='unapproved change';
+  if(kind==='custom'||kind==='unmanaged'){
+   const c=JSON.parse(row['报名页配置']);if(kind==='custom'){row['容量']='3';c.capacity=3;c.registrationLimit=3;}else c.recurringDuty=false;
+   row['报名页配置']=JSON.stringify(c);row['批准摘要']=workflowApprovalHash(row);
+  }
+  retained.push({id:row._id,row:structuredClone(row),kind});
+ }
+ await w.runRecurringDuty();
+ for(const {id,row,kind} of retained)assert.deepEqual(tables[WF.events].find(e=>e._id===id),row,kind);
+});
+
+test('disabled legacy duty stays paused until enabled and preserves a custom notice during upgrade',async()=>{
+ const {w,tables}=fixture();await w.configureRecurringDuty({enabled:true},'owner');
+ const row=legacySeat(tables[WF.events].find(e=>e['报名日期']==='2030-12-09'));
+ row['通知草稿']='自定义通知保持不变';row['批准摘要']=workflowApprovalHash(row);
+ await w.configureRecurringDuty({enabled:false},'owner');await w.runRecurringDuty();assert.equal(row['容量'],'1');
+ await w.configureRecurringDuty({enabled:true},'owner');assert.equal(row['容量'],'2');assert.equal(row['通知草稿'],'自定义通知保持不变');
+ assert.equal(workflowEventApproved(row),true);
+});
+
+
+test('legacy migration fails closed when historical evidence cannot be read',async()=>{
+ let readFailure=false;
+ const {w,tables}=fixture({beforeRead:name=>{if(readFailure&&name===WF.ledger)throw Object.assign(Error('synthetic evidence timeout'),{code:'request_timeout'});}});
+ await w.configureRecurringDuty({enabled:true},'owner');
+ const row=legacySeat(tables[WF.events].find(e=>e['报名日期']==='2030-12-09')),before=structuredClone(row);
+ readFailure=true;await assert.rejects(w.runRecurringDuty(),{statusCode:503,code:'paged_read_unavailable'});
+ assert.deepEqual(row,before);
+ readFailure=false;await w.runRecurringDuty();assert.equal(row['容量'],'2');
 });

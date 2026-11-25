@@ -66,7 +66,7 @@ test('component donation has proof upload and recurring duty is controlled in th
  await page.locator('.admin-card--special').screenshot({path:test.info().outputPath('special-tools.png')});
  await page.getByRole('button',{name:'省红会组宣部值班',exact:true}).click();
  await expect(page.getByRole('button',{name:'暂停新报名',exact:true})).toBeVisible();
- await expect(page.getByText('周一至周五，09:00–12:00、14:00–17:00',{exact:false})).toBeVisible();
+ await expect(page.getByText('周一至周五，09:00–12:00、14:00–17:00，每班2人。',{exact:false})).toBeVisible();
  await page.screenshot({path:test.info().outputPath('recurring-duty.png'),fullPage:true});
  await page.getByRole('button',{name:'暂停新报名',exact:true}).click();
  await page.goto('/console/admin');
@@ -74,7 +74,7 @@ test('component donation has proof upload and recurring duty is controlled in th
  await expect(page.getByRole('button',{name:'启用常态排班',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'启用常态排班',exact:true}).click();
  const catalog=await (await page.request.get('/api/volunteer/workflow/catalog')).json();
- const duty=catalog.events.find(e=>e['活动名称']==='省红会组宣部值班');expect(duty).toBeTruthy();
+ const duty=catalog.events.find(e=>e['活动名称']==='省红会组宣部值班');expect(duty).toBeTruthy();expect(duty['容量']).toBe('2');
  await page.goto('/console/events?event='+duty._id+'&rosterView=board');
  await expect(page.locator('.special-schedule-grid')).toBeVisible();
  await expect(page.locator('.special-schedule-grid')).toContainText('组宣部');
