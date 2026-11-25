@@ -549,6 +549,8 @@ export const console_ = {
     // 意见 Word：走 requestBlob 以自动注入会话 CSRF（不可用裸 fetch 读 meta[name="csrf-token"]
     // ——该标签从未被注入，token 会是空串，导致 403 csrf_failed）。
     opinion: (contentId, body) => requestBlob(`/api/outreach/reviews/${encodeURIComponent(contentId)}/opinion`, { method: 'POST', body }),
+    // 重发同一轮退回意见（不新增退回次数）：投稿人没收到邮件时的补救入口。
+    resendOpinion: (contentId, body) => request(`/api/outreach/reviews/${encodeURIComponent(contentId)}/opinion/resend`, { method: 'POST', body }),
   },
 
   community: {
