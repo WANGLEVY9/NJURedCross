@@ -476,14 +476,22 @@ body.is-resizing-activity-directory {
 .activity-v2 .activity-draft-workspace__fields {
   width: 100%;
   min-width: 0;
+  min-inline-size: 0;
+  max-width: 100%;
   margin-inline: 0;
   padding: 0;
   border: 0;
 }
 
+.activity-v2 .activity-draft-workspace__form>.activity-draft-workspace__fields>div {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .activity-v2 .activity-draft-workspace__form>.panel,
-.activity-v2 .activity-draft-workspace__fields>.panel,
-.activity-v2 .activity-draft-workspace__form>div>.panel {
+.activity-v2 .activity-draft-workspace__form .activity-draft-workspace__fields>.panel,
+.activity-v2 .activity-draft-workspace__form .panel {
   width: 100%;
   max-width: none;
   margin-inline: 0;
@@ -771,12 +779,11 @@ body.is-resizing-activity-directory {
 
 /* Desktop workspace uses a stable reading width for forms. */
 @media (min-width: 1201px) {
-  .activity-v2 .activity-draft-workspace__form>.panel,
-  .activity-v2 .activity-draft-workspace__fields>.panel,
-  .activity-v2 .activity-draft-workspace__form>div>.panel {
-    max-width: 1240px;
+  .activity-v2 .activity-draft-workspace__form .panel {
+    max-width: none;
     width: 100%;
-    margin-inline: auto;
+    min-width: 0;
+    margin-inline: 0;
   }
 
   .activity-v2 .activity-draft-grid {
