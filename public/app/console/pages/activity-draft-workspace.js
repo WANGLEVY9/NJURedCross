@@ -79,8 +79,9 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   });
   function positionTable(){
     const tbody=h('tbody');
+    const headings=['岗位与人数','日期与时间','地点与工作','时长（小时）','操作'];
     for(const [index,p] of content.positions.entries()){
-      const row=h('tr'),cells=[h('td'),h('td'),h('td'),h('td'),h('td')];row.append(...cells);
+      const row=h('tr'),cells=headings.map(label=>h('td',{data:{label}}));row.append(...cells);
       tbody.append(h('tr',{class:'activity-position-heading'},h('th',{colspan:5},h('strong',{class:'activity-position-label',text:positionLabel(index+1)}))));
       for(const [key,label,type]of [['name','岗位名称','text'],['date','日期','date'],['start','开始时间','time'],['end','结束时间','time'],['location','地点','text'],['capacity','人数','number'],['serviceHours','服务时长','number'],['trainingHours','培训时长','number'],['travelHours','交通时长','number'],['work','工作内容','text']]){
         const f=field({label,value:p[key],type,required:false,step:type==='time'?60:'any',onInput:()=>{p[key]=f.control.value;update();}});cells[['name','capacity'].includes(key)?0:['date','start','end'].includes(key)?1:['location','work'].includes(key)?2:3].append(f);
@@ -88,7 +89,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
       const flexible=field({label:'弹性名额',name:'flexibleCapacity',value:p.flexibleCapacity||'0',...flexibleInput,onInput:()=>{p.flexibleCapacity=flexible.control.value;update();}});cells[0].append(flexible);
       cells[4].append(button({label:'复制',size:'sm',onClick:()=>{content.positions.push({...p,id:crypto.randomUUID()});renderDetails();update();}}),button({label:'删除',variant:'ghost',size:'sm',onClick:()=>{content.positions=content.positions.filter(x=>x.id!==p.id);renderDetails();update();}}));tbody.append(row);
     }
-    return h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...['岗位与人数','日期与时间','地点与工作','时长（小时）','操作'].map(text=>h('th',{text})))),tbody));
+    return h('div',{class:'activity-draft-table'},h('table',{},h('thead',{},h('tr',{},...headings.map(text=>h('th',{text})))),tbody));
   }
   function renderDetails(){
     const special=content.special&&scheduleType(content.special.type);
@@ -130,7 +131,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   }
   const viewButton=button({label:'活动信息查看',onClick:()=>run(()=>showPreview(false),{readOnly:true})});
   const editButton=button({label:'活动信息修改',disabled:!editable,onClick:()=>{if(editable&&!busy&&!uncertain)controls.get('name')?.focus();}});
-  const previewButton=button({label:'预览并提交',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
+  const previewButton=button({label:'预览并提交',variant:'primary',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
   root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),form);
   renderDetails();for(const b of [saveButton,previewButton])b.disabled=!editable;
   if(projectPeople)void projectPeople.refresh();else void refreshResponsible();

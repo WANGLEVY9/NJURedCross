@@ -1,16 +1,20 @@
 # 文档导航
 
+本目录保存持续有效的产品、架构、接口、运维与开发指南。新增文档使用 kebab-case，规则见 [文件与命名约定](NAMING.md)。日期性的审计、评审和验证记录放 `reports/`，不要混放在这里。同一条规则只在一处完整表述，其他文档用相对链接指向它。
+
 ## 持续维护的指南
 
 **运行与架构**
 
 - [运行与复现](GETTING_STARTED.md)：离线测试、界面预览、完整业务环境。
 - [代码架构](ARCHITECTURE.md)：模块、依赖、数据与权限边界。
+- [安全巡检](SECURITY_INSPECTION.md)：危险代码门禁、依赖公告与人工审查边界。
 - [正式数据连接](PRODUCTION_DATA.md)：活动、献血车与独立存储表的现行说明。
 - [页面与 API](API.md)：主要接口与会话/权限边界。
 - [前端设计系统](FRONTEND_DESIGN.md)：组件、动效和数据图表约定。
 - [活动报名设计](ACTIVITY_BOOKING_DESIGN.md)：报名与周历的场景规范。
 - [首页主视觉](HOME_SHOWCASE.md)：五专题轮播与品牌光场。
+- [页面截图](SCREENSHOTS.md)：线上实况视图与本地合成截图的来源、边界和复现方法。
 - [首页 P01 / P02](HOME_EDITORIAL_P01_P02.md)：分层纸艺主视觉、服务栏目与参与说明。
 - [活动目录 P03](DISCOVERY_LAYOUT_P03.md)：稀疏数据布局、页脚空白根因与验收测量。
 - [页面艺术 P00](PAGE_ART_DIRECTION_P00.md)：分栏页面艺术系统的设计比较与后续轮次。
@@ -25,6 +29,7 @@
 - [部署与回滚](OPERATIONS.md)：发布流程、CI/CD、验证与故障处理。
 - [main 十分钟同步](MAIN_SYNC_AUTOMATION.md)：Quality gate 后的服务器兜底部署。
 - [线上部署现状](PRODUCTION_BASELINE.md)：运行拓扑、核对方式与数据边界。
+- [NJUTable 空表清理与日志保留](NJUTABLE_HYGIENE.md)：60 天 TTL、默认预览、显式确认与 systemd timer。
 - [发布准备](RELEASE_READINESS.md)：开源分发与发布前自查表。
 
 **业务模块**
@@ -34,6 +39,9 @@
 - [早安晚安](MORNING.md)：同行名片、审核、留言、举报与生产配置。
 - [页面加载与数据刷新](PAGE_LOADING_PERFORMANCE.md)：缓存范围与刷新时效。
 - [读缓存与后台队列](CACHE_AND_QUEUE.md)：按表失效、持久化任务队列与未采用的方案。
+- [工程性能审查](../reports/ENGINEERING_PERFORMANCE_AUDIT_2026-11-22.md)：2026-11-22 的开发完整性、写队列、分页读取与优化顺序。
+- [大型公开服务平台综合评审](../reports/PUBLIC_SERVICE_PLATFORM_REVIEW_2026-11-22.md)：前后端、安全、性能、可用性与运维的专家评估及改造路线。
+- [读写一致性专项巡检](../reports/CONSISTENCY_READ_WRITE_AUDIT_2026-11-23.md)：2026-11-23 的补录、审批、派生文件与缓存读写边界审查。
 - [二级报销审核](REIMBURSEMENT_WORKFLOW_API.md)：本地两级审核、权限、退回和用户端对接约定。
 
 **管理端与设计**

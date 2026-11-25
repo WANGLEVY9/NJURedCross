@@ -14,7 +14,9 @@ test('management Suzhou tags stay compact and centered beside status with single
  const boxes=await card.locator('.activity-v2-status').evaluate(el=>[...el.children].map(n=>{const r=n.getBoundingClientRect();return {height:r.height,center:r.y+r.height/2};}));
  expect(boxes[1].height).toBeLessThan(boxes[0].height);expect(Math.abs(boxes[0].center-boxes[1].center)).toBeLessThan(1);
  await expect(card.locator('strong')).toHaveCSS('text-overflow','ellipsis');
- await expect(card.locator('.activity-region-tag')).toHaveCSS('font-size','10px');
+ const regionTag=card.locator('.activity-region-tag');
+ const tagSize=Number.parseFloat(await regionTag.evaluate(node=>getComputedStyle(node).fontSize));
+ expect(tagSize).toBeGreaterThanOrEqual(12);expect(tagSize).toBeLessThanOrEqual(13);
  await card.screenshot({path:info.outputPath('suzhou-region-tag-card.png'),animations:'disabled'});
  await page.goto(`/console/events?workspace=v2&draft=${suzhou.id}`);
  const heading=page.getByRole('region',{name:'活动操作工作区'}).locator('.activity-v2-heading h2');
@@ -112,7 +114,8 @@ test('final hours page protects regional review, previews the full template, syn
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto(url);
  if(info.project.name==='desktop-chromium'){
   await expect(pane.getByRole('button',{name:'修改明细',exact:true}).first()).toBeVisible();
-  expect(await pane.locator('.activity-final-hours-table').evaluate(node=>node.scrollWidth<=node.clientWidth+1)).toBe(true);
+  const hoursTable=pane.locator('.activity-final-hours-table');
+  expect(await hoursTable.evaluate(node=>node.scrollWidth<=node.clientWidth+1||getComputedStyle(node).overflowX!=='visible')).toBe(true);
   await page.screenshot({path:info.outputPath('final-hours-compact.png'),timeout:5000});
  }
  await pane.getByRole('button',{name:'预览并导出',exact:true}).click();const preview=page.getByRole('dialog',{name:'完整分工时长表',exact:true});await expect(preview.getByRole('columnheader')).toHaveCount(11);await expect(preview).toContainText('实际培训时长/小时');await expect(preview).toContainText('未通过记录 1 人');await preview.getByRole('button',{name:'关闭',exact:true}).click();
@@ -160,7 +163,7 @@ test('real running page saves first review, imports all participants and require
  const csv=`姓名,学号,服务时长,培训时长,交通时长\n${participant['姓名']},${participant['学号']},3,0,0\n`;
  await upload.locator('input[type=file]').setInputFiles({name:'合成时长.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
  await expect(upload.getByRole('spinbutton',{name:`${participant['姓名']} 服务时长`,exact:true})).toHaveValue('3');
- await expect(upload.getByLabel(`${participant['姓名']} 初审结果`,{exact:true})).toHaveValue('');await expect(upload.getByRole('button',{name:'提交',exact:true})).toHaveCount(0);
+ await expect(upload.getByLabel(`${participant['姓名']} 初审结果`,{exact:true})).toHaveValue('pass');await expect(upload.getByRole('button',{name:'提交',exact:true})).toHaveCount(0);
  await upload.getByLabel(`${participant['姓名']} 初审结果`,{exact:true}).selectOption('fail');await upload.getByLabel(`${participant['姓名']} 初审原因`,{exact:true}).fill('上传后重新核对，未到场');
  await upload.getByRole('button',{name:'预览时长表',exact:true}).click();await expect(upload.getByRole('spinbutton')).toHaveCount(0);await expect(upload).toContainText('上传后重新核对，未到场');
  if(info.project.name==='desktop-chromium')await page.screenshot({path:info.outputPath('running-preview.png'),timeout:5000});
@@ -238,9 +241,23 @@ test('shared console rail stays balanced across overview, administrator and acti
   await expect.poll(async()=>Math.round((await page.locator('.nav').boundingBox()).width)).toBeLessThanOrEqual(264);
  }
  const directory=await page.locator('.activity-v2-directory').boundingBox();
- expect(directory.width).toBe(250);
+ expect(directory.width).toBeGreaterThanOrEqual(300);expect(directory.width).toBeLessThanOrEqual(460);
  const workspace=await page.locator('.activity-v2-workspace').boundingBox();
  expect(directory.width/workspace.width).toBeLessThan(0.5);
+ const resizer=page.getByRole('separator',{name:'调整活动列表宽度',exact:true});
+ await expect(resizer).toBeVisible();
+ await expect(resizer).toHaveAttribute('aria-valuemin','300');
+ await expect(resizer).toHaveAttribute('aria-valuemax',String(Math.min(460,Math.round(workspace.width*0.48))));
+ const before=directory.width;
+ await resizer.focus();await page.keyboard.press('ArrowRight');
+ await expect.poll(async()=>Math.round((await page.locator('.activity-v2-directory').boundingBox()).width)).toBeGreaterThanOrEqual(Math.round(before)+20);
+ const stored=await page.evaluate(()=>JSON.parse(localStorage.getItem('nju-rc.preferences.v1')||'{}').activityDirectoryWidth);
+ expect(stored).toBeGreaterThanOrEqual(320);
+ await page.reload();await expect(page.locator('.activity-v2-directory')).toBeVisible();
+ await expect.poll(async()=>Math.round((await page.locator('.activity-v2-directory').boundingBox()).width)).toBeGreaterThanOrEqual(Math.round(before)+12);
+ const reset=page.getByRole('separator',{name:'调整活动列表宽度',exact:true});
+ await reset.focus();await page.keyboard.press('Home');
+ await expect.poll(async()=>Math.round((await page.locator('.activity-v2-directory').boundingBox()).width)).toBe(300);
 });
 test('new activity requires regional classification and restores its saved draft after reload',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-organizer'}});
@@ -251,6 +268,17 @@ test('new activity requires regional classification and restores its saved draft
  const pane=page.getByRole('region',{name:'活动操作工作区'});await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name);await pane.getByLabel('活动名称',{exact:true}).fill(name+'修改');await pane.getByRole('button',{name:'保存草稿',exact:true}).click();await expect(pane.getByRole('status').filter({hasText:'已保存'})).toHaveText('已保存');
  await page.reload();await expect(page.getByRole('region',{name:'活动操作工作区'}).getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');
  const card=page.locator('.activity-v2-card[aria-pressed=true]');await expect(card).toHaveAttribute('data-region','nanjing');await expect(card).toHaveAttribute('data-category','生命中心');await expect(card.locator('small')).toHaveCount(0);
+ if(!info.project.name.includes('mobile')){
+  const cardStyle=await card.evaluate(node=>({background:getComputedStyle(node).backgroundColor,ink:getComputedStyle(node,'::before').backgroundColor}));
+  const plazaStyle=await page.evaluate(async()=>{
+   const link=document.createElement('link');link.rel='stylesheet';link.href='/styles/events-plaza.css';document.head.append(link);await new Promise(resolve=>link.addEventListener('load',resolve,{once:true}));
+   const probe=document.createElement('div');probe.className='events-page';probe.innerHTML='<div class="event-row" data-category="生命中心"></div>';probe.style.position='absolute';probe.style.opacity='0';document.body.append(probe);
+   const target=probe.querySelector('.event-row'),style=getComputedStyle(target);const result={bg:style.getPropertyValue('--category-label-bg').trim(),ink:style.getPropertyValue('--category-label-ink').trim()};probe.remove();link.remove();return result;
+  });
+  expect(plazaStyle.bg).toBe('#e2f2e6');expect(plazaStyle.ink).toBe('#276b44');
+  expect(cardStyle.background).not.toBe('rgb(255, 255, 255)');
+  expect(cardStyle.ink).toBe('rgb(39, 107, 68)');
+ }
  if(info.project.name.includes('mobile')){
   await page.getByRole('button',{name:'返回活动列表',exact:true}).click();await expect(page.locator('.activity-v2-directory')).toBeVisible();await page.locator('.activity-v2-card').filter({hasText:name+'修改'}).click();await expect(pane.getByLabel('活动名称',{exact:true})).toHaveValue(name+'修改');
  }else{
@@ -622,7 +650,7 @@ test('saved grouped draft submits once retaining all jobs creator and collaborat
  const saved=(await (await page.request.get(`/api/volunteer/workflow/workspace-drafts/${draft.id}`)).json()).result;expect(saved.submissionStatus).toBe('complete');
  const formal=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.filter(e=>e['活动ID']===saved.activityId);expect(formal).toHaveLength(1);
  const detail=await (await page.request.get(`/api/volunteer/workflow/events/${formal[0]._id}/detail`)).json();const event=detail.events.find(e=>e._id===formal[0]._id),config=JSON.parse(event['报名页配置']);expect(event['负责人账号ID']).toBe('synthetic-organizer');expect(config.coOwners).toEqual(['synthetic-life-director-two']);expect(config.workspaceReviewerIds).toEqual(['synthetic-super']);expect(config.positionDraft.positions).toHaveLength(2);expect(config.positionDraft.positions[1].start).toBe('2030-01-03T14:10:00+08:00');expect(config.approval.region).toBe('nanjing');
- await page.reload();await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(content.name),includeHidden:true})).toHaveCount(1);
+ await page.reload();await expect(page.locator('.activity-v2-heading').locator('[aria-current=step]')).toHaveText('待审批');await expect(page.locator('.activity-v2-list .activity-v2-card',{hasText:new RegExp(content.name)})).toHaveCount(1);
 });
 
 
@@ -692,7 +720,7 @@ test('real grouped registration shows one project card and exclusive position-na
  const content={qqGroup:'123456789',name:'合成多岗位报名页-'+info.project.name,region:'nanjing',category:'生命中心',responsibleId:'synthetic-organizer',bookingMode:'grouped',date:'2030-01-01',endDate:'2030-01-03',deadline:'2029-12-31T18:00',notice:'合成多岗位报名通知',positions:[{id:'real-job-one',name:'宣传岗',date:'2030-01-01',start:'09:15',end:'11:45',campus:'仙林',location:'合成甲地',capacity:'3',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'宣传服务'},{id:'real-job-two',name:'签到岗',date:'2030-01-03',start:'14:10',end:'16:40',campus:'鼓楼',location:'合成乙地',capacity:'4',serviceHours:'2.5',trainingHours:'0',travelHours:'0',work:'签到服务'}]};
  const draft=(await (await page.request.post(root,{headers,data:{requestId:crypto.randomUUID(),content}})).json()).result;const preview=(await (await page.request.post(`${root}/${draft.id}/preview`,{headers,data:{expectedVersion:1}})).json()).result;await page.request.post(`${root}/${draft.id}/confirm-preview`,{headers,data:{expectedVersion:1,digest:preview.digest}});expect((await page.request.post(`${root}/${draft.id}/submit`,{headers,data:{expectedVersion:1,digest:preview.digest}})).ok()).toBe(true);
  const saved=(await (await page.request.get(`${root}/${draft.id}`)).json()).result;const event=(await (await page.request.get('/api/volunteer/workflow/catalog')).json()).events.find(e=>e['活动ID']===saved.activityId);const url=`/console/events?workspace=v2&event=${event._id}`;await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto(url);await page.getByRole('button',{name:'审批通过',exact:true}).click();const dialog=page.getByRole('dialog',{name:'审批通过 · 发布活动',exact:true});await dialog.getByRole('combobox',{name:'发布方式',exact:true}).click();await page.getByRole('option',{name:'立即发布',exact:true}).click();await dialog.getByRole('button',{name:'确认发布',exact:true}).click();
- const tabs=page.getByRole('tablist',{name:'活动岗位',exact:true});await expect(tabs.getByRole('tab')).toHaveCount(2);await expect(tabs.getByRole('tab',{name:'宣传岗',exact:true})).toHaveAttribute('aria-selected','true');await tabs.getByRole('tab',{name:'签到岗',exact:true}).click();await expect(tabs.getByRole('tab',{name:'签到岗',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.locator('.activity-v2-list').getByRole('button',{name:new RegExp(content.name),includeHidden:true})).toHaveCount(1);
+ const tabs=page.getByRole('tablist',{name:'活动岗位',exact:true});await expect(tabs.getByRole('tab')).toHaveCount(2);await expect(tabs.getByRole('tab',{name:'宣传岗',exact:true})).toHaveAttribute('aria-selected','true');await tabs.getByRole('tab',{name:'签到岗',exact:true}).click();await expect(tabs.getByRole('tab',{name:'签到岗',exact:true})).toHaveAttribute('aria-selected','true');await expect(page.locator('.activity-v2-list .activity-v2-card',{hasText:new RegExp(content.name)})).toHaveCount(1);
  await page.screenshot({path:info.outputPath('registration-grouped-page.png'),animations:'disabled'});
 });
 

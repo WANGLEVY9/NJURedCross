@@ -47,7 +47,6 @@ import { morningRevisionRoutes } from './lib/morning/revisions.js';
 import { morningTagRoutes } from './lib/morning/tags.js';
 import { MORNING_PROTECTED_TABLES } from './lib/morning/shared.js';
 import { createWarmthCapabilities } from './lib/community/capabilities.js';
-import { inspectMorningSchema } from './lib/morning/rollout.js';
 import { readPagedRows } from './lib/http/paged-rows.js';
 import { updateRows, deleteRows } from './lib/http/batch-write.js';
 import { validateAttendancePhoto } from './lib/events/photo-validation.js';
@@ -70,7 +69,7 @@ import { Base } from 'seatable-api';
 import { json, securityHeaders } from './lib/http/response.js';
 import { withDisplayReads, withRequestReads, withoutReadContext, isDisplayRead, isDisplayRequest, invalidateDisplayReads, displayRead, displayReadCacheStats } from './lib/http/display-reads.js';
 import { createReadCache } from './lib/http/read-cache.js';
-import { createWriteJournal, withWriteJournal, writtenTables, trackClient } from './lib/cache/write-tracker.js';
+import { createWriteJournal, withWriteJournal, trackClient } from './lib/cache/write-tracker.js';
 import { createIdleGate } from './lib/background/idle-gate.js';
 import { createJobQueue } from './lib/queue/index.js';
 import { createPdfAssets } from './lib/http/pdf-assets.js';
@@ -124,6 +123,8 @@ import * as reviewFlow from './lib/attachment/review.js';
 import * as digestFlow from './lib/attachment/digest.js';
 import {liaisonMailRecipients} from './lib/attachment/liaison-mail-recipients.js';
 import { applyReviewStep, authorizeOpinionExport } from './lib/attachment/review-policy.js';
+import { findDirectoryMembers, normalizeMemberQuery } from './lib/attachment/members.js';
+import { syncTemplateRow, isWrittenArticleSubmission } from './lib/attachment/template-sync.js';
 import * as taskApi from './lib/attachment/tasks.js';
 import { searchBusinessRecords } from './lib/console-search.js';
 import { agentRoutes } from './lib/agent/api.js';
@@ -144,7 +145,7 @@ import {
   readAgentBusinessContext,
 } from './lib/agent/business-context.js';
 import { createFileAgentTaskStore } from './lib/agent/task-store.js';
-import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, REVIEW_STATUS, reviewChainFor, reviewProgressFor, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor, attachmentFromRow, ATTACHMENT_STATUS, ATTACHMENT_PROVIDER_NJUBOX } from './lib/attachment/store.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor, attachmentFromRow, ATTACHMENT_STATUS, ATTACHMENT_PROVIDER_NJUBOX } from './lib/attachment/store.js';
 import { downloadBuffer as downloadBoxBuffer } from './lib/attachment/box.js';
 import { createSessionRevocations } from './lib/identity/session-revocations.js';
 import {
@@ -157,6 +158,8 @@ import {
 import { uploadSeaTableImageRequest } from './lib/http/seatable-image.js';
 import { collectRequestBody } from './lib/http/request-body.js';
 import { readJsonObject } from './lib/http/json-body.js';
+import { createRequestConcurrencyGate, DEFAULT_JSON_BODY_LIMIT_BYTES, DEFAULT_UPLOAD_BODY_LIMIT_BYTES } from './lib/http/request-limits.js';
+import { createRequestMiddleware } from './lib/http/request-middleware.js';
 import { openMaterialReceiptStore } from './lib/materials/receipt-store.js';
 import { openPublicMaterialRequestStore } from './lib/materials/public-request-store.js';
 import { createPublicMaterialsPortal, assertMaterialRequestAsset, materialLinkedIds } from './lib/materials/public-portal.js';
@@ -181,7 +184,6 @@ import { materialApplicationPlan } from './lib/materials/application-plan.js';
 import { openMailDeliveryStore } from './lib/mail/delivery-store.js';
 import { openMailRetryStore } from './lib/mail/retry-store.js';
 import {
-  hashPasswordAsync as hashPassword,
   verifyPasswordAsync as verifyPassword,
 } from './lib/identity/password-async.js';
 import { createAuditWriteHealth } from './lib/audit/write-health.js';
@@ -1000,7 +1002,7 @@ async function getWorkspaceSubmissions(session,authority){
   const actor=businessAccountRef(session),drafts=await getWorkspaceDrafts(session,authority),bridge=await getWorkspaceBridge();
   return createWorkspaceSubmissions({...getWorkspaceDraftStore(),queue:workspaceDraftQueue,drafts,authorize:workspaceDraftAuthorize(actor,authority),...bridge});
 }
-async function getWorkspaceProfileData(accountId,session,authority){
+async function getWorkspaceProfileData(accountId){
   return readWorkspaceProfileData({
     identityBase:await getIdentityBase(),
     volunteerBase:await getVolunteerBase(),
@@ -2104,9 +2106,14 @@ function reviewShapeOf(source) {
     reviewTrail: String(source['审核轨迹'] ?? source.reviewTrail ?? ''),
     status: String(source['审核状态'] || source.status || submissionStatusPending),
     editor: String(source['美编人'] || source.editor || ''),
+    // 2026-11-24：初审登记的美编学号（「宣传投稿表」新增列）。终审写「新媒体审核表」要用。
+    editorStudentId: String(source['美编学号'] || source.editorStudentId || ''),
     articleCategory: String(source['推文类别'] || source.articleCategory || ''),
     // 2026-11-11：退回意见要直投投稿人，联系邮箱随形状一起带出，不再只留在表里。
     submitterEmail: String(source['联系邮箱'] || source.contactEmail || ''),
+    // 2026-11-24：终审要把「文编姓名/学号」写进「新媒体审核表」，投稿人信息随形状带出。
+    contactName: String(source['联系人'] || source.contactName || ''),
+    studentId: String(source['学号'] || source.studentId || ''),
   };
 }
 
@@ -2121,6 +2128,11 @@ function reviewChainView(source, assignees = []) {
   const picked = reviewFlow.assigneesForCategory(assignees, category);
   const trail = parseReviewTrail(shape.reviewTrail);
   const currentLevel = state.current?.level || state.total;
+  // 初审登记的美编（2026-11-24）：优先取轨迹快照（含院系/邮箱），
+  // 老数据没有快照时回落到投稿表的两列原文，让审核抽屉能回显已有值。
+  const initialApproval = trail.find((entry) => Number(entry?.level) === 1 && entry?.decision === 'approve');
+  const manualEditor = initialApproval?.manualEditor
+    || (shape.editor ? { name: shape.editor, studentId: shape.editorStudentId } : null);
   return {
     kind,
     kindLabel: REVIEW_KIND_LABELS[kind] || '审核链',
@@ -2134,6 +2146,7 @@ function reviewChainView(source, assignees = []) {
     passed: state.passed,
     total: state.total,
     done: state.done,
+    manualEditor: manualEditor || null,
     schedulable: canSchedule({ kind, reviewLevel: shape.reviewLevel, reviewTrail: shape.reviewTrail, status: shape.status }),
     // 同一层级最多退回一次（制度 §4.1）。已完成则无需退回。
     canReturn: !state.done && canReturnAtLevel(shape.reviewTrail, currentLevel).allowed,
@@ -2686,7 +2699,7 @@ function assertPublicEmail(email) {
   return email;
 }
 
-async function readJson(req, maxBytes) {
+async function readJson(req, maxBytes = DEFAULT_JSON_BODY_LIMIT_BYTES) {
   return readJsonObject(req, maxBytes);
 }
 
@@ -3035,12 +3048,6 @@ async function volunteerRows(client, tableName) {
     () => loadAllRows(client, tableName, { pageSize: 1000, maxRows: 100_000 }),
     30_000, [tableName]);
 }
-function volunteerStatus(value) {
-  const text = String(value || '').trim();
-  if (/通过|成功|已完成|已核对|已解决/.test(text)) return 'success';
-  if (/拒绝|失败|未通过|问题/.test(text)) return 'danger';
-  return 'warning';
-}
 async function getVolunteerOverview(client, { notificationsOnly = false } = {}) {
   const [registrations, checkins, approvals, profiles, hours] = await Promise.all([
     volunteerRows(client, '活动报名总表'),
@@ -3299,16 +3306,22 @@ async function getNotificationsOverview(client, permissionValue = CONSOLE_PERMIS
    ]);
 
   // Failed sources must not be presented as an empty notification queue.
-  for (const result of [
-    materialsResult,
-    eventsResult,
-    outreachResult,
-    volunteerResult,
-    communityResult,
-    publicSubmissionResult,
-    warmthResult,
-  ]) {
-    if (result.status === 'rejected') throw result.reason;
+  // Aggregate a sanitized failure instead of forwarding upstream error text,
+  // which can contain table names, request payloads or SDK response bodies.
+  const failedSources = [
+    ['materials', materialsResult],
+    ['events', eventsResult],
+    ['outreach', outreachResult],
+    ['volunteer', volunteerResult],
+    ['community', communityResult],
+    ['publicSubmissions', publicSubmissionResult],
+    ['warmth', warmthResult],
+  ].filter(([, result]) => result.status === 'rejected').map(([name]) => name);
+  if (failedSources.length) {
+    throw Object.assign(new Error('部分待办来源暂时无法读取，请稍后刷新。'), {
+      statusCode: 503,
+      code: 'notification_sources_unavailable',
+    });
   }
 
   const items = [];
@@ -3896,7 +3909,10 @@ async function getMaterialsOverview(client, { notificationsOnly = false } = {}) 
 }
 
 function today() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()); }
-const withEventMutation = createMutationQueue();
+/** Partition independent activity writes; ambiguous or multi-activity operations keep the global barrier. */
+const withEventMutation = createMutationQueue({
+  keyOf: scope => scope?.eventKey ?? '*',
+});
 const withOutreachReview = createMutationQueue();
 const materialLocks = new Map();
 async function withMaterialLock(assetCode, task) {
@@ -5144,7 +5160,7 @@ async function portalRoutes(req, res, url) {
       return json(res, 200, { ok: true, penName: current || null, bound: Boolean(current) });
     }
 
-    requireCsrf(req, session);
+    if (!requireCsrf(req, res, session)) return;
     // 已绑定：一律拒绝（无改名审核流，D1）
     if (current) {
       return json(res, 409, { ok: false, code: 'pen_name_locked', penName: current, message: `笔名已绑定为「${current}」，绑定后不可更改。` });
@@ -5305,6 +5321,7 @@ const identityCtx = {
     sessionTtlSeconds,
     // Strong binding: student self-registration only accepts campus mail.
     smailDomains: ['smail.nju.edu.cn', 'nju.edu.cn'],
+    staffEmailDomains:(process.env.REGISTRATION_STAFF_EMAIL_DOMAINS||'').split(',').map(value=>value.trim()).filter(Boolean),
     publicEmailDomains,
     publicWriteLimit,
     root,
@@ -5550,9 +5567,14 @@ async function api(req, res, url) {
     /^\/api\/events(?:\/|$)/.test(url.pathname)
     || /^\/api\/public\/events\/[^/]+\/registrations$/.test(url.pathname)
   );
+  const eventMatch = url.pathname.match(/^\/api\/events\/([^/]+)(?:\/|$)/)
+    || url.pathname.match(/^\/api\/public\/events\/([^/]+)\/registrations$/);
+  const eventKey = eventMatch
+    ? (() => { try { return decodeURIComponent(eventMatch[1]); } catch { return null; } })()
+    : null;
 
   const dispatch = () => eventWrite
-    ? withEventMutation(() => dispatchApi(req, res, url))
+    ? withEventMutation(() => dispatchApi(req, res, url), { eventKey })
     : dispatchApi(req, res, url);
 
   // Identity owns per-mailbox/per-student mutation locks. Never wait behind
@@ -5979,7 +6001,7 @@ if (url.pathname.startsWith('/api/public/')) {
 
     const qrMatch = url.pathname.match(/^\/api\/materials\/inventory\/([^/]+)\/qr$/);
     if (qrMatch && req.method === 'GET') {
-      const [inventory, configs] = await Promise.all([listAllRows(client, inventoryTable), listAllRows(client, '物资配置表')]);
+      const inventory = await listAllRows(client, inventoryTable);
       const row = inventory.find((item) => item._id === decodeURIComponent(qrMatch[1]));
       if (!row) return json(res, 404, { ok: false, message: 'Inventory item not found' });
       const svg = await QRCode.toString(materialCode(row), { type: 'svg', errorCorrectionLevel: 'M', margin: 1, color: { dark: '#520d2e', light: '#fffdfb' } });
@@ -6167,6 +6189,17 @@ if (url.pathname.startsWith('/api/public/')) {
     if (req.method === 'GET' && url.pathname === '/api/outreach/checklist') {
       return json(res, 200, { ok: true, checklist: await readChecklist(client) });
     }
+    // GET /api/outreach/members?q= —— 按姓名或学号**精确**检索名册（初审「含美编招募」用）
+    // 2026-11-24：只返回值域内的 姓名/学号/院系/邮箱，绝不返回身份证号、银行卡号等列；
+    // 精确等值匹配，避免任何持 outreach 权限的账号拿它枚举全会在册成员。
+    if (req.method === 'GET' && url.pathname === '/api/outreach/members') {
+      const query = String(url.searchParams.get('q') || '').trim();
+      if (!normalizeMemberQuery(query)) {
+        return json(res, 400, { ok: false, message: '请填写要检索的姓名或学号（不支持引号等特殊字符，最长 32 字）。' });
+      }
+      const found = await findDirectoryMembers(client, query);
+      return json(res, 200, { ok: true, ...found });
+    }
     // GET /api/outreach/reviews/:contentId/chain —— 审核链定义 + 当前进度
     const reviewChainMatch = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)\/chain$/);
     if (reviewChainMatch && req.method === 'GET') {
@@ -6208,11 +6241,14 @@ if (url.pathname.startsWith('/api/public/')) {
       const decision = String(body.decision || '').trim();
       if (!['approve', 'return'].includes(decision)) return json(res, 400, { ok: false, message: '审核结果必须是 approve 或 return' });
       return await withOutreachReview(async () => {
-        const { existing, shape, assignees, advance } = await applyReviewStep({
+        const reviewAccount = accountsByUsername.get(session.username);
+        const { existing, shape, assignees, advance, publishDate } = await applyReviewStep({
           client, table: outreachSubmissionTable, contentId, body: { ...body, decision },
-          account: accountsByUsername.get(session.username), reviewer: session.username,
+          account: reviewAccount, reviewer: session.username,
           readRows: readOutreachSubmissionRows, readAssignees: readOutreachAssignees,
           readChecklist, shapeOf: reviewShapeOf,
+          // 初审「含美编招募」：按姓名或学号精确命中名册唯一一人，服务端只认名册不认手填。
+          readMember: query => findDirectoryMembers(client, query),
         });
         const opinions = Array.isArray(body.opinions) ? body.opinions : [];
         // 2026-11-11：作用域只认「推文类别」（文创设计退化为内容类型）；缺失即空串，
@@ -6252,14 +6288,34 @@ if (url.pathname.startsWith('/api/public/')) {
         } else {
           deliveryStatus = 'digest';
         }
+        // 2026-11-24：文字稿件终审通过 → 自动在「新媒体审核表」建一行（免人工二次抄写）。
+        // 台账写入失败不回滚审核结果（用户已点通过），但必须把原因带回前端并留审计。
+        let templateSync = null;
+        if (decision === 'approve' && advance.done && isWrittenArticleSubmission(shape)) {
+          templateSync = await syncTemplateRow({
+            client,
+            trail: advance.patch.审核轨迹,
+            submission: shape,
+            publishDate,
+            finalReviewer: String(reviewAccount?.realName || '').trim(),
+          });
+          if (!templateSync.ok) {
+            console.warn(`[outreach] 新媒体审核表未写入 ${contentId}: ${templateSync.reason} ${templateSync.message || ''}`);
+          }
+        }
         await recordAudit(req, session, `outreach.review.step.${decision}`, contentId, 'success', {
           level: advance.entry.level,
           done: advance.done,
           delivered: deliver.filter((item) => item.ok).length,
           deliveryStatus,
           category: reviewCategory,
+          templateSync: templateSync ? { ok: templateSync.ok, skipped: templateSync.skipped, reason: templateSync.reason } : null,
         });
         const returnSuffix = reviewFlow.deliverySummary(deliveryStatus);
+        const templateSuffix = !templateSync ? ''
+          : templateSync.ok
+            ? (templateSync.skipped ? '；新媒体审核表已有同一行，未重复写入' : '；已写入新媒体审核表')
+            : `；但新媒体审核表未写入（${templateSync.message || '原因未知'}）`;
         return json(res, 200, {
           ok: true,
           step: advance.entry,
@@ -6268,9 +6324,10 @@ if (url.pathname.startsWith('/api/public/')) {
           chain: reviewChainView({ ...existing, 审核状态: advance.status, 审核层级: advance.patch.审核层级, 审核轨迹: advance.patch.审核轨迹 }, assignees),
           delivered: deliver,
           deliveryStatus,
+          templateSync,
           message: decision === 'approve'
             ? (advance.done
-              ? '终审通过，内容可排期发布（对接人将在 08:00 / 20:00 汇总中收到排期提醒）'
+              ? `终审通过，内容可排期发布（对接人将在 08:00 / 20:00 汇总中收到排期提醒）${templateSuffix}`
               : `第 ${advance.entry.level} 级通过，进入「${advance.next?.name || '下一级'}」（汇总提醒 08:00 / 20:00）`)
             : `第 ${advance.entry.level} 级已退回修改（${returnSuffix}）`,
         });
@@ -6466,9 +6523,8 @@ if (url.pathname.startsWith('/api/public/')) {
       // 「刷新待办」显式带 ?fresh=1 时仍然直读权威源。
       const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username));
       const load = () => getNotificationsOverview(client, permissions, session);
-      if (url.searchParams.has('fresh')) return json(res, 200, await load());
       const cacheKey = `notifications:${session.username}:${permissions.join(',')}`;
-      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, []));
+      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, [], { refresh: url.searchParams.has('fresh') }));
     }
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
       const consents = await readCommunityConsents(client);
@@ -6876,9 +6932,8 @@ if (url.pathname.startsWith('/api/public/')) {
       // 「刷新待办」显式带 ?fresh=1 时仍然直读权威源。
       const permissions = normalizePermissions(accountsByUsername.get(session.username)?.permissions, session.role, accountsByUsername.get(session.username));
       const load = () => getNotificationsOverview(client, permissions, session);
-      if (url.searchParams.has('fresh')) return json(res, 200, await load());
       const cacheKey = `notifications:${session.username}:${permissions.join(',')}`;
-      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, []));
+      return json(res, 200, await displayRead(client, cacheKey, load, 15_000, [], { refresh: url.searchParams.has('fresh') }));
     }
     // 「我的参与」：与公众端同一套登记模型（温暖连接参加表），不再读旧 consent 结构
     if (req.method === 'GET' && url.pathname === '/api/community/overview') {
@@ -7116,77 +7171,55 @@ const staticFile = createStaticHandler(publicDir);
 const pdfAssets = createPdfAssets();
 // 后台定时任务与页面请求争用同一个上游；有人操作时后台任务主动让路。
 const backgroundGate = createIdleGate();
-const server = http.createServer((req, res) => observer.http(req,res,async () => {
-  // 时延记账独立于 telemetry：关掉日志也要能验收「≤1 秒」。
-  latencyLedger.start(req, res);
-  // 桌游房间使用独立的内存状态，不占 SeaTable 请求预算。
-  if (String(req.url || '').startsWith('/api/games/uno/')) {
-    if (req.method === 'POST') {
-      let trusted = false;
-      try { const origin = new URL(req.headers.origin); trusted = origin.host === req.headers.host && ['https:', 'http:'].includes(origin.protocol); } catch {}
-      if (!trusted || !/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) {
-        return json(res, 403, { ok: false, message: '请求来源不受信任。' });
-      }
-      try { enforcePublicLimit(req, 'uno-write', 2000); }
-      catch (error) { return json(res, 429, { ok: false, message: error.message, retryAfterSeconds: error.retryAfterSeconds }); }
-    }
-    const gameUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    // 已登录则把平台账号身份带给房间（昵称取自账号）；未登录仍可匿名游玩。
-    const unoSession = getSession(req);
-    const unoUser = unoSession
-      ? { username: unoSession.username, name: accountsByUsername.get(unoSession.username)?.displayName || unoSession.username }
-      : null;
-    void handleUnoRequest(req, res, gameUrl, unoUser).then((handled) => {
-      // 未匹配的路径必须显式 404，否则响应永远不发、连接被占住。
-      if (!handled && !res.writableEnded && !res.destroyed) {
-        json(res, 404, { ok: false, code: 'route_not_found', message: '接口不存在或请求方法不受支持。' });
-      }
-    }).catch(() => { if (!res.writableEnded) res.destroy(); });
-    return;
-  }
-  const requestHandled = (async () => {
-  backgroundGate.mark();
-  try {
-    const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (url.pathname.startsWith('/api/')) {
-      assertApiRequestPath(url.pathname);
-      if(url.pathname==='/api/telemetry/client'){
-        return await clientTelemetry(req,res,{json,limit:r=>enforcePublicLimit(r,'telemetry',12000)});
-      }
-      const display = isDisplayRequest(req.method, url.pathname);
+const concurrencyLimit = Number.parseInt(process.env.PLATFORM_HTTP_CONCURRENCY || '32', 10);
+const queueLimit = Number.parseInt(process.env.PLATFORM_HTTP_QUEUE_LIMIT || '64', 10);
+const requestGate = createRequestConcurrencyGate({
+  limit: concurrencyLimit >= 1 && concurrencyLimit <= 1024 ? concurrencyLimit : 32,
+  queueLimit: queueLimit >= 0 && queueLimit <= 4096 ? queueLimit : 64,
+});
 
-      // 写表记账：请求内记录被写入的表，结束后只失效依赖这些表的投影。
-      const journal = createWriteJournal();
-      try {
-        return await withWriteJournal(journal, () => withHttpRequestBudget(req, res, () =>
-          display
-            ? withDisplayReads(() => api(req, res, url))
-            : api(req, res, url),
-        // 上传类接口单独放宽：字节要过本机中转，30 秒会在「写表」那一步把请求掐掉。
-        { timeoutMs: requestBudgetMsFor(req.method, url.pathname) }));
-      } finally {
-        if (journal.size) for (const table of journal) invalidateWrittenSnapshots(table);
-      }
+async function handleUno(req, res, url) {
+  if (req.method === 'POST') {
+    let trusted = false;
+    try { const origin = new URL(req.headers.origin); trusted = origin.host === req.headers.host && ['https:', 'http:'].includes(origin.protocol); } catch {}
+    if (!trusted || !/^application\/json(?:\s*;|$)/i.test(req.headers['content-type'] || '')) {
+      return json(res, 403, { ok: false, message: '请求来源不受信任。' });
     }
-    if (await pdfAssets(req, res, url)) return;
-    return await staticFile(req, res, url);
-  } catch (error) {
-    if(res.destroyed||res.writableEnded)return;
-    if (!res.headersSent && !res.destroyed) { const failure = apiFailure(error, { method: req.method }); json(res, failure.status, failure.payload); }
-    else res.destroy();
+    try { enforcePublicLimit(req, 'uno-write', 2000); }
+    catch (error) { return json(res, 429, { ok: false, message: error.message, retryAfterSeconds: error.retryAfterSeconds }); }
   }
-  })();
-  // 子路由用 `false` 表示「这个前缀下没有匹配的处理」。
-  // 直接把它 return 出去，响应就永远不会发出：客户端一直等到自己超时，连接被占住。
-  // 这类请求正确的语义是 404（路径或方法不存在），不是挂起。
-  return requestHandled.then((result) => {
-    if (result === false && !res.writableEnded && !res.destroyed) {
-      json(res, 404, { ok: false, code: 'route_not_found', message: '接口不存在或请求方法不受支持。' });
-    }
-  }).catch(() => {
-    if (!res.writableEnded && !res.destroyed) res.destroy();
-  });
-}));
+  const unoSession = getSession(req);
+  const unoUser = unoSession
+    ? { username: unoSession.username, name: accountsByUsername.get(unoSession.username)?.displayName || unoSession.username }
+    : null;
+  const handled = await handleUnoRequest(req, res, url, unoUser);
+  if (!handled && !res.writableEnded && !res.destroyed) return false;
+  return undefined;
+}
+
+const loopbackAddresses = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const metricsAccess = req => {
+  if (!loopbackAddresses.has(req.socket?.remoteAddress)) return false;
+  const forwarded = String(req.headers['x-real-ip'] || '').trim();
+  return forwarded ? loopbackAddresses.has(forwarded) : true;
+};
+
+const requestMiddleware = createRequestMiddleware({
+  api, staticFile, pdfAssets, backgroundGate, requestGate,
+  createWriteJournal, withWriteJournal, withHttpRequestBudget, withDisplayReads,
+  isDisplayRequest, invalidateWrittenSnapshots, requestBudgetMsFor,
+  assertApiRequestPath, clientTelemetry, enforcePublicLimit, handleGame: handleUno,
+  latency: latencyLedger, cacheStats: displayReadCacheStats, queueStats: () => jobQueue.stats(),
+  runtimeStats: () => observer.runtime(), telemetryStats: () => observer.runtime(),
+  readinessChecks: { sessionSecret: () => Boolean(sessionSecret),
+    writeState: () => Boolean(writeStateDir), jobQueue: () => Boolean(jobQueue),
+    server: () => server.listening },
+  metricsAccess,
+  bodyLimitFor: (req, url) => requestBudgetMsFor(req.method, url.pathname) > 30_000
+    ? { uploadMaxBytes: DEFAULT_UPLOAD_BODY_LIMIT_BYTES, allowNonMultipartUpload: true }
+    : undefined,
+});
+const server = http.createServer((req, res) => observer.http(req, res, () => requestMiddleware(req, res)));
 server.on('error', (error) => {
   if (error.code === 'EADDRINUSE') console.error(`Port ${port} is already in use. Open http://localhost:${port} or set another PORT in .env.`);
   else console.error('HTTP server failed; check service configuration and runtime status.');

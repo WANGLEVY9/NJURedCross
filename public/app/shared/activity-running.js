@@ -4,6 +4,27 @@ const config=event=>{try{return JSON.parse(event['报名页配置']||'{}');}catc
 export function runningPositions(data){
  return data.events.filter(event=>config(event).bookingMode!=='grouped');
 }
+/**
+ * 岗位选项文案：岗位名在前，日期时段与地点只作补充。
+ *
+ * 分岗位活动的各岗位行往往共用同一个「地点」（同一校区），以地点打头会让多个选项
+ * 文字完全一致——操作人分不出差别，只能接受下拉默认值，补录就全部落在第一岗位。
+ * 服务端 `lib/events/position-label.js` 用同一规则生成终审页的岗位列表。
+ */
+export function positionOptionLabel(event){
+ const row=event||{},name=String(row['岗位']||row['活动名称']||'').trim();
+ const slot=[row['报名日期'],row['报名时段']].map(value=>String(value??'').trim()).filter(Boolean).join(' ');
+ const place=String(row['地点']||'').trim(),extra=[slot,place&&!slot.includes(place)?place:''].filter(Boolean).join(' · ');
+ return [name,extra].filter(Boolean).join(' · ')||'未命名岗位';
+}
+/**
+ * 时段规范化：`14:00:00-16:00:00`（岗位行配置）与 `14:00—16:00`（报名页）指向同一场，
+ * 但字符串不同。补录直接用岗位行时段写入台账，合并时按字符串去重就失效，
+ * 「正式工作日期」会把同一场列出两遍。统一成报名页的写法后再比较与展示。
+ */
+export function normalizeTimeRange(text){
+ return String(text??'').replace(/(\d{1,2}:\d{2}):\d{2}\s*[-–—~至]\s*(\d{1,2}:\d{2}):\d{2}/g,'$1—$2');
+}
 export function runningParticipants(data,positionId,entries=[]){
  const jobs=runningPositions(data);
  return data.registrations.filter(row=>['已确认','已签到'].includes(row['报名状态'])&&row['请假状态']!=='已批准').flatMap(row=>{

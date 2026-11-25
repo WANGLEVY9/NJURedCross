@@ -28,6 +28,8 @@ const BROAD = [
   /^public\/styles\//,
   /^tests\/helpers\//,
   /^playwright\.config/,
+  /^\.github\/workflows\/ci\.yml$/,
+  /^scripts\/(?:run-browser-shard|ci-quality-report|check-browser-contracts)\.mjs$/,
 ];
 
 const MAP = [

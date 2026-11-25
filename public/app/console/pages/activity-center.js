@@ -1,4 +1,5 @@
 import {setFormControlsLocked} from '../../ui/form-lock.js';
+import {REGISTRATION_ENTRY_FLAGS} from '../../shared/registration-capabilities.js';
 import { openActivityChangeDrawer, activityChangePanel, isActivityChangeSupported } from './activity-change-editor.js';
 import { activityHeaderActions } from './activity-header-actions.js';
 import {ACTIVITY_CENTERS,HALF_HOURS,serviceDuration} from '../../shared/activity-management.js';
@@ -11,7 +12,6 @@ import {searchField} from '../../ui/search-field.js';
 import {peoplePicker} from '../../ui/people-picker.js';
 import {enhanceDateTimeField} from '../../ui/date-time-picker.js';
 import {activityWindow} from '../../shared/activity-window.js';
-import {activityPublicationChoice} from './activity-publication-choice.js';
 import {configureProjectPositions} from './activity-positions.js';
 import {activityCreateSteps} from './activity-create-steps.js';
 import {continueActivityCreation} from './activity-create-wizard.js';
@@ -38,6 +38,11 @@ import {buildPositionMap,labelPosition} from '../../shared/position-labels.js';
 const config=e=>{try{return JSON.parse(e['报名页配置']||'{}');}catch{return {};}};
 const result=r=>r['报名状态']==='待筛选'?'待确认':r['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(r['报名状态'])?'报名成功':r['报名状态'];
 export default async function activityCenter(context,shell){
+ // 统一工作区是默认入口，但 `?legacy=1` 必须还能显式打开历史页面：
+ // 历史活动的能力尚未全部并入工作区，且 tests/browser/legacy-activity-fixture.mjs
+ // 一整族用例靠这条入口回归老版报名表、审批与通知面板。
+ const legacyEntry=typeof location!=='undefined'&&new URLSearchParams(location.search).get('legacy')==='1';
+ if(REGISTRATION_ENTRY_FLAGS.unifiedWorkspace&&!legacyEntry)return (await import('./activity-workspace-page.js')).default(context,shell);
  let publicationEditor=null,publicationIdentity=null,leaving=false,serviceIdentity=null;
  const serviceEditor=()=>document.querySelector('.field-edit-dialog')||document.querySelector('.service-workspace');
  const hasUnsaved=()=>serviceEditor()?.hasUnsaved?.()||publicationEditor?.hasUnsaved()||document.querySelector('.notification-email')?.hasUnsaved();
@@ -585,7 +590,7 @@ export default async function activityCenter(context,shell){
  async function batchLeave(e,approved){
   const state=legacyRosterState(e),rows=scopedRows(data.registrations,e).filter(row=>state.selected.has(row._id)&&matchesLegacyRoster(row,state)&&row['请假状态']==='待审批'&&['待筛选','已确认'].includes(row['报名状态']));
   if(!rows.length||rows.length>100){notify.warning('请选择1～100条当前筛选内待审批的请假');return;}
-  const reason=field({label:'处理说明',required:true,multiline:true,maxlength:500});let busy=false,drawer,guard;
+  const reason=field({label:'处理说明（选填）',multiline:true,maxlength:500});let busy=false,drawer,guard;
   const save=button({label:'确认处理',variant:'primary',onClick:async()=>{
    if(busy||!reason.control.reportValidity())return;
    busy=true;setFormControlsLocked(drawer.body,true);

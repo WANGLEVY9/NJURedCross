@@ -101,6 +101,11 @@ class ReleaseTests(unittest.TestCase):
         (self.root / 'public/a.css').write_bytes(b'changed')
         receipt = receipt_of(lambda: receiver.deploy(io.BytesIO(b'NJRC-MANIFEST-V1\n')))
         self.assertEqual(receipt['files']['public/a.css'], hashlib.sha256(b'changed').hexdigest())
+        self.assertEqual(receipt['commit'], 'a' * 40)
+
+    def test_baseline_without_release_state_has_an_empty_commit(self):
+        receipt = receipt_of(lambda: receiver.deploy(io.BytesIO(b'NJRC-MANIFEST-V1\n')))
+        self.assertEqual(receipt, {'commit': '', 'files': {}})
 
     def test_failed_health_restores_previous_files_and_state(self):
         receiver.deploy(archive({'public/sample.css': b'first'}))

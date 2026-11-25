@@ -10,7 +10,7 @@
 // Usage: node scripts/import-plaza-photos.mjs [sourceDir] [--alt=alt.json]
 import sharp from 'sharp';
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
-import { resolve, extname } from 'node:path';
+import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const HOME = process.env.HOME || '/tmp';

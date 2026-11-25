@@ -21,6 +21,12 @@ test('leave intent survives restart, waits for commit and sends approved cancell
  assert.equal(f.sent.length,1);assert.match(f.sent[0].text,/已批准/);assert.equal(f.tasks[1].状态,'已发送');
  assert.equal(f.row.报名状态,'已请假');
 });
+test('empty optional leave explanation queues and sends after the decision commits',async()=>{
+ const f=fixture(),w=f.worker();
+ await w.prepareLeaveDecision(f.event,f.row,{approved:true,reason:''});
+ f.commit(true,'');await w.reconcile(f.data);
+ assert.equal(f.sent.length,1);assert.equal(f.tasks[1].状态,'已发送');
+});
 
 test('rejected leave retries only known failures with stable key and a bounded budget',async()=>{
  const f=fixture(async()=>({ok:false,retryable:true})),w=f.worker();

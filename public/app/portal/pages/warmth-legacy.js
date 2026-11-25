@@ -176,7 +176,7 @@ export default async function warmthPage() {
         h(
           'div',
           { class: 'program__body' },
-          h('div', { class: 'row-3 row-wrap' }, h('h3', { class: 't-h3', text: program.name }), badge('自愿加入', { tone: 'success', iconName: 'check' })),
+          h('div', { class: 'row-3 row-wrap' }, h('h2', { class: 't-h3', text: program.name }), badge('自愿加入', { tone: 'success', iconName: 'check' })),
           h('p', { class: 't-secondary', text: program.summary }),
           h(
             'details',

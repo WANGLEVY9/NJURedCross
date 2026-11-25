@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PDFDocument } from 'pdf-lib';
+import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { reimbursementTableServer } from './helpers/reimbursements-table-server.js';
 import { renderTestSummary } from './helpers/reimbursement-summary-renderer.js';
 import { wordFixture, pictureFixture } from './helpers/reimbursement-materials.js';
@@ -66,6 +67,66 @@ test('a super-administrator completes initial review, activity final review, fun
   assert.equal(exported.status, 200); assert.equal(exported.bytes.subarray(0, 2).toString(), 'PK');
 });
 
+test('opening and downloading a stored initial-review PDF use the new page order without modifying archived records', async t => {
+  const f = await reimbursementTableServer(); t.after(() => f.close());
+  const call = api(f);
+  await f.fixture.makeService({ workflowVersion: 3 }).summaries.saveActivity(final, { id: 'synthetic-event', name: '合成活动', campus: '苏州',
+    date: '2026-10-20', location: '合成地点', participantCount: 1, description: '历史合并件回归' });
+  const archivedBytes = await PDFDocument.create();
+  for (const label of ['INVOICE', 'PAYMENT', 'ORDER', 'OTHER']) {
+    archivedBytes.addPage([500, 400]).drawText(label, { x: 30, y: 120 });
+  }
+  const oldMerged = Buffer.from(await archivedBytes.save());
+  const files = [];
+  for (const [label, materialType] of [['INVOICE', ''], ['PAYMENT', '付款截图'], ['ORDER', '订单截图'], ['OTHER', '领取单']]) {
+    const pdf = await PDFDocument.create();
+    pdf.addPage([500, 400]).drawText(label, { x: 30, y: 120 });
+    files.push({ name: `${label}.pdf`, kind: materialType ? 'supporting' : 'invoice', materialType,
+      expenseItemId: label === 'PAYMENT' ? '' : 'item', bytes: Buffer.from(await pdf.save()) });
+  }
+  const { request } = await submit(call, files, '合成物资', '7.20');
+  const store = f.fixture.makeStore(), previous = await store.prepareWrite();
+  const legacy = structuredClone(previous.document);
+  const stored = legacy.maps.bundles.find(([id]) => id === request.bundle.id)[1];
+  const archiveRef = await f.fixture.files.put({ sha256: checksum(oldMerged), bytes: oldMerged });
+  legacy.storedBytes += archiveRef.size - stored.merged.$material.size;
+  delete stored.mergedLayoutVersion;
+  stored.merged = { $material: archiveRef };
+  stored.pageCount = 4;
+  stored.sources.forEach((source, index) => { source.startPage = index + 1; source.endPage = index + 1; });
+  await store.commit(legacy, previous);
+  f.reopen();
+  const journal = f.fixture.rows.get(f.fixture.tables.journal).length, objects = f.fixture.objects.size;
+  const getList = () => call('', { user: 'initial-suzhou' });
+  const shown = (await getList()).data.requests.find(item => item.id === request.id);
+  assert.equal(shown.bundle.refreshMergedLayout, true);
+  const path = shown.bundle.mergedUrl.replace(/^\/api\/reimbursements/, '');
+  assert.equal((await call(path, { user: 'initial-other' })).status, 404);
+  const first = await call(path, { user: 'initial-suzhou' });
+  const second = await call(path, { user: 'initial-suzhou' });
+  assert.equal(first.status, 200);
+  assert.equal(first.headers.get('cache-control'), 'no-store');
+  assert.match(decodeURIComponent(first.headers.get('content-disposition')), /合成申请人-合成物资-7\.20-合并版\.pdf/);
+  assert.deepEqual(second.bytes, first.bytes);
+  const rendered = getDocument({ data: new Uint8Array(first.bytes), verbosity: 0 });
+  try {
+    const pdf = await rendered.promise;
+    assert.equal(pdf.numPages, 3);
+    for (const [index, labels, size] of [[1, ['INVOICE'], [842, 595]], [2, ['ORDER', 'PAYMENT'], [595, 842]], [3, ['OTHER'], [595, 842]]]) {
+      const page = await pdf.getPage(index);
+      assert.deepEqual(page.view.slice(2), size);
+      const items = (await page.getTextContent()).items.filter(item => item.str.trim());
+      assert.deepEqual(items.map(item => item.str), labels);
+      if (index === 2) assert.ok(items[0].transform[4] < 297 && items[1].transform[4] > 297);
+    }
+  } finally { await rendered.destroy(); }
+  assert.deepEqual((await call(path.replace('/merged', '/original/1'))).bytes, files[1].bytes);
+  assert.equal(f.fixture.rows.get(f.fixture.tables.journal).length, journal);
+  assert.equal(f.fixture.objects.size, objects);
+  assert.equal((await getList()).data.requests.find(item => item.id === request.id).revision, request.revision);
+  assert.equal((await store.load()).document.maps.bundles.find(([id]) => id === request.bundle.id)[1].merged.$material.sha256, checksum(oldMerged));
+});
+
 test('formal HTTP workflow persists all material kinds through the real Box adapter, sends stored PDFs, and restores activity review and payments', async t => {
   const f = await reimbursementTableServer(); t.after(() => f.close()); const call = api(f);
   const service = () => f.fixture.makeService({ workflowVersion: 3, generateSummary: renderTestSummary });
@@ -98,7 +159,8 @@ test('formal HTTP workflow persists all material kinds through the real Box adap
   assert.ok([403, 404].includes((await call(`/bundles/${a.bundle.id}/merged`, { user: 'material-admin' })).status));
   assert.equal((await call('', { user: 'initial-other' })).data.requests.length, 0);
   const merged = await call(`/bundles/${a.bundle.id}/merged`);
-  assert.equal((await PDFDocument.load(merged.bytes)).getPageCount(), 3);
+  // Invoice on page 1, order and payment screenshots sharing page 2.
+  assert.equal((await PDFDocument.load(merged.bytes)).getPageCount(), 2);
   const sent = [];
   const notifier = () => createReimbursementNotifier({ service: service(), enabled: () => true, origin: f.origin,
     getReviewer: async key => ({ id: `synthetic-contact-${key}`, email: `${key}@example.invalid`, emailVerified: true }),
@@ -125,8 +187,8 @@ test('formal HTTP workflow persists all material kinds through the real Box adap
   assert.deepEqual(summary.rows.map(row => row.label), ['第二项', '第一项']); assert.equal(summary.unmergedAttachments.length, 1);
   f.reopen();
   const packet = await call(`/summaries/${summary.id}/packet`, { user: 'final' }); assert.equal(packet.status, 200);
-  const pdf = await PDFDocument.load(packet.bytes); assert.equal(pdf.getPageCount(), summary.formPages + 4);
-  assert.equal(pdf.getPage(summary.formPages).getWidth(), 350);
+  const pdf = await PDFDocument.load(packet.bytes); assert.equal(pdf.getPageCount(), summary.formPages + 3);
+  assert.equal(pdf.getPage(summary.formPages).getWidth(), 842);
   const form = await call(`/summaries/${summary.id}/form`, { user: 'final' }); assert.equal(form.status, 200);
   assert.equal(f.fixture.objects.has(checksum(packet.bytes)), true); assert.equal(f.fixture.objects.has(checksum(form.bytes)), true);
   const storedSummary = f.fixture.rows.get(f.fixture.tables.summaries).find(row => row['平台汇总ID'] === summary.id);

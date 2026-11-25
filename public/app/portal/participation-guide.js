@@ -1,6 +1,5 @@
 import {h} from '../core/dom.js';
 import {request} from '../core/api.js';
-import {button} from '../ui/primitives.js';
 import {openDrawer} from '../ui/overlay.js';
 import {reportError} from '../core/toast.js';
 const titles={training:'前期培训',location:'服务点位',hours:'时长查询',checkin:'签到示例'};

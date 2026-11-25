@@ -1,9 +1,9 @@
-const paymentTypes = ['订单截图', '订单和付款截图', '付款截图'];
+const paymentTypes = ['订单截图', '物流截图', '订单和付款截图', '付款截图', '共用付款账单'];
 export const isOrderPayment = file => file.kind === 'supporting' && paymentTypes.includes(file.materialType);
 function priority(file) {
   if (file.kind === 'invoice') return 0;
   const index = paymentTypes.indexOf(file.materialType);
-  return file.kind === 'supporting' && index >= 0 ? index + 1 : 4;
+  return file.kind === 'supporting' && index >= 0 ? index + 1 : paymentTypes.length + 1;
 }
 
 /** Stable expense IDs only; common attachments are never copied into every expense. */

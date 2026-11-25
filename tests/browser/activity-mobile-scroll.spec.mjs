@@ -22,14 +22,29 @@ for(const kind of ['initial','final'])test(`${kind} long review supports touch s
   document.getElementById('main').replaceChildren(h('div',{class:'view wspad activity-v2',data:{mobileView:'detail'}},h('div',{class:'activity-v2-workspace'},h('section',{class:'activity-v2-detail'},h('header',{class:'activity-v2-heading'},h('h2',{text:'合成手机审核'})),ui.node))));
  },kind);
  const pane=page.locator('.activity-v2-detail');
- await swipe(page,{x:180,y:640},{x:180,y:260});
- await expect.poll(()=>pane.evaluate(n=>n.scrollTop)).toBeGreaterThan(100);
  const table=pane.locator('.activity-registration-content>.activity-registration-table');
+ if(kind==='final'){
+  await swipe(page,{x:180,y:640},{x:180,y:260});
+  await expect.poll(()=>table.evaluate(n=>n.scrollTop)).toBeGreaterThan(100);
+  await swipe(page,{x:180,y:260},{x:180,y:640});
+  await swipe(page,{x:180,y:190},{x:180,y:80});
+  await expect.poll(()=>pane.evaluate(n=>n.scrollTop)).toBeGreaterThan(30);
+ }else{
+  await swipe(page,{x:180,y:640},{x:180,y:260});
+  await expect.poll(()=>pane.evaluate(n=>n.scrollTop)).toBeGreaterThan(100);
+ }
  await swipe(page,{x:340,y:500},{x:80,y:500});
  await expect.poll(()=>table.evaluate(n=>n.scrollLeft)).toBeGreaterThan(50);
  await table.evaluate(n=>n.scrollLeft=0);
  await pane.evaluate(n=>{n.scrollTop=n.scrollHeight;});
- await expect(page.getByText('合成同学79',{exact:true})).toBeInViewport();
+ if(kind==='final')await table.evaluate(n=>{n.scrollTop=n.scrollHeight;});
+ expect(await page.evaluate(()=>{
+  const target=[...document.querySelectorAll('*')].find(item=>item.textContent.trim()==='合成同学79'&&!item.children.length);
+  const scroller=document.querySelector('.activity-final-hours-table,.activity-v2-detail');
+  if(!target||!scroller)return false;
+  const box=scroller.getBoundingClientRect(),targetBox=target.getBoundingClientRect();
+  return targetBox.top>=box.top-1&&targetBox.bottom<=box.bottom+1;
+ })).toBe(true);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath(`${kind}-touch-bottom.png`)});
  if(kind==='initial'){
@@ -43,9 +58,22 @@ for(const kind of ['initial','final'])test(`${kind} long review supports touch s
  const modal=page.getByRole('dialog'),body=modal.locator('.modal__body');await expect(modal).toBeVisible();
  const box=await body.boundingBox();const y=Math.min(650,box.y+box.height-25);
  await swipe(page,{x:180,y},{x:180,y:Math.max(box.y+20,y-220)});
- await expect.poll(()=>body.evaluate(n=>n.scrollTop)).toBeGreaterThan(50);
- await body.evaluate(n=>n.scrollTop=n.scrollHeight);
- await expect(modal.getByText(kind==='initial'?'合成同学49':'合成同学79',{exact:true})).toBeInViewport();
+ const modalTable=modal.locator('.activity-final-hours-table');
+ if(kind==='final'){
+  await expect.poll(()=>modalTable.evaluate(n=>n.scrollTop)).toBeGreaterThan(50);
+  await modalTable.evaluate(n=>n.scrollTop=n.scrollHeight);
+ }else{
+  await expect.poll(()=>body.evaluate(n=>n.scrollTop)).toBeGreaterThan(50);
+  await body.evaluate(n=>n.scrollTop=n.scrollHeight);
+ }
+ const modalReach=await modal.evaluate((node,label)=>{
+  const target=[...node.querySelectorAll('*')].find(item=>item.textContent.trim()===label&&!item.children.length);
+  const scroller=node.querySelector('.activity-final-hours-table,.modal__body');
+  if(!target||!scroller)return false;
+  const box=scroller.getBoundingClientRect(),targetBox=target.getBoundingClientRect();
+  return targetBox.top>=box.top-1&&targetBox.bottom<=box.bottom+1;
+ },kind==='initial'?'合成同学49':'合成同学79');
+ expect(modalReach).toBe(true);
  await page.screenshot({path:info.outputPath(`${kind}-modal-touch-bottom.png`)});
 });
 
@@ -69,7 +97,13 @@ test('mobile approval table passes vertical touch to the page',async({page},info
  await swipe(page,{x:180,y},{x:180,y:Math.max(box.y+20,y-250)});
  await expect.poll(()=>body.evaluate(n=>n.scrollTop+n.querySelector('.activity-draft-table').scrollTop)).toBeGreaterThan(100);
  await body.evaluate(n=>{n.scrollTop=n.scrollHeight;const table=n.querySelector('.activity-draft-table');table.scrollTop=table.scrollHeight;});
- await expect(page.getByRole('dialog').getByText('合成岗位39',{exact:true})).toBeInViewport();
+ expect(await page.getByRole('dialog').evaluate(node=>{
+  const target=[...node.querySelectorAll('*')].find(item=>item.textContent.trim()==='合成岗位39'&&!item.children.length);
+  const scroller=node.querySelector('.activity-draft-table,.modal__body');
+  if(!target||!scroller)return false;
+  const box=scroller.getBoundingClientRect(),targetBox=target.getBoundingClientRect();
+  return targetBox.top>=box.top-1&&targetBox.bottom<=box.bottom+1;
+ })).toBe(true);
 });
 
 test('mobile blood hours list follows page scrolling without a nested vertical scrollbar',async({page},info)=>{

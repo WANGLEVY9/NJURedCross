@@ -82,6 +82,8 @@ export default async function reimbursementsPage() {
   voucherNote.classList.add('material-special-note');
   const meeting = field({ label: '是否参加会议', name: 'reimbursementMeeting', value: 'no', options: [{ value: 'no', label: '否' }, { value: 'yes', label: '是，需附会议邀请函' }] });
   const singleOrder = checkbox({ name: 'reimbursementSingleOrder', label: '本申请只对应一笔订单（可包含多项物品）；多笔订单将分次提交' });
+  const sharedPay = field({ label: '本订单分摊的实付金额（元）', name: 'sharedPaymentAmount', hint: '仅填写当前订单金额，并在特殊情况说明注明共用账单关系。' });
+  sharedPay.hidden = true;
   const requirementsSlot = h('div', { class: 'stack-2 material-required-materials', aria: { live: 'polite' } });
   const rules = () => rulesVersion === 1 && typedUploads ? { materialRulesVersion: 1, meetingRelated: meeting.control.value === 'yes', singleOrderConfirmed: singleOrder.control.checked } : {};
   function renderRequirements() {
@@ -89,7 +91,7 @@ export default async function reimbursementsPage() {
     const types = [...new Set(expenses.flatMap(row => requiredReimbursementMaterials(row.category.control.value, meeting.control.value === 'yes')))];
     requirementsSlot.replaceChildren(h('b', { class: 't-secondary', text: types.length ? `本申请需提供：${types.join('、')}` : '先选择报销类别，再按要求上传材料。' }),
       ...types.map(type => h('p', { class: 't-caption', text: `${type}：${reimbursementMaterialHint(type)}` })),
-      h('p', { class: 't-caption', text: '订单和付款截图请直接上传清晰图片或 PDF，平台自动命名并整理；Word 可作为辅助原件。发票与行程单请上传 PDF 原件。' }));
+      h('p', { class: 't-caption', text: '订单与付款截图可上传图片、PDF，也可直接上传 Word（平台自动提取其中图片并整理成一份 Word）；发票与行程单请上传 PDF 原件。' }));
   }
   meeting.control.addEventListener('change', renderRequirements);
   const expenseList = h('div', { class: 'stack-3' });
@@ -120,9 +122,10 @@ export default async function reimbursementsPage() {
     const entry = { id: row.id || String(sequence + 1),
       category: field({ label: '报销类别', name: `expenseCategory${sequence}`, required: true, maxlength: 50, value: row.category || '', placeholder: '例如：办公用品、印刷费',
         ...(rulesVersion === 1 ? { options: [{ value: '', label: '请选择报销类别' }, ...REIMBURSEMENT_CATEGORIES] } : {}) }),
-      label: field({ label: '支出项目', name: `expenseLabel${sequence}`, required: true, maxlength: 100, value: row.label || '', placeholder: '例如：便利用品' }),
+      label: field({ label: '支出项目', name: `expenseLabel${sequence}`, required: true, maxlength: 100, value: row.label || '',
+        placeholder: '例如：蒸汽眼罩', hint: '合并 PDF 使用此名称。采购请按发票填写可识别的物资名称。' }),
       amount: field({ label: '金额（元）', name: `expenseAmount${sequence}`, required: true, value: row.amount || '', placeholder: '填写发票与实际支出中的较小金额',
-        hint: '请填写发票金额与实际支出金额中的较小值。' }),
+        hint: '请填写发票价税合计与实付金额中的较小值。' }),
       note: field({ label: '用途 / 备注', name: `expenseNote${sequence}`, maxlength: 300, value: row.note || '' }),
       rail: railJourneyFields(`expenseRail${sequence}`, row.railJourney), originalRailJourney: row.railJourney };
     entry.amount.control.inputMode = 'decimal';
@@ -162,12 +165,12 @@ export default async function reimbursementsPage() {
   const submit = button({ label: '提交审核申请', variant: 'primary', onClick: send });
   submit.disabled = true;
   const cancelEdit = button({ label: '取消补充', variant: 'ghost', onClick: () => reset() }); cancelEdit.hidden = true;
-  const uploadHeading = materialSection('上传材料', '发票与补充材料分开上传，按报销人、类别、项目自动命名，原件内容不变。', '02');
+  const uploadHeading = materialSection('上传材料', '发票与补充材料分开上传，按报销人、类别、项目自动命名；补充材料提交后自动合成一份 Word，原件内容不变。', '02');
   const form = h('div', { class: 'panel material-application' }, h('div', { class: 'panel__body stack-6' },
     editMessage,
     h('section', { class: 'stack-4' }, materialSection('申请信息', '填写申请人与本次报销事由。', '01'),
       h('div', { class: 'formgrid' }, campus, activityCategory), activity, activityExtras, h('div', { class: 'formgrid' }, name, expenseDate), purpose,
-      materialSection('支出明细', '一笔申请对应一笔订单，可包含多项物品；合计按明细自动计算。'), expenseList, addExpense, amount, meeting, singleOrder, voucherNote),
+      materialSection('支出明细', '一笔申请对应一笔订单，可包含多项物品；合计按明细自动计算。'), expenseList, addExpense, amount, meeting, singleOrder, sharedPay, voucherNote),
     h('section', { class: 'stack-4 material-upload-section' }, uploadHeading,
       requirementsSlot, ...uploadSections.map(section => section.node),
       h('p', { class: 't-caption', text: `最多 ${UPLOAD_LIMITS.files} 份 · 单份 ${UPLOAD_LIMITS.fileMB} MB · 总计 ${UPLOAD_LIMITS.totalMB} MB · 合计不超过 ${UPLOAD_LIMITS.pages} 页` }),
@@ -180,13 +183,14 @@ export default async function reimbursementsPage() {
   }
   function lock(value) {
     busy = value;
-    for (const control of [name.control, amount.control, purpose.control, campus.control, activityCategory.control, activity.control, expenseDate.control, voucherNote.control, meeting.control, singleOrder.control,
+    for (const control of [name.control, amount.control, purpose.control, campus.control, activityCategory.control, activity.control, expenseDate.control, voucherNote.control, meeting.control, singleOrder.control, sharedPay.control,
       ...expenses.flatMap(row => [row.category.control, row.label.control, row.amount.control, row.note.control, ...row.rail.fields.map(field => field.control)]), addExpense,
       ...uploadSections.map(section => section.input), submit, cancelEdit,
       ...expenseList.querySelectorAll('button'), ...uploadSections.flatMap(section => [...section.list.querySelectorAll('button,select')])]) control.disabled = value;
     if (!value) { submit.disabled = !files.length || !activities.length; renderActivityCategories(); renderExpenses(); }
   }
   function renderFiles() {
+    sharedPay.hidden = !typedUploads || !files.some(entry => entry.materialType === '共用付款账单');
     if (!invalidAssociations()) { submitFeedback.replaceChildren(); submitFeedback.hidden = true; }
     fileSummary.textContent = files.length ? `${typedUploads ? `发票 ${files.filter(entry => entry.kind === 'invoice').length} 份 · 补充材料 ${files.filter(entry => entry.kind === 'supporting').length} 份` : `已选择 ${files.length} 份`} · ${(files.reduce((sum, entry) => sum + entry.file.size, 0) / MB).toFixed(2)} MB` : '尚未选择材料';
     for (const section of uploadSections) section.list.replaceChildren(...files.flatMap((entry, index) => {
@@ -253,7 +257,7 @@ export default async function reimbursementsPage() {
   [name, purpose].forEach(entry => entry.control.addEventListener('input', renderFiles));
   function reset() {
     resubmitId = null; resubmitContext = null; rulesVersion = 1; meeting.control.value = 'no'; singleOrder.control.checked = false;
-    files = []; invalidate(); renderFiles(); editMessage.textContent = ''; cancelEdit.hidden = true;
+    files = []; sharedPay.control.value = ''; invalidate(); renderFiles(); editMessage.textContent = ''; cancelEdit.hidden = true;
     name.control.value = getSessionState().user?.realName || ''; amount.control.value = ''; purpose.control.value = '';
     originalActivity = null; campus.control.value = ''; activityCategory.control.value = ''; activity.control.value = '';
     expenseDate.control.value = ''; dateEdited = false; renderActivityCategories(); voucherNote.control.value = ''; expenses = []; addRow(); renderExpenses();
@@ -270,7 +274,9 @@ export default async function reimbursementsPage() {
     for (const row of expenses) if (cents(row.amount.control.value.trim()) === null) { row.amount.setError('请填写正数金额，最多两位小数'); invalid ||= row.amount.control; }
     for (const row of expenses) if (row.category.control.value === '火车票/高铁票') invalid ||= row.rail.validate(!resubmitId || Boolean(row.originalRailJourney));
     if (invalid) { invalid.focus(); return; }
-    const issues = reimbursementMaterialIssues({ ...rules(), expenseItems: expenses.map(row => ({ category: row.category.control.value })) }, files);
+    const sharedPaymentAmount = sharedPay.hidden ? '' : sharedPay.control.value.trim();
+    const issues = reimbursementMaterialIssues({ ...rules(), sharedPaymentCents: sharedPaymentAmount ? cents(sharedPaymentAmount) : null,
+      voucherNote: voucherNote.control.value, expenseItems: expenses.map(row => ({ category: row.category.control.value })) }, files);
     if (issues.length) { submitFeedback.replaceChildren(notice(issues.join(' '), { tone: 'error' })); submitFeedback.hidden = false;
       submitFeedback.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); return; }
     if (invalidAssociations()) {
@@ -293,6 +299,7 @@ export default async function reimbursementsPage() {
       }
       const result = await api.submit({ ...rules(), ...(resubmitContext ? { revision: resubmitContext.revision, stateVersion: resubmitContext.stateVersion } : {}), name: name.control.value.trim(), amount: amount.control.value.trim(),
         purpose: purpose.control.value.trim(), bundleId: bundle.id, idempotencyKey: key,
+        ...(sharedPaymentAmount ? { sharedPaymentAmount } : {}),
         activityId: activity.control.value, expenseDate: expenseDate.control.value, voucherNote: voucherNote.control.value.trim(),
         expenseItems: expenses.map(row => ({ ...(typedUploads ? { id: row.id, category: row.category.control.value.trim(),
           ...(row.category.control.value === '火车票/高铁票' && row.rail.value() ? { railJourney: row.rail.value() } : {}) } : {}), label: row.label.control.value.trim(), amount: row.amount.control.value.trim(), note: row.note.control.value.trim() })) }, resubmitId);
@@ -314,6 +321,7 @@ export default async function reimbursementsPage() {
       rulesVersion = item.materialRulesVersion === 1 ? 1 : 0; meeting.control.value = item.meetingRelated ? 'yes' : 'no'; singleOrder.control.checked = item.singleOrderConfirmed === true;
       resubmitContext = { requestId: item.id, revision: item.revision, stateVersion: item.stateVersion, bundleId: item.bundle.id };
       files = retainedMaterialEntries(item);
+      sharedPay.control.value = Number.isSafeInteger(item.sharedPaymentCents) ? (item.sharedPaymentCents / 100).toFixed(2) : '';
       amount.control.value = (item.amountCents / 100).toFixed(2); purpose.control.value = item.purpose;
       const catalogActivity = activities.find(activity => activity.id === item.activityId);
       originalActivity = item.activityId ? { ...catalogActivity, id: item.activityId,
@@ -336,7 +344,8 @@ export default async function reimbursementsPage() {
       h('td', {}, h('div', { class: 'row-2 row-wrap' }, button({ label: '查看材料', variant: 'ghost', size: 'sm', onClick: () => {
         const detail = bundleDetails(item.bundle, { withPreview: false });
         openDrawer({ title: item.activityName || '报销申请详情', width: 820, body: [requestInfo(item), detail], onClose: () => detail.dispose() });
-      } }), item.status === 'returned' ? button({ label: '补充后重提', variant: 'secondary', size: 'sm', onClick: () => {
+      } }), item.bundle?.supportingDocxUrl ? button({ label: '下载 Word 材料', variant: 'secondary', size: 'sm', href: item.bundle.supportingDocxUrl }) : null,
+      item.status === 'returned' ? button({ label: '补充后重提', variant: 'secondary', size: 'sm', onClick: () => {
         supplement(item);
       } }) : null))));
     mine.replaceChildren(data.requests.length ? h('div', { class: 'material-my-requests__scroll', tabIndex: 0,

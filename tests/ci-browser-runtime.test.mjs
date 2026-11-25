@@ -15,13 +15,20 @@ test('all browser CI jobs use the locked Playwright image without apt or downloa
   assert.ok(block.includes('timeout-minutes: 2\n        run: node scripts/check-browser-runtime.mjs'),`${job} must check its preinstalled runtime with a bounded step`);
   assert.doesNotMatch(block,/run:.*(?:playwright install|apt-get|apt install)/);
   assert.ok(block.includes('npm ci'),`${job} must install project dependencies`);
-  assert.ok(block.includes('npm run test:browser'),`${job} must still run the tests`);
+  if (job === 'browser') {
+   assert.ok(block.includes('node scripts/run-browser-shard.mjs'),'browser must run the shard wrapper');
+   assert.ok(block.includes('--project=') && block.includes('--shard='),'browser must keep project/shard coverage');
+   const shard=await readFile(new URL('../scripts/run-browser-shard.mjs',import.meta.url),'utf8');
+   assert.ok(shard.includes("'playwright', 'test'"),'shard wrapper must invoke Playwright');
+  } else assert.ok(block.includes('npm run test:browser'),`${job} must still run the tests`);
  }
 });
 
 test('missing or cancelled verification continues to block deployment',async()=>{
  const workflow=(await readFile(new URL('../.github/workflows/ci.yml',import.meta.url),'utf8')).replaceAll('\r\n','\n');
  assert.match(workflow,/needs: \[verify, release-tests, browser, cross-browser, timezones, coverage\]/);
- assert.ok(workflow.includes('assert not failed and not cancelled'));
+ assert.ok(workflow.includes('node scripts/ci-quality-report.mjs quality "$RESULTS"'));
+ const report=await readFile(new URL('../scripts/ci-quality-report.mjs',import.meta.url),'utf8');
+ assert.match(report,/process\.exitCode = failed\.length \|\| cancelled\.length \? 1 : 0/);
  assert.match(workflow,/name: Deploy main to production\n {4}needs: quality/);
 });

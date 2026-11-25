@@ -45,8 +45,11 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
     activeOriginal = viewer;
   }
   function originalRow(file, index) {
+    const source = bundle.sources[index];
+    const pages = !withPreview ? '' : !source.startPage ? ' · Word 原件，请下载核对'
+      : bundle.refreshMergedLayout ? '' : ` · 合并页码 ${source.startPage}–${source.endPage}`;
     return h('li', {},
-    h('span', { class: 'material-file-list__name', title: originalName(file), text: `${index + 1}. ${originalName(file)} · ${MATERIAL_KINDS[file.kind] || '原材料'}${withPreview ? bundle.sources[index].startPage > 0 ? ` · 合并页码 ${bundle.sources[index].startPage}–${bundle.sources[index].endPage}` : ' · Word 原件，请下载核对' : ''}` }),
+    h('span', { class: 'material-file-list__name', title: originalName(file), text: `${index + 1}. ${originalName(file)} · ${MATERIAL_KINDS[file.kind] || '原材料'}${pages}` }),
     h('div', { class: 'row-2 row-wrap' }, button({ label: '查看原件', size: 'sm', variant: 'ghost', onClick: () => viewOriginal(file) }),
       downloadLink(file)));
   }
@@ -118,6 +121,9 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
       const amountState = group.amount?.state === 'unknown' && !state?.complete ? 'pending' : group.amount?.state || 'unknown';
       const nameState = group.name?.state === 'unknown' && !state?.complete ? 'pending' : group.name?.state || 'unknown';
       const duplicate = invoices.some(result => numberCounts.get(result.invoice?.fields?.invoiceNumber?.value) > 1);
+      const separate = bundle.separateExpenseIds?.includes(group.expenseItemId) || bundle.sources.some(source => source.kind === 'invoice'
+        && source.expenseItemId === group.expenseItemId && analyses.some(result => result.page >= source.startPage
+          && result.page <= source.endPage && result.buyer?.state === 'different'));
       const details = h('details', { class: 'material-recognition-details', open: expandedChecks.has(group.expenseItemId) },
         h('summary', { class: 't-caption', text: '查看识别详情' }),
         group.amount ? h('section', { class: 'stack-3 material-cross-check-details' }, h('h4', { class: 't-h4', text: '跨材料核对依据' }),
@@ -140,6 +146,9 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
           checkBadge(!duplicate && amountState === 'matched' ? group.amountScope === 'order' ? '订单总额正确' : '金额正确' : !duplicate && amountState === 'pending' ? '金额核验中' : '金额待核对', duplicate ? 'different' : amountState, group.amount?.message || '缺少可靠关联信息'),
           checkBadge(nameState === 'matched' ? '物资名正确' : nameState === 'not-applicable' ? '本类别无需物资名核验' : nameState === 'pending' ? '物资名核验中' : '物资名待核对', nameState, group.name?.message || '缺少可靠关联信息')),
         group.amountScope === 'order' ? h('p', { class: 't-caption', text: '已按整单合计核验，各物品的金额分摊仍须人工确认。' }) : null,
+        separate ? notice('非南京大学抬头，不计入学校报销。请按实际渠道另行处理。', { tone: 'warning' }) : null,
+        bundle.taxMismatchExpenseIds?.includes(group.expenseItemId)
+          ? notice('南京大学发票的纳税人识别号不符，请核对原件。', { tone: 'warning' }) : null,
         duplicate ? notice('发票号码重复，请核对是否重复上传。', { tone: 'error' }) : null,
         details);
     }), ...materialAnalysisFeedback(bundle, state).map(entry => {
@@ -151,15 +160,16 @@ export function bundleDetails(bundle, { withPreview = false, checks = null, requ
   update(initial);
   const unsubscribe = checks?.subscribe((id, state) => { if (id === bundle.id) update(state); });
   const header = h('div', { class: 'material-bundle-head' },
-      h('p', { class: 't-secondary', text: originalsFirst ? `${bundle.sources.length} 份原材料 · 第 ${request?.revision || 1} 版`
+      h('p', { class: 't-secondary', text: originalsFirst || bundle.refreshMergedLayout ? `${bundle.sources.length} 份原材料 · 第 ${request?.revision || 1} 版`
         : `${bundle.sources.length} 份原材料 · 合并后 ${bundle.pageCount} 页` }),
+      bundle.supportingDocxUrl ? button({ label: '下载 Word 材料', variant: 'secondary', size: 'sm', href: bundle.supportingDocxUrl }) : null,
       (!originalsFirst || mergedFirst) && bundle.mergedUrl ? downloadLink({ name: bundle.mergedName || '报销材料合并.pdf', url: bundle.mergedUrl,
         kind: bundle.sources.length === 1 ? bundle.sources[0].kind : null }, '下载合并 PDF', 'secondary') : null);
   const analysis = h('section', { class: 'stack-3 material-analysis' },
       h('h3', { class: 't-h4', text: '报销材料提取' }), summary,
       results);
   const originalSection = h('section', { class: 'stack-3 material-originals' }, h('h3', { class: 't-h4', text: `原始材料（${bundle.sources.length} 份）` }),
-      bundle.sources.some(source => !source.startPage) ? h('p', { class: 't-caption', text: 'Word 材料保留原件，不包含在合并 PDF 中，请分别下载核对。' }) : null, originals, downloadStatus);
+      bundle.sources.some(source => !source.startPage) ? h('p', { class: 't-caption', text: '未能提取图片的 Word 材料仅保留原件，不包含在合并 PDF 中，请分别下载核对。' }) : null, originals, downloadStatus);
   const node = h('div', { class: 'stack-4 material-bundle' }, header,
     ...(mergedFirst ? [preview, analysis, originalSection] : originalsFirst ? [analysis, originalSection] : [analysis, originalSection, preview]));
   node.dispose = () => { unsubscribe?.(); preview?.dispose?.(); activeOriginal?.close(); };

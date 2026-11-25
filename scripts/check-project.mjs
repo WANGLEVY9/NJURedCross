@@ -37,4 +37,9 @@ for (const path of docs) {
   }
 }
 console.log(`Checked ${sources.length} JavaScript modules and ${docs.length} Markdown documents; ${errors} errors.`);
+const naming = spawnSync(process.execPath, [resolve(root, 'scripts/check-names.mjs')], { cwd: root, encoding: 'utf8' });
+if (naming.status !== 0) {
+  process.stderr.write(naming.stderr || naming.stdout || '');
+  errors++;
+}
 process.exitCode = errors ? 1 : 0;

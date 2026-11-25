@@ -174,7 +174,7 @@ test('legacy date and identity ordering keep position groups stable', async ({ p
 });
 
 for (const approved of [true, false]) {
-  test(`legacy batch ${approved ? 'approves' : 'rejects'} only filtered pending leave with a required reason`, async ({ page }) => {
+  test(`legacy batch ${approved ? 'approves' : 'rejects'} only filtered pending leave with an optional reason`, async ({ page }) => {
     const { posts } = await setup(page);
     const roster = page.locator('.activity-legacy-roster');
     await page.getByRole('button', { name: '全选当前可处理报名', exact: true }).click();
@@ -192,14 +192,11 @@ for (const approved of [true, false]) {
     await page.getByRole('button', { name: approved ? '批量批准请假' : '批量驳回请假', exact: true }).click();
     const drawer = page.getByRole('dialog', { name: approved ? '批量批准 1 条请假' : '批量驳回 1 条请假' });
     await expect(drawer).toBeVisible();
-    const reason = drawer.getByRole('textbox', { name: '处理说明 必填', exact: true });
-    await expect(reason).toHaveAttribute('required', '');
-    await drawer.getByRole('button', { name: '确认处理', exact: true }).click();
-    expect(posts).toEqual([]);
-    await reason.fill('合成请假核验说明');
+    const reason = drawer.getByRole('textbox', { name: '处理说明（选填）', exact: true });
+    await expect(reason).not.toHaveAttribute('required', '');
     await drawer.getByRole('button', { name: '确认处理', exact: true }).click();
     await expect(drawer).toHaveCount(0);
-    expect(posts).toEqual([{ ids: ['r-leave'], action: approved ? 'leave-approve' : 'leave-reject', reason: '合成请假核验说明' }]);
+    expect(posts).toEqual([{ ids: ['r-leave'], action: approved ? 'leave-approve' : 'leave-reject', reason: '' }]);
     await expect(roster.getByRole('status')).toContainText('已选 0 条');
     await page.getByRole('button', { name: '全选当前可处理报名', exact: true }).click();
     await expect(page.getByRole('button', { name: '批量批准请假', exact: true })).toBeDisabled();

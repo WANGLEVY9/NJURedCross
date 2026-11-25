@@ -97,7 +97,7 @@ test('a write only drops the projections that depend on the written table', asyn
 
 test('an explicit failure after partial writes still invalidates the recorded projections', async () => {
   clearDisplayReads();
-  const source = (await readFile(new URL('../server.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
+  const source = (await readFile(new URL('../lib/http/request-middleware.js', import.meta.url), 'utf8')).replace(/\r\n/g, '\n');
   assert.match(source, /const display = isDisplayRequest\(req.method, url.pathname\)/);
   const cleanup = source.match(/\} finally \{\n( {8}if \(journal\.size\)[^\n]*)/)?.[1];
   assert.ok(cleanup);

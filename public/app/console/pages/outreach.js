@@ -22,6 +22,7 @@ import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import showcaseAdminPage from './showcase.js';
 import { protectDrawerDraft } from '../../ui/drawer-draft.js';
+import { memberPicker, memberLookupHint } from '../../ui/member-picker.js';
 import { makeThumbnail } from '../../core/image-thumb.js';
 
 const CHANNELS = [
@@ -87,6 +88,7 @@ function openReviewDrawer({
   let checklist = [];         // 21 项模板
   const checked = new Set();  // 勾选的检查项序号
   const opinions = [];        // 修改意见行 { position, problem, requirement }
+  let manualEditor = null;    // 初审登记的美编 { name, studentId, faculty, email }（2026-11-24）
 
   const noteField = field({ label: '审核意见', name: 'note', multiline: true, rows: 4, placeholder: '通过时可以留空；退回修改必须写明具体意见' });
   const hintNode = h('p', { class: 't-caption' });
@@ -94,6 +96,19 @@ function openReviewDrawer({
   /* ---- 审核链进度 ---- */
   const chainSlot = h('div', { class: 'stack-2' });
   const assigneeSlot = h('div', { class: 'stack-2' });
+
+  /* ---- 美编登记（文字稿件初审「含美编招募」）----
+     制度把招募放在初审，但系统原先没有登记口，导致终审写不进「新媒体审核表」的
+     美编姓名/学号。这里让初审当场从名册检索并指定唯一一人。 */
+  const editorSlot = h('div', { class: 'stack-3' });
+  const editorError = h('p', { class: 'field__error', attrs: { role: 'alert', 'aria-live': 'polite' }, hidden: true });
+
+  /* ---- 预期发布时间（终审必填，写进新媒体审核表）---- */
+  const publishDateField = field({
+    label: '预期发布时间', name: 'expectedPublishDate', type: 'date', required: true,
+    hint: '终审通过后自动写入「新媒体审核表」的「预期发布时间」列。',
+  });
+  publishDateField.hidden = true;
 
   /* ---- 审核清单（必填：勾 = 该项已确认合格）+ 修改意见（选填） ---- */
   const checklistSlot = h('div', { class: 'stack-3' });
@@ -276,6 +291,127 @@ function openReviewDrawer({
         ? notice('已完成全部审核，可以创建排期任务。', { tone: 'success', iconName: 'check' })
         : notice(`当前待「${chain.current?.name || '—'}」处理。`, { tone: 'info', iconName: 'info' }),
     );
+    syncStageControls();
+  }
+
+  /* ---- 阶段化控件：初审登记美编 / 终审填预期发布时间 ---- */
+  function syncStageControls() {
+    const isArticle = Boolean(chain && chain.kind === 'article');
+    const isInitial = isArticle && chain.current?.level === 1;
+    // 只有文字稿件才会在终审后写「新媒体审核表」，其他链不显示这个日期框。
+    const isFinal = isArticle && Boolean(chain.current && chain.current.level === chain.total);
+    publishDateField.hidden = !isFinal;
+    editorSlot.hidden = !isArticle;
+    editorError.hidden = true;
+    if (isArticle) renderEditorSlot(isInitial);
+  }
+
+  function renderEditorSlot(isInitial) {
+    clear(editorSlot);
+    if (!chain || chain.kind !== 'article') return;
+    if (!isInitial) {
+      // 终审/已完成的抽屉只回显初审登记结果；改登记回初审层级重做。
+      editorSlot.append(
+        h('p', { class: 't-label', text: '美编（初审登记）' }),
+        readonlyField({
+          label: '', name: 'manualEditor',
+          value: manualEditor?.name
+            ? `${manualEditor.name} · ${manualEditor.studentId || '学号未登记'}${manualEditor.faculty ? ` · ${manualEditor.faculty}` : ''}`
+            : '初审时未登记——终审建行会缺美编姓名/学号，请退回让对接人补登记。',
+        }),
+      );
+      return;
+    }
+
+    const queryField = field({
+      label: '美编登记（初审含美编招募）', name: 'editorQuery',
+      placeholder: '输入姓名或学号，如 汤艺暄 / 251880248',
+      hint: '按姓名或学号在名册中精确匹配；同名会列出候选人，按学号选人。名册查不到即「未注册」，需先补录名册。',
+    });
+    const resultsNode = h('div', { class: 'stack-2' });
+    const selectedNode = h('div', { class: 'stack-2' });
+
+    function renderSelected() {
+      clear(selectedNode);
+      if (!manualEditor?.name) return;
+      selectedNode.append(notice(
+        `已选美编：${manualEditor.name} · ${manualEditor.studentId}${manualEditor.faculty ? ` · ${manualEditor.faculty}` : ''}`,
+        { tone: 'success', iconName: 'check' },
+      ));
+    }
+
+    function setEditor(member) {
+      manualEditor = {
+        name: member.name, studentId: member.studentId,
+        faculty: member.faculty || '', email: member.email || '',
+      };
+      renderSelected();
+    }
+
+    // 唯一命中：直接选中并收起候选区；同名候选则保留卡片并高亮，方便看清选的是哪一位、也能改选。
+    function pick(member) {
+      setEditor(member);
+      clear(resultsNode);
+    }
+
+    async function search() {
+      const query = queryField.control.value.trim();
+      queryField.setError(null);
+      clear(resultsNode);
+      if (!query) { queryField.setError('请输入姓名或学号'); return; }
+      manualEditor = null;
+      renderSelected();
+      resultsNode.append(h('p', { class: 't-caption t-faint', text: '检索中…' }));
+      try {
+        const payload = await consoleApi.outreach.members(query);
+        const members = Array.isArray(payload?.members) ? payload.members : [];
+        clear(resultsNode);
+        // 名册查无此人 ⇒ 明确告诉对接人「未注册」，而不是笼统的「没找到」：
+        // 新成员没入册时，无论怎么改写法都查不出来，必须先去补录名册。
+        const hint = memberLookupHint(query, payload);
+        if (hint) {
+          resultsNode.append(notice(hint.text, { tone: hint.tone, title: hint.title, iconName: 'alert' }));
+          return;
+        }
+        if (members.length === 1) { pick(members[0]); return; }
+        // 同名多人：横向可滑动卡片，按学号选人（竖排按钮在抽屉里会顶掉正文）。
+        resultsNode.append(memberPicker(members, { query, onPick: setEditor }));
+        if (payload?.truncated) {
+          resultsNode.append(h('p', {
+            class: 't-caption t-faint',
+            text: `结果较多，只显示前 ${members.length} 条；直接填完整学号可一步定位。`,
+          }));
+        }
+      } catch (error) {
+        clear(resultsNode);
+        resultsNode.append(notice(error?.message || '名册检索失败，请稍后重试。', { tone: 'warning' }));
+      }
+    }
+
+    queryField.control.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter') return;
+      event.preventDefault();
+      search();
+    });
+
+    editorSlot.append(
+      h('p', { class: 't-label', text: '美编登记（初审含美编招募）' }),
+      queryField,
+      h('div', { class: 'row-wrap row-2' },
+        button({ label: '查找成员', variant: 'secondary', size: 'sm', iconName: 'search', onClick: search }),
+        button({
+          label: '清除', variant: 'ghost', size: 'sm', iconName: 'x',
+          onClick: () => {
+            queryField.control.value = '';
+            manualEditor = null;
+            clear(resultsNode);
+            renderSelected();
+          },
+        })),
+      resultsNode,
+      selectedNode,
+    );
+    renderSelected();
   }
 
   async function loadAssignees(category) {
@@ -311,7 +447,7 @@ function openReviewDrawer({
     categorySlot.append(readonlyField({ label: '当前投稿栏目', name: 'category', value: value || '未配置' }));
   }
   renderCategory(reviewFlow?.category);
-  if (reviewFlow) decisions.append(chainSlot, categorySlot, assigneeSlot);
+  if (reviewFlow) decisions.append(chainSlot, categorySlot, assigneeSlot, editorSlot, editorError, publishDateField);
   decisions.append(reviewFormBlock, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '最终决策' }), decisionControl, hintNode), noteField);
   const body = h('div', { class: 'review-workspace' }, preview, decisions);
 
@@ -393,6 +529,27 @@ function openReviewDrawer({
       checklistError.replaceChildren(h('span', { text: '审核链或检查清单尚未就绪，请刷新或联系管理员配置。' }));
       return;
     }
+    // 2026-11-24：初审（文字稿件）通过前必须登记美编，终审通过前必须填预期发布时间。
+    // 服务端同口径再校验一次，这里只是为了不让用户白等一次请求。
+    if (reviewFlow && chain && decision === 'approve') {
+      const isArticleInitial = chain.kind === 'article' && chain.current?.level === 1;
+      if (isArticleInitial && !manualEditor?.studentId) {
+        editorError.hidden = false;
+        editorError.replaceChildren(
+          icon('alert', 'ico ico--sm'),
+          h('span', { text: '请先检索并选中美编（初审含美编招募），再提交通过。' }),
+        );
+        shake(editorSlot);
+        return;
+      }
+      const isFinal = chain.kind === 'article'
+        && Boolean(chain.current && chain.current.level === chain.total);
+      if (isFinal && !publishDateField.control.value) {
+        publishDateField.setError('终审通过前必须填写预期发布时间');
+        shake(publishDateField);
+        return;
+      }
+    }
     // 清单必填：通过（approve）时须逐项确认全部检查项（勾 = 该项已确认合格）。
     if (decision === 'approve' && reviewFlow && checklist.length) {
       const missing = checklist.filter((item) => !checked.has(item.id));
@@ -423,6 +580,8 @@ function openReviewDrawer({
           decision, note, expectedLevel: chain?.current?.level,
           checklists: checklist.filter((item) => checked.has(item.id)),
           opinions: opinions.filter((row) => row.position || row.problem || row.requirement),
+          manualEditor: manualEditor ? { name: manualEditor.name, studentId: manualEditor.studentId } : null,
+          expectedPublishDate: publishDateField.control.value || '',
         }),
       );
       draftProtection.release();
@@ -458,6 +617,8 @@ function openReviewDrawer({
     consoleApi.outreach.reviewChain(reviewFlow.contentId)
       .then((payload) => {
         chain = payload.chain;
+        // 初审登记过的美编回显（服务端优先取轨迹快照，老数据回落投稿表两列）。
+        manualEditor = chain?.manualEditor || null;
         reviewFlow.category = resolveReviewCategory(chain?.category, reviewFlow.category);
         // 未登记栏目要显式说出来：显示「未配置」会让审核人以为是表没配，
         // 实际是投稿时没选栏目（历史稿件），处理动作完全不同。
@@ -830,9 +991,10 @@ export default async function outreachPage(context, shell) {
                       // 栏目由审核链接管（chain.category 才是「推文类别」）；item.type 只是内容类型，
                       // 传进来会被当成栏目去查对接人，责任人必然「未配置」。
                       reviewFlow: { contentId: item.id, kind: item.kind },
-                      onSubmit: async ({ decision, note, checklists, opinions, expectedLevel }) => {
+                      onSubmit: async ({ decision, note, checklists, opinions, expectedLevel, manualEditor, expectedPublishDate }) => {
                         const result = await consoleApi.outreach.reviewStep(item.id, {
                           decision, note, expectedLevel,
+                          manualEditor, expectedPublishDate,
                           opinions: opinions?.map((row) => ({ position: row.position, problem: row.problem, requirement: row.requirement, fixed: false })) || [],
                           checklist: checklists?.map((row) => ({ id: row.id, category: row.category, item: row.item, standard: row.standard, checked: true })) || [],
                         });
@@ -967,12 +1129,14 @@ export default async function outreachPage(context, shell) {
             category: row.articleCategory || row.category,
           },
           onSubmit: async ({
-            decision, note, checklists, opinions, expectedLevel,
+            decision, note, checklists, opinions, expectedLevel, manualEditor, expectedPublishDate,
           }) => {
             const result = await consoleApi.outreach.reviewStep(row.id, {
               decision,
               note,
               expectedLevel,
+              manualEditor,
+              expectedPublishDate,
               opinions: opinions?.map((entry) => ({
                 position: entry.position,
                 problem: entry.problem,
@@ -1769,7 +1933,7 @@ export default async function outreachPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide operations-module operations-outreach' },
+    { class: 'view wspad wspad--wide operations-module operations-outreach console-operations-redesign' },
     pageHead({
             title: '审核内容，安排发布',
       description: '征集、审核、排期与发布结果登记在一条流水线上。外部渠道仍由人工确认发布，平台负责记录与追溯。',

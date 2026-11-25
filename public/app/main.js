@@ -6,7 +6,7 @@ import { observePageResources, reportTiming, timeBrowserPhase } from './core/tel
      · Operations console     (/console/**, session protected)
    ========================================================================== */
 
-import { defineRoutes, mountRouter, setNotFound, navigate, redirect } from './core/router.js';
+import { defineRoutes, mountRouter, setNotFound, redirect } from './core/router.js';
 import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange, request, publicApi } from './core/api.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';

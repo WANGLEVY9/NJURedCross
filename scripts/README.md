@@ -1,5 +1,7 @@
 # 脚本与外部写入边界
 
+本目录只放本地检查、发布、数据预览和运维工具，文件命名与职责边界见 [文件与命名约定](../docs/NAMING.md)。新增 Node 工具统一用 `.mjs`；Python 运维工具用 kebab-case，已有 `main_sync.py` 等服务器安装路径保持稳定。发布包只包含运行源码，脚本工具默认不会部署。
+
 只有 `check`、lint、`test:*` 和 UI `preview` 进入默认离线验证；其他工具各自需要配置。不要把 `scripts/*.mjs` 全部执行。
 
 ## 无业务数据访问
@@ -22,6 +24,14 @@
 | `audit:data` | 对照数据源和应用结果；输出可能含内部业务统计，不直接公开 |
 
 其他 smoke 使用 `BASE_URL`，默认端口不统一，见 [测试指南](../docs/TESTING.md)。默认账号口令是历史夹具，不能用于生产。
+
+`npm run inspect:production-performance` 调用 `scripts/inspect-production-performance.sh`，只在应用服务器上读取 `release.json`、systemd 状态、脱敏后的 `journalctl` 遥测和现有 Nginx timing 日志，不修改服务、业务表、配置或凭据。脚本把 `summarize-telemetry.mjs` 按 `service + operation` 聚合，可分别核对 `queue/wait`、`activity-read`、`activity-external-write`、`activity-mutation`、`background/run` 与 `background/skipped`。参数依次是 `--since` 字符串和最大日志行数，默认 `2 hours ago` 与 `30000`。这是有界样本，不代表完整请求率或 SLA。
+
+恢复新生产服务器的直连后，也可直接从本机执行 `ssh njuredcross-diag` 取得相同的有界只读诊断输出；该密钥由 `authorized_keys` 强制绑定到服务器上的只读脚本，不能执行任意 shell。部署密钥别名 `njuredcross-prod` 只用于 `NJRC-MANIFEST-V1` 与发布接收器，不用于日常日志巡检。别名和密钥职责见 [部署、回滚与运行维护](../docs/OPERATIONS.md)。
+
+`npm run correlate:telemetry-traces -- 1000 20` 进一步按 `traceId/spanId/parentSpanId` 还原最慢链路的区间、并发重叠、关键路径和独占耗时热点；参数依次为最小链路耗时（毫秒）和返回条数。配合 `scripts/inspect-telemetry-trace.mjs <UUID>` 可从聚合结果钻取单条链路。字段含义与排障顺序见 [链路观测与保留策略](../docs/TELEMETRY.md)。
+
+该工具是本地运维工具，不在生产发布包内；输入必须是原始结构化遥测行（例如 `journalctl ... -o cat` 或有界日志导出）。`ssh njuredcross-diag` 输出的是发布记录、服务状态和聚合摘要，只用于核验与定位时间窗口，不直接作为关联工具输入。
 
 ## main 十分钟兜底同步
 

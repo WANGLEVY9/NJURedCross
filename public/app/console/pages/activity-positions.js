@@ -13,7 +13,7 @@ export function configureProjectPositions(event,onSaved,{onContinue,onBack,steps
  const list=h('div',{class:'position-editor__list'}),items=[];
  let drawer,busy=false,guard;
  const local=value=>value?.slice(0,19)||'';
- const deadline=enhanceDateTimeField(field({label:'统一报名截止（北京时间）',name:'deadline',type:'datetime-local',step:1,required:true,value:local(plan?.deadline),max:local(c.window?.start)}));
+ const deadline=enhanceDateTimeField(field({label:'统一报名截止（北京时间）',name:'deadline',type:'datetime-local',step:1,required:true,value:local(plan?.deadline),max:local(c.window?.end)}));
  const summary=h('strong',{'aria-live':'polite'}),warning=h('p',{class:'position-editor__error',role:'status','aria-live':'polite',hidden:true}),error=h('p',{class:'position-editor__error',role:'alert',hidden:true});
  const hourFields=['serviceHours','trainingHours','travelHours'];
  const readItem=item=>Object.fromEntries(item.inputs.filter(f=>!hourFields.includes(f.control.name)||f.control.value!=='').map(f=>[f.control.name,f.control.value]));
@@ -51,7 +51,7 @@ export function configureProjectPositions(event,onSaved,{onContinue,onBack,steps
   const payload=read(),total=payload.positions.reduce((n,p)=>n+Number(p.capacity),0);
   if(payload.positions.some(p=>p.serviceHours!==undefined&&Number(p.serviceHours)<=0)){error.textContent='岗位服务时长填写时须大于 0，留空则继承活动配置。';error.hidden=false;error.scrollIntoView({block:'nearest'});return;}
   const keys=payload.positions.map(p=>JSON.stringify([p.start,p.end,p.location.trim(),p.name.trim()]));
-  const message=!items.length?'请至少添加一个岗位。':total>100000?'岗位总名额不能超过 100000 人。':new Set(keys).size!==keys.length?'存在重复岗位，请修改复制岗位的名称、时间或地点。':payload.positions.some(p=>p.end<=p.start)?'岗位结束时间必须晚于开始时间。':payload.deadline>=local(c.window?.start)?'报名截止须早于活动开始。':'';
+  const message=!items.length?'请至少添加一个岗位。':total>100000?'岗位总名额不能超过 100000 人。':new Set(keys).size!==keys.length?'存在重复岗位，请修改复制岗位的名称、时间或地点。':payload.positions.some(p=>p.end<=p.start)?'岗位结束时间必须晚于开始时间。':payload.deadline>=local(c.window?.end)?'报名截止须早于活动结束。':'';
   error.textContent=message;error.hidden=!message;if(message){error.scrollIntoView({block:'nearest'});return;}
   if(event['状态']==='报名中'&&JSON.stringify(payload)!==initial&&!await confirmAction({title:'保存并暂停项目报名？',description:'新岗位安排保存后，整个项目暂停接受新报名。已有报名保留；请检查后点击“统一发布岗位”重新开放。',confirmLabel:'保存岗位安排'}))return;
   busy=true;setFormControlsLocked(drawer.body,true);

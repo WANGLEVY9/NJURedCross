@@ -3,7 +3,6 @@ import { Base } from 'seatable-api';
 import * as box from '../lib/attachment/box.js';
 import {
   SHOWCASE_TABLE,
-  sanitizeDirname,
 } from '../lib/attachment/store.js';
 import {
   SHOWCASE_GROUPS,

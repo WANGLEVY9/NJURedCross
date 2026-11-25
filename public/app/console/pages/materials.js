@@ -949,7 +949,7 @@ export default async function materialsPage(context, shell) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide operations-module operations-materials' },
+    { class: 'view wspad wspad--wide operations-module operations-materials console-operations-redesign' },
     materialServices('loan', { console: true }),
     pageHead({
             title: '审批与库存，井然有序',

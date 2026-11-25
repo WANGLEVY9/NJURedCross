@@ -117,8 +117,10 @@ export default async function summaryPage() {
       button({ label: '查看与下载', variant: 'secondary', onClick: () => showRecord(record) }))));
     if (!historySlot.childElementCount) historySlot.append(h('p', { class: 't-secondary', text: '尚未生成汇总表。' }));
     if (activityReview) {
-      const unfinished = financeItems.filter(row => row.activityId === item?.id && ['pending', 'initial_returned', 'returned'].includes(row.status));
+      const unfinished = financeItems.filter(row => row.activityId === item?.id && !row.separateReimbursement && ['pending', 'initial_returned', 'returned'].includes(row.status));
       if (unfinished.length) candidatesSlot.append(notice(`本活动另有 ${unfinished.length} 项尚未完成初审，本批不会纳入，请确认是否等待材料齐全后再生成。`, { tone: 'warning' }));
+      const separate = financeItems.filter(row => row.activityId === item?.id && row.separateReimbursement && row.approvedCents === null);
+      if (separate.length) candidatesSlot.append(notice(`非南京大学抬头，请按实际渠道另行报销：${separate.map(row => `${row.applicant} · ${row.label}`).join('、')}`, { tone: 'warning' }));
     }
     renderOrder(); updateCount();
   }
@@ -130,13 +132,14 @@ export default async function summaryPage() {
     const move = (index, direction) => { [itemOrder[index], itemOrder[index + direction]] = [itemOrder[index + direction], itemOrder[index]]; renderOrder(); };
     const crossChecks = new Map(candidates.map(request => [request.id, reimbursementCrossChecks(request, request.bundle, request.bundle.analyses || [])]));
     const rows = itemOrder.map((item, index) => {
-      const rowKey = key(item), draft = settlements.get(rowKey) || { amount: (item.amountCents / 100).toFixed(2), reason: '' }; settlements.set(rowKey, draft);
+      const limit = item.schoolLimitCents ?? item.amountCents;
+      const rowKey = key(item), draft = settlements.get(rowKey) || { amount: (limit / 100).toFixed(2), reason: '' }; settlements.set(rowKey, draft);
       const choose = h('input', { type: 'checkbox', checked: selected.has(rowKey) || undefined, aria: { label: `纳入${item.label}` }, on: { change: event => {
         const keys = useWorkspace ? [rowKey] : entries.filter(row => row.requestId === item.requestId).map(key);
         keys.forEach(value => event.target.checked ? selected.add(value) : selected.delete(value));
         if (!useWorkspace) renderOrder(); updateCount();
       } } });
-      const amount = field({ name: `summary-amount-${rowKey}`, label: '', type: 'number', min: 0, max: item.amountCents / 100, step: '.01', value: draft.amount });
+      const amount = field({ name: `summary-amount-${rowKey}`, label: '', type: 'number', min: 0, max: limit / 100, step: '.01', value: draft.amount });
       const reason = field({ name: `summary-reason-${rowKey}`, label: '', maxlength: 300, placeholder: '金额减少时必填原因', value: draft.reason });
       if (!useWorkspace) { amount.control.readOnly = true; reason.control.disabled = true; }
       amount.control.setAttribute('aria-label', `${item.label}核定金额`); reason.control.setAttribute('aria-label', `${item.label}核定原因`);

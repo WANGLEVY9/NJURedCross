@@ -87,7 +87,7 @@ test('HTTP downloads send generated names, actual MIME types and unchanged origi
   const submission = await fetch(root, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(submit(bundle)) });
   assert.equal(submission.status, 201); const { request } = await submission.json();
   const merged = await fetch(`${origin}${request.bundle.mergedUrl}`, { headers });
-  assert.ok(decodeURIComponent(merged.headers.get('content-disposition')).includes('混合申请人-活动清单-1.00-合并材料.pdf'));
+  assert.ok(decodeURIComponent(merged.headers.get('content-disposition')).includes('混合申请人-活动清单-1.00-合并版.pdf'));
   for (let index = 0; index < files.length; index++) {
     const download = await fetch(`${origin}${request.bundle.originalUrls[index].url}`, { headers });
     assert.deepEqual(Buffer.from(await download.arrayBuffer()), files[index].bytes);

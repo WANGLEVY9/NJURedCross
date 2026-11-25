@@ -26,12 +26,26 @@ test('Box download consumes bytes inside its budget and stops an oversized body 
 
 test('Box stalled response body times out and parent cancellation releases the reader', async () => {
   let cancelled = 0;
-  const stalled = config(async () => new Response(new ReadableStream({ cancel() { cancelled++; } })));
+  let readerCreated;
+  const readerObserved = new Promise(resolve => { readerCreated = resolve; });
+  let readers = 0;
+  const stalled = config(async () => {
+    const response = new Response(new ReadableStream({ cancel() { cancelled++; } }));
+    const getReader = response.body.getReader.bind(response.body);
+    response.body.getReader = (...args) => {
+      if (++readers === 2) readerCreated();
+      return getReader(...args);
+    };
+    return response;
+  });
   await assert.rejects(downloadBuffer(stalled, '/fixture.jpg', undefined, { timeoutMs: 10 }), { code: 'external_request_timeout' });
   assert.equal(cancelled, 1);
   const abort = new AbortController();
   const pending = withRequestBudget(() => downloadBuffer(stalled, '/fixture.jpg'), { signal: abort.signal });
-  await new Promise(resolve => setTimeout(resolve, 5));
+  await Promise.race([
+    readerObserved,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('reader was not observed')), 2_000)),
+  ]);
   abort.abort();
   await assert.rejects(pending, { code: 'external_request_cancelled' });
   assert.equal(cancelled, 2);

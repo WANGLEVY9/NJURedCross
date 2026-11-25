@@ -4,6 +4,8 @@
 
 使用 JavaScript ES Modules，2 空格缩进、UTF-8、LF 与末尾换行；由 `.editorconfig` 提示。模块路径显式包含扩展名。页面文件使用 kebab-case，共享工具放 `core/` 或 `ui/`，后端领域代码放 `lib/<domain>/`，运维脚本放 `scripts/`。不要用纯格式化修改混入业务修复。
 
+新增文件与重命名的完整规则见 [文件与命名约定](NAMING.md)，由 `npm run check:names` 校验；既有路径保持稳定，历史名称不批量改名。
+
 `eslint.config.js` 采用 recommended 正确性规则，区分 Node 和浏览器全局；暂未启用未使用变量和无效赋值规则以避免大范围遗留清理。控制字符正则用于输入过滤；SDK 异常边界刻意抑制可能含凭据的 cause，因此这两类规则作了显式例外。语法和相对导入另由 `check` 验证。当前没有类型检查或自动格式化门槛。
 
 ## 功能变更步骤

@@ -57,6 +57,14 @@ test('multi-day unified range is valid across midnight without deriving service 
  const d={...content(),bookingMode:'unified',positions:[],start:'23:30',end:'01:15',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'',travelHours:'0',work:'合成任务'};
  assert.deepEqual(workspaceDraftErrors(d),[]);assert.equal(normalizeWorkspaceDraft(d).serviceHours,'3');
 });
+test('registration cutoff may follow the first position but must precede activity end',()=>{
+ const d=content();
+ assert.deepEqual(workspaceDraftErrors({...d,deadline:'2030-01-02T10:00'}),[]);
+ assert.ok(workspaceDraftErrors({...d,deadline:'2030-01-03T23:59'}).includes('报名截止须早于活动结束'));
+ const single={...d,bookingMode:'unified',positions:[],start:'09:00',end:'12:00',location:'合成地点',capacity:'2',serviceHours:'3',work:'合成工作',endDate:d.date};
+ assert.deepEqual(workspaceDraftErrors({...single,deadline:'2030-01-01T10:00'}),[]);
+ assert.ok(workspaceDraftErrors({...single,deadline:'2030-01-01T12:00'}).includes('报名截止须早于活动结束'));
+});
 test('six stages keep approved but unpublished activity in pending approval; ledger existence alone does not advance stage',()=>{
  assert.equal(workspaceStage({状态:'可发布'}),'待审批');assert.equal(workspaceStage({状态:'草稿'}),'草稿');assert.equal(workspaceStage({状态:'进行中'}),'进行中');assert.equal(workspaceStage({状态:'进行中'},{hoursSubmitted:true}),'时长审核');
 });

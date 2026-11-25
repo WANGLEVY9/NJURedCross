@@ -178,7 +178,7 @@ export default async function auditPage(context, shell) {
     body: h('div', { class: 'stack-4' }, filterBar, summary, listRegion, pager, detail),
   });
 
-  const node = h('div', { class: 'view wspad operations-module audit-log' },
+  const node = h('div', { class: 'view wspad operations-module audit-log console-operations-redesign' },
     pageHead({
       title: '操作日志',
       description: '记录平台内的账号、活动、时长、物资与财务操作，可按角色、板块与结果检索。',

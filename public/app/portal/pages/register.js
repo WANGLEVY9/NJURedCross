@@ -13,11 +13,19 @@ import { navigate } from '../../core/router.js';
 import { button, field, notice, badge } from '../../ui/primitives.js';
 import { notify } from '../../core/toast.js';
 import { safePortalNext } from '../auth-flow.js';
+import {requiresStaffDeclaration} from '../../shared/staff-declaration.js';
+import {openModal} from '../../ui/overlay.js';
 import { PASSWORD_HINT, passwordPolicyError, registrationProfileError } from '../../core/password-policy.js';
 
 export default async function registerPage(context) {
   const next = safePortalNext(context.query.get('next'));
   let pending = false;
+  const staffAnswers=new Map();
+  function confirmStaff(){return new Promise(resolve=>{
+    let answer=null,dialog;
+    const choose=value=>{answer=value;void dialog.close();};
+    dialog=openModal({title:'是否为教职工',body:h('p',{text:'你选择的邮箱后缀需要确认身份。你是否为教职工？'}),footer:[button({label:'取消',onClick:()=>dialog.close()}),button({label:'否，我不是教职工',onClick:()=>choose('否')}),button({label:'是，我是教职工',variant:'primary',onClick:()=>choose('是')})],onClose:()=>resolve(answer)});
+  });}
   // A failed config read is a network symptom, never evidence that signup is
   // closed: the server still decides, so the form stays usable on flaky links.
   let configUnavailable = false;
@@ -83,10 +91,16 @@ export default async function registerPage(context) {
     pending = true;
 
     try {
+      let staffDeclared='未确认';
+      if(requiresStaffDeclaration(email,registration.staffEmailDomains)){
+        staffDeclared=staffAnswers.get(email)||await confirmStaff();
+        if(!staffDeclared)return;
+        staffAnswers.set(email,staffDeclared);
+      }
       const payload = await (async () => {
         submitButton.dataset.loading = 'true'; submitButton.disabled = true;
         try {
-          return await registerAccount({ emailDomain, password, realName, studentId, notificationEmail });
+          return await registerAccount({ emailDomain, password, realName, studentId, notificationEmail,staffDeclared });
         } finally {
           delete submitButton.dataset.loading; submitButton.disabled = false;
         }

@@ -33,7 +33,11 @@ const requiredConfirmation = 'APPLY-NJU-RC-SUBMISSION-V2-SCHEMA';
 
 /** 与 server.js 的 outreachSubmissionTable 保持同一表名。 */
 const SUBMISSIONS_TABLE = '宣传投稿表';
-const SUBMISSIONS_NEW_COLUMNS = ['文创类别', '美编人', '作品标题', '学号'];
+/**
+ * 2026-11-24：「美编学号」——初审「含美编招募」时从名册登记的美编学号。
+ * 「美编人」只存姓名，学号必须单独一列：终审要把它写进「新媒体审核表」的「美编学号」。
+ */
+const SUBMISSIONS_NEW_COLUMNS = ['文创类别', '美编人', '作品标题', '学号', '美编学号'];
 
 /**
  * v2.1（2026-10 用户变更要求）：影像素材表追加两列——

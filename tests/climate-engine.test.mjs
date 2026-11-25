@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   createGame, makeRng, flipWeather, nominate, setVotes, resolveVote, canRunoff, startRunoff,
-  finishDay, nightAction, dawn, project, nightStepInfo, checkVictory, RESILIENCE_START,
-  setPartner, firstNightAction, endFirstNight, declareEvacuate,
+  finishDay, nightAction, dawn, project, nightStepInfo, checkVictory, RESILIENCE_START, RESILIENCE_MAX,
+  setPartner, firstNightAction, endFirstNight, declareEvacuate, claimPreach,
 } from '../public/app/games/climate/engine.js';
-import { ROLES, ROLE_IDS, PLAYER_SETUP, SCRIPTS, WEATHER, INHERIT_ORDER, NIGHT_ORDER } from '../public/app/games/climate/data.js';
+import { ROLES, ROLE_IDS, PLAYER_SETUP, INHERIT_ORDER, NIGHT_ORDER } from '../public/app/games/climate/data.js';
 
 test('角色数据：24 个角色 / 四类齐全 / 每角色字段完整', () => {
   assert.equal(ROLE_IDS.length, 24);
@@ -391,4 +391,42 @@ test('疏散宣称：登记后可查、写入日志，且阻止被提名', () =>
   assert.ok(s.log.some((l) => l.kind === 'evacuate'), '疏散登记留日志');
   nominate(s, s.players[2].id, target.id);
   assert.equal(s.dayState.nominations.length, 0, '被疏散者不能被提名');
+});
+
+/* -------------------------------------------------------------------------- */
+/* 2026-11-22 功能验收发现的两处缺陷：回归用例                                  */
+/* -------------------------------------------------------------------------- */
+
+test('宣讲结算：票数达 2N/3 时韧性 +1（回归：ceil 误传单参恒得 NaN）', () => {
+  const s = fixture(['preacher', 'observer', 'evaluator', 'empath', 'stationchief', 'panicseed']);
+  s.weather.current = 'cloudy';           // 固定非极端日，隔离天气扣减
+  s.night.preachReady = s.players[0].id;  // 前一夜已预告
+  claimPreach(s);
+  assert.equal(s.dayState.preachFired, true, '宣讲应进入已发动状态');
+
+  // 5 人投给同一被提名人：处决后存活 5 人，门槛 ceil(10/3)=4，票数 5 达标
+  s.players.slice(1).forEach((p) => nominate(s, p.id, s.players[2].id));
+  setVotes(s, Object.fromEntries(s.players.slice(1).map((p) => [p.id, s.players[2].id])));
+  resolveVote(s);
+  const before = s.resilience;
+  finishDay(s);
+
+  assert.equal(s.resilience, Math.min(RESILIENCE_MAX, before + 1), '宣讲达标应 +1 韧性');
+  assert.ok(s.log.some((l) => l.kind === 'preach' && /韧性 \+1/.test(l.text)), '应留下宣讲达成日志');
+});
+
+test('寒潮次日禁提名：只认昨日标记，不要求当日又是寒潮（回归）', () => {
+  const s = fixture(['observer', 'evaluator', 'preacher', 'empath', 'stationchief', 'panicseed']);
+  s.weather.deck = ['coldwave'];
+  flipWeather(s);
+  assert.equal(s.weather.current, 'coldwave');
+  assert.equal(s.weather.nextDayNoNominate, true, '寒潮当日应标记次日禁提名');
+
+  s.day += 1;
+  s.weather.deck = ['cloudy'];
+  flipWeather(s);
+  assert.equal(s.dayState.noNominate, true, '寒潮次日应禁提名');
+
+  nominate(s, s.players[0].id, s.players[1].id);
+  assert.equal(s.dayState.nominations.length, 0, '禁提名日提名应被拒');
 });

@@ -26,7 +26,7 @@ export function reimbursementCrossChecks(request, bundle, analyses) {
   return groups.filter(group => group.kind === 'expense').map(group => {
     const category = request.expenseItems.find(item => item.id === group.expenseItemId)?.category;
     const required = request.materialRulesVersion === 1 ? requiredReimbursementMaterials(category, request.meetingRelated) : null;
-    const requiresPayment = !required || required.includes('付款截图'), requiresOrder = !required || required.includes('订单截图');
+    const requiresOrder = !required || required.includes('订单截图');
     const wholeOrder = sameOrder && request.expenseItems.length > 1;
     const evidence = (sameOrder ? orderFiles : group.files).map(file => {
       const source = bundle.sources[file.index];
@@ -35,7 +35,8 @@ export function reimbursementCrossChecks(request, bundle, analyses) {
     });
     const invoices = evidence.filter(entry => entry.file.kind === 'invoice');
     const orders = evidence.filter(entry => entry.file.kind === 'supporting' && ['订单截图', '订单和付款截图'].includes(entry.file.materialType));
-    const payments = evidence.filter(entry => entry.file.kind === 'supporting' && ['付款截图', '订单和付款截图'].includes(entry.file.materialType));
+    const payments = evidence.filter(entry => entry.file.kind === 'supporting' && ['付款截图', '订单和付款截图', '共用付款账单'].includes(entry.file.materialType));
+    const requiresPayment = !required || required.includes('付款截图');
     const read = (entry, field) => entry.pages.map(result => field === 'invoiceAmount' ? result.invoice?.fields?.totalAmount
       : field === 'invoiceNumber' ? result.invoice?.fields?.invoiceNumber : result.supporting?.[field]);
     const distinct = fields => [...new Set(fields.filter(field => field?.state === 'extracted').map(field => field.value))];
@@ -49,11 +50,18 @@ export function reimbursementCrossChecks(request, bundle, analyses) {
     const duplicate = numbers.some(number => numberFiles.get(number) > 1);
     const paymentValues = distinct(payments.flatMap(entry => read(entry, 'paidAmount')));
     const paymentReady = payments.length > 0 && payments.every(entry => reliable(entry, 'paidAmount')) && paymentValues.length === 1;
-    const paymentCents = paymentReady ? evidenceAmountCents(paymentValues[0]) : null;
-    const referenceCents = Number.isSafeInteger(invoiceCents) && (!requiresPayment || Number.isSafeInteger(paymentCents))
-      ? requiresPayment ? Math.min(invoiceCents, paymentCents) : invoiceCents : null;
+    const paymentTotalCents = paymentReady ? evidenceAmountCents(paymentValues[0]) : null;
+    const shared = payments.some(entry => entry.file.materialType === '共用付款账单');
+    const claimedShare = request.sharedPaymentCents;
+    const shareExceedsTotal = shared && Number.isSafeInteger(paymentTotalCents) && claimedShare > paymentTotalCents;
+    const paymentCents = shared
+      ? !shareExceedsTotal && Number.isSafeInteger(claimedShare) && claimedShare > 0 ? claimedShare : null
+      : paymentTotalCents;
+    const referenceCents = !duplicate && !shareExceedsTotal && Number.isSafeInteger(invoiceCents) && (!requiresPayment || Number.isSafeInteger(paymentCents))
+      ? Math.min(invoiceCents, paymentCents ?? invoiceCents) : null;
     let amount = !totalAgrees ? verdict('different', '申请总额与支出明细合计不一致')
       : duplicate ? verdict('different', '发票号码重复，金额不能重复计入')
+        : shareExceedsTotal ? verdict('different', '本订单分摊实付款超过共用付款账单总额')
         : !invoices.length || requiresPayment && !payments.length ? verdict('unknown', '缺少关联发票或付款截图')
           : requiresPayment && paymentValues.length > 1 ? verdict('unknown', '存在多个付款金额，请人工确认是否分次付款或材料重复')
             : referenceCents === null ? verdict('unknown', '金额尚未可靠识别，或材料中存在冲突')
@@ -72,6 +80,7 @@ export function reimbursementCrossChecks(request, bundle, analyses) {
         : names.every(nameMatches) ? verdict('matched', '订单物资名与填写的支出项目名称一致')
           : verdict('different', '订单物资名与填写的支出项目名称不一致');
     return { ...group, amount, name, amountScope: wholeOrder ? 'order' : 'item', invoiceCents, paymentCents, referenceCents, names,
+      ...(shared ? { sharedPaymentTotalCents: paymentTotalCents, shareExceedsTotal } : {}),
       evidence: evidence.map(entry => ({ name: entry.file.originalName || entry.file.name, kind: entry.file.kind,
         materialType: entry.file.materialType, pages: entry.pages.map(result => result.page), complete: entry.complete,
         fields: entry.pages.flatMap(result => entry.file.kind === 'invoice' ? [result.invoice?.fields?.totalAmount]

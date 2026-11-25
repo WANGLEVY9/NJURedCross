@@ -123,6 +123,20 @@ main，并在 Actions 部署失败或延迟时调用同一个发布接收器。�
 
 部署后检查 systemd、HTTPS 页面、运行文件哈希和 .env 未变化。失败恢复已替换文件、依赖和服务，部署状态不前移。此代码回滚不涉及数据库，也不撤销外部业务操作。照片、私有 Base 和环境配置始终独立保留。修改服务器接收器或轮换部署密钥时，需要由 Owner 显式维护外部安装文件和 Secrets。
 
+### 2026-11-22 生产连接恢复
+
+新生产服务器为 `47.116.184.159`，实例 `i-uf6356uwag85yyjpejk0`。本机保留旧
+`njuredcross` 别名指向旧 IP；新主机配置两个独立别名，均严格校验 `known_hosts`：
+
+| 本机别名 | 私钥 | 用途 |
+| --- | --- | --- |
+| `njuredcross-prod` / `njuredcross-new` | `~/.ssh/njuredcross_deploy_diag_ed25519` | GitHub Actions 使用的受限部署密钥；服务器仅允许执行 `/usr/local/sbin/njuredcross-ci-deploy.py` |
+| `njuredcross-diag` | `~/.ssh/njuredcross_readonly_diag_ed25519` | 受限只读诊断密钥；服务器仅允许执行 `/usr/local/sbin/njuredcross-readonly-diagnostics.sh` |
+
+部署密钥通过 `printf 'NJRC-MANIFEST-V1\n' | ssh njuredcross-prod` 返回全部运行文件哈希；CI 部署回执中的 `verifiedFiles` 与该清单一致。诊断密钥直接执行 `ssh njuredcross-diag`，输出 `release.json` 关键字段、systemd 状态、脱敏遥测聚合和 Nginx timing 尾部；不提供 shell、端口转发或文件传输，也不读取账号、Cookie、请求正文或业务表。两把密钥的 `authorized_keys` 行都必须使用带引号的 `command="..."`，否则选项中的空格会被解析成额外 token。
+
+私钥只保存在本机与 GitHub Actions 加密 Secrets，公钥指纹不视为机密；不要输出私钥正文。需要重新配置服务器入口时，使用已登录的阿里云 ECS 云助手对实例执行一次性只读安装脚本，不新增开放端口或安全组规则。
+
 本地验证接收器：`python3 -m unittest discover -s tests -p '*_test.py'`。查看发布状态：GitHub Actions 的部署任务，以及服务器上的 `release.json`。
 
 ## 连接重置与加载超时
@@ -147,6 +161,8 @@ main，并在 Actions 部署失败或延迟时调用同一个发布接收器。�
 ## 全链路耗时诊断
 
 生产环境默认启用 `PLATFORM_TELEMETRY`（显式 `false` 关闭）；非生产需显式 `true`。JSON 日志写标准输出，由 `njuredcross.service` 的 journald 接收，不新增第三方上报服务，不写 NJUTable。应用使用独立 journal，目标保留 7 天并限制为 256 MiB。安装、查询和质量门禁见 [链路观测与保留策略](TELEMETRY.md)。Nginx timing 日志另按既有 14 份日轮转。
+
+应用提供三个脱敏运维端点：`/healthz` 只报告进程存活；`/readyz` 报告配置、私有状态目录、任务队列和监听状态；`/metrics` 输出固定的 Prometheus 文本指标，仅响应本机回环地址。探针与指标不调用业务数据源，不返回账号、Token、Cookie、查询参数或业务行内容。`PLATFORM_HTTP_CONCURRENCY` 与 `PLATFORM_HTTP_QUEUE_LIMIT` 控制普通 HTTP 请求的并发与等待队列，默认 32 / 64；队列满时返回明确的 503，UNO SSE 长连接不占该闸门。
 
 - `http`：所有入口的脱敏路由、方法、状态、总耗时、断开标志、活动请求数、依赖次数/累计耗时。返回 `X-Request-ID`，Nginx 配置同步更新后亦记录该 ID。
 - `dependency`：SeaTable SDK 请求（包括认证）、SMTP、NJUBox、OSS、外部内容、队列等待、密码计算及后台任务分类。默认最多 10000 条诊断记录/分钟/进程，丢弃数量进入下一条 runtime；并行调用的累计耗时可能大于请求墙钟耗时，不要相减计算网络时间。

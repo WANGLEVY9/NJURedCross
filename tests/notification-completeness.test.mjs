@@ -80,7 +80,13 @@ test('any failed source prevents a misleading successful summary', async () => {
   ]) {
     const f = fixture({ failure });
 
-    await assert.rejects(f.load(), error => error === f.readError);
+    await assert.rejects(f.load(), error => {
+      assert.equal(error.code, 'notification_sources_unavailable');
+      assert.equal(error.statusCode, 503);
+      assert.notEqual(error, f.readError);
+      assert.doesNotMatch(error.message, /Synthetic source unavailable/);
+      return true;
+    });
   }
 });
 

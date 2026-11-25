@@ -1,5 +1,5 @@
 import { h } from '../../core/dom.js';
-import { getSessionState } from '../../core/api.js';
+import { getSessionState, requestBlob } from '../../core/api.js';
 import { button, field, checkbox, notice, pageHead } from '../../ui/primitives.js';
 import { materialServices } from '../../shared/material-services.js';
 import { reimbursementsApi as api, reimbursementAmount } from '../../shared/reimbursements-api.js';
@@ -51,9 +51,24 @@ export default async function ledgerPage() {
     } catch (error) { if (!disposed) exportStatus.replaceChildren(notice(error.message, { tone: 'error' })); }
     finally { busy = false; download.disabled = !enabled; }
   } });
+  const month = field({ label: '归档月份', name: 'reimbursementArchiveMonth', type: 'month' });
+  const archiveStatus = h('div', { aria: { live: 'polite' } });
+  const archive = button({ label: '下载月度报销材料', variant: 'secondary', onClick: async () => {
+    if (!enabled || archive.disabled) return;
+    if (!month.control.value) { month.setError('请选择归档月份'); return; }
+    month.setError(null); archiveStatus.replaceChildren(); archive.disabled = true;
+    try {
+      const selectedMonth = month.control.value, query = new URLSearchParams({ month: selectedMonth, activityId: activity.control.value });
+      const { blob } = await requestBlob(`${reimbursementApiRoot()}/ledger/archive?${query}`, { method: 'GET', signal: AbortSignal.timeout(60000) });
+      if (disposed) return;
+      const url = URL.createObjectURL(blob), link = h('a', { href: url, download: `${selectedMonth} 待报销.zip` });
+      document.body.append(link); link.click(); link.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error) { if (!disposed) archiveStatus.replaceChildren(notice(error.message, { tone: 'error' })); }
+    finally { archive.disabled = !enabled; }
+  } });
   const exportPanel = h('section', { class: 'panel', hidden: true }, h('div', { class: 'panel__body stack-4' },
     h('h2', { class: 't-h3', text: '选择导出信息' }), mode, columns,
-    h('p', { class: 't-caption', text: '身份证和银行卡字段不提供导出。明细按项目分行；申请金额和打款金额只在本申请首行列出，避免重复累计。发票识别结果需人工核对。' }), download, exportStatus));
+    h('p', { class: 't-caption', text: '身份证和银行卡字段不提供导出。明细按项目分行；申请金额和打款金额只在本申请首行列出，避免重复累计。发票识别结果需人工核对。' }), download, exportStatus, month, archive, archiveStatus));
   async function load() {
     const id = ++sequence;
     try {
@@ -67,7 +82,8 @@ export default async function ledgerPage() {
           h('td', {}, item.canRegisterPayment ? button({ label: '登记打款', size: 'sm', onClick: async () => {
             try { const result = await api.requestDetails(item.id); if (!disposed) openPaymentRegistration(result.request, { onDone: load }); }
             catch (error) { if (!disposed) status.replaceChildren(notice(error.message, { tone: 'error' })); }
-          } }) : item.paidDate ? h('span', { class: 't-caption', text: item.paidDate }) : '')))))));
+          } }) : item.paidDate ? h('span', { class: 't-caption', text: item.paidDate }) : '',
+          item.retainUntil ? h('p', { class: 't-caption', text: `原件至少保留至 ${item.retainUntil}` }) : null)))))));
       if (!payload.rows.length) rows.append(h('p', { class: 't-secondary', text: '当前筛选没有申请。' }));
     } catch (error) { if (!disposed && id === sequence) status.replaceChildren(notice(error.message, { tone: 'error' })); }
   }

@@ -18,8 +18,10 @@ export function initialReviewEditor(item, { onChange = () => {}, mode = 'initial
   const expenses = item.expenseItems.map((row, index) => ({ id: row.id,
     category: field({ label: '报销类别', name: `initialItemCategory${index}`, value: row.category || '', maxlength: 50,
       ...(item.materialRulesVersion === 1 ? { options: REIMBURSEMENT_CATEGORIES } : {}) }),
-    label: field({ label: '物品名称', name: `initialItemName${index}`, value: row.label, required: true, maxlength: 100 }),
-    amount: field({ label: '金额（元）', name: `initialItemAmount${index}`, value: (row.amountCents / 100).toFixed(2), required: true }),
+    label: field({ label: '物品名称', name: `initialItemName${index}`, value: row.label, required: true, maxlength: 100,
+      hint: '合并 PDF 使用此名称。采购请按发票核对物资名称。' }),
+    amount: field({ label: '金额（元）', name: `initialItemAmount${index}`, value: (row.amountCents / 100).toFixed(2), required: true,
+      hint: '请核对发票价税合计与实付金额中的较小值。' }),
     note: field({ label: '用途', name: `initialItemUse${index}`, value: row.note || '', maxlength: 300 }),
     rail: railJourneyFields(`initialRail${index}`, row.railJourney), original: row }));
   const fields = [activity, activityName, campus, amount, purpose, date, special, ...expenses.flatMap(row => [row.category, row.label, row.amount, row.note, ...row.rail.fields])];

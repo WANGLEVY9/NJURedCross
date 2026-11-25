@@ -79,7 +79,7 @@ test('invoice, common supporting and merged download names use exact amounts whi
   const service = await setup(), { bundle } = await service.preprocess(owner, files);
   const { request } = await service.submit(owner, submitBody(bundle));
   assert.equal(service.attachment(owner, bundle.id, 0).name, '测试申请人-修正带-87.00-发票.pdf');
-  assert.equal(service.attachment(owner, bundle.id).name, '测试申请人-修正带-87.00-合并材料.pdf');
+  assert.equal(service.attachment(owner, bundle.id).name, '测试申请人-修正带-87.00-合并版.pdf');
   const old = { name: '测试申请人-办公用品-修正带-发票-01.pdf', kind: 'invoice', expenseItemId: 'pens', originalName: '原始发票.pdf' };
   assert.equal(requestMaterialFilename(request, old, 0, [old]), '测试申请人-修正带-87.00-发票.pdf');
   assert.equal(old.name, '测试申请人-办公用品-修正带-发票-01.pdf');

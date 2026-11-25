@@ -40,3 +40,11 @@ test('an account outside the event owners and regional roster still cannot appro
   await assert.rejects(f.workflow.decideLeave('registration-row', true, '同意请假', f.actor), { statusCode: 403 });
   assert.equal(f.tables[WF.registrations][0]['请假状态'], '待审批');
 });
+test('thirty leave approvals accept empty explanations and preserve authority checks', async () => {
+ const f=fixture({allowRegistrar:true}),original=f.tables[WF.registrations][0];
+ f.tables[WF.registrations]=Array.from({length:30},(_,i)=>({...original,_id:`leave-${i}`,报名ID:`WR-${i}`}));
+ const started=Date.now();
+ for(const row of f.tables[WF.registrations])await f.workflow.decideLeave(row._id,true,'',f.actor);
+ assert.ok(Date.now()-started<10000);
+ assert.ok(f.tables[WF.registrations].every(r=>r['请假状态']==='已批准'&&r['处理说明']===''));
+});

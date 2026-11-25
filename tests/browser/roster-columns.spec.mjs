@@ -19,7 +19,7 @@ async function mount(page,kind){
  },kind);
 }
 
-test('all activity roster variants show sequential numbers, a department after student ID, and retain local column choices',async({page},info)=>{
+test('all activity roster variants hide department by default, and retain local column choices',async({page},info)=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});await page.goto('/console/events');await expect(page.locator('.activity-v2-card').first()).toBeVisible();
  for(const kind of ['legacy','native','historical']){
   await mount(page,kind);
@@ -27,12 +27,19 @@ test('all activity roster variants show sequential numbers, a department after s
   const headers=await table.locator('thead th').allTextContents();expect(headers[0]).toBe('序号');expect(headers.indexOf('部门')).toBe(headers.indexOf('学号')+1);
   await expect(table.locator('tbody [data-roster-column="序号"]')).toHaveText(['1','2','3']);
   await expect(table.locator('tbody [data-roster-column="部门"]').first()).toHaveText('生命中心');
-  const picker=page.locator('.roster-column-picker');await picker.locator('summary').click();await picker.getByLabel('部门',{exact:true}).uncheck();
-  await expect(table.locator('tbody [data-roster-column="部门"]').first()).toHaveJSProperty('hidden',true);
+  const department=table.locator('tbody [data-roster-column="部门"]').first();
+  await expect(department).toHaveJSProperty('hidden',true);
+  const picker=page.locator('.roster-column-picker');
+  await picker.locator('summary').click();
+  await picker.getByLabel('部门',{exact:true}).check();
+  await expect(department).toBeVisible();
   if(kind==='native')await page.getByRole('button',{name:'批量操作',exact:true}).click();
-  await expect(table.locator('tbody [data-roster-column="部门"]').first()).toHaveJSProperty('hidden',true);
-  await mount(page,kind);await expect(page.locator('tbody [data-roster-column="部门"]').first()).toHaveJSProperty('hidden',true);
-  await page.locator('.roster-column-picker summary').click();await page.getByRole('button',{name:'恢复默认栏目',exact:true}).click();await expect(page.locator('tbody [data-roster-column="部门"]').first()).toHaveJSProperty('hidden',false);
+  await expect(department).toBeVisible();
+  await mount(page,kind);
+  await expect(department).toBeVisible();
+  await picker.locator('summary').click();
+  await page.getByRole('button',{name:'恢复默认栏目',exact:true}).click();
+  await expect(department).toHaveJSProperty('hidden',true);
  }
  await mount(page,'legacy');await page.locator('.roster-column-picker summary').click();
  await page.locator('#main').evaluate(node=>{node.scrollTop=0;});

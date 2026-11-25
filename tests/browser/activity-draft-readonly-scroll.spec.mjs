@@ -7,7 +7,7 @@ test('read-only draft remains scrollable with disabled fields and visible recove
   const {h}=await import('/app/core/dom.js');
   const {activityDraftWorkspace}=await import('/app/console/pages/activity-draft-workspace.js');
   const ui=activityDraftWorkspace({initial:{id:'synthetic-readonly',version:1,content:{name:'合成只读草稿',region:'nanjing',category:'一加助残专项',bookingMode:'unified',description:'合成只读说明',notice:'合成通知\n'.repeat(100)}},editable:false,actionsNode:h('details',{class:'activity-v2-more'},h('summary',{text:'更多操作'}),h('button',{disabled:true,text:'删除活动'})),preview:async()=>({content:{},errors:[]})});
-  const recovery=h('button',{class:'btn',text:'核对提交结果',on:{click:()=>{recovery.dataset.checked='true';}}});ui.node.querySelector('.activity-draft-toolbar').append(recovery);
+  const recovery=h('button',{class:'btn',data:{recovery:'true'},text:'核对提交结果',on:{click:()=>{recovery.dataset.checked='true';}}});ui.node.querySelector('.activity-draft-toolbar').prepend(recovery);
   document.getElementById('main').replaceChildren(h('div',{class:'view wspad activity-v2',data:{mobileView:'detail'}},h('div',{class:'activity-v2-workspace'},h('section',{class:'activity-v2-detail'},ui.node))));
  });
  const form=page.locator('.activity-draft-workspace__form');

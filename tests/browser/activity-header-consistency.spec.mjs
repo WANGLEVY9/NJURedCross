@@ -23,6 +23,11 @@ for (const project of [false, true]) {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await setup(page, project);
     await page.evaluate(()=>document.fonts.ready);
+    await expect(page.locator('.activity-action-dock .activity-primary-actions > button').first()).toBeVisible();
+    await expect.poll(async () => {
+      const box = await page.locator('.activity-action-dock .activity-primary-actions > button').first().boundingBox();
+      return box && box.width > 0 && box.height > 0;
+    }).toBe(true);
     const header = page.locator('.activity-detail-head[data-unified-header]');
     const first = page.locator('.activity-action-dock .activity-primary-actions > button').first();
     const left = (await first.boundingBox()).x;

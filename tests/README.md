@@ -1,5 +1,7 @@
 # 合成领域与基础设施回归
 
+本目录按测试框架组织回归：`*.test.mjs` 为 Node 原生测试，`browser/*.spec.mjs` 为 Playwright 用例，`*_test.py` 为 Python 运维工具测试。新增文件名遵循 [文件与命名约定](../docs/NAMING.md)；既有 `v3`、`legacy` 等历史名称保留，避免打断测试选择与文档引用。
+
 `infrastructure.test.mjs` 使用 Node 原生测试框架、临时目录、回环 HTTP 服务和合成 Token 验证基础设施行为。邮件使用内存流，SDK 不认证，不访问外网或学生资料。
 
 ```bash

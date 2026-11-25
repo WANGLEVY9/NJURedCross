@@ -303,7 +303,7 @@ export default async function volunteersPage(context) {
 
   const node = h(
     'div',
-    { class: 'view wspad wspad--wide' },
+    { class: 'view wspad wspad--wide operations-module console-operations-redesign' },
     pageHead({
       title: '服务记录核对',
       description: '把「登记审批 → 活动报名 → 活动签到 → 时长录入 → 个人档案」这条链路的完成情况放在一个页面里，并定位其中的缺口。',

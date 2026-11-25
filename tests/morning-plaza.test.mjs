@@ -1,8 +1,5 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { MORNING_CARD_STATUS } from '../lib/morning/api.js';
 import {
   MORNING_PLAZA_API_PATH,
@@ -13,7 +10,6 @@ import {
   toMorningPlazaDetailView,
   toMorningPlazaViewer,
 } from '../lib/morning/plaza.js';
-import { openMorningPlazaSnapshotStore } from '../lib/morning/plaza-snapshot-store.js';
 
 
 function row(overrides = {}) {

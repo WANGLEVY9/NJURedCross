@@ -1,4 +1,6 @@
-import {leaveReviewActions,leaveStatus,canReviewLeave} from './activity-leave-review.js';
+import {leaveReviewActions,leaveStatus,canReviewLeave,batchLeaveButton} from './activity-leave-review.js';
+import {registrationCapabilities} from '../../shared/registration-capabilities.js';
+import {registrationDownloadButton} from './registration-download.js';
 import {rosterColumns} from '../roster-columns.js';
 import {registrationCapacity} from '../../shared/activity-registration.js';
 import {successMailEditor} from './success-mail-composer.js';
@@ -81,6 +83,7 @@ export function openRosterLeaveDrawer(row, { refresh }) {
 }
 
 export function rosterPanel(event, registrations, {refresh, directory, directoryError,viewState,events=[event]}) {
+  const capabilities=registrationCapabilities(event);
   let regional=false;try{regional=JSON.parse(event['报名页配置']||'{}').approval?.mode==='workspace-regional';}catch{/* Invalid configuration grants no new behavior. */}
   const review=rosterReview(event),finalized=review?.phase==='final',committing=review?.phase==='publishing',editing=!finalized&&!committing&&event['状态']==='报名中';
   const savedState=viewState?.eventId===event._id&&viewState.finalized===finalized&&viewState.committing===committing?viewState:null;
@@ -439,6 +442,8 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
   const capacityState=registrationCapacity(event,registrations);
   if(regional&&capacityState.full)body.append(badge('报名中 · 报名已满',{tone:'warning'}));
   body.append(button({label:review?.confirmedAt?'查看成功邮件':'编辑成功邮件（可选）',onClick:()=>successMailEditor(event,refresh)}),...(rows.some(r=>r.rosterDraft)?[notice('有历史暂存结果尚未公布。可逐条发布并通知，或撤销暂定后重新处理；不会自动批量发送。',{tone:'info'})]:[]),h('div',{class:'activity-roster-summary'},h('span',{text:'推荐录取 '+event['容量']+' 人'}),h('strong',{text:'已录取 '+confirmed+' 人'})),...(directoryError?[notice('志愿者资料暂未加载成功，请刷新重试。未提供的证书和成员身份不会被视为“否”。',{tone:'warning'})]:[]),finalActions,tabs,h('div',{class:'activity-roster-search'},search,toggleFilters,columns.control),tools,chips,selection,records,batch);render();
+  if(capabilities.batchLeave)body.prepend(batchLeaveButton({getRows:()=>canReviewLeave(event)&&!committing?registrations:[],refresh}));
+  if(capabilities.exportRegistration)body.prepend(registrationDownloadButton(event));
   void loadMailStatuses();
   return panel({title:'报名管理',description:finalized?'报名结果与通知状态分开显示。':'',body});
 }
@@ -446,7 +451,7 @@ export function rosterPanel(event, registrations, {refresh, directory, directory
 export function publicationReadiness(event,config) {
   const plan=config.positionDraft||config.positionPlan,positions=plan?.positions||[];
   const grouped=config.bookingMode==='grouped';
-  const positionsReady=!grouped||(positions.length>0&&Boolean(activityWindow(plan.deadline,config.window?.start))&&positions.every(p=>p.name?.trim()&&p.location?.trim()&&['鼓楼','仙林','浦口','苏州'].includes(p.campus)&&Number.isInteger(Number(p.capacity))&&Number(p.capacity)>0&&positionWithinActivity(p,config.window)));
+  const positionsReady=!grouped||(positions.length>0&&Boolean(activityWindow(plan.deadline,config.window?.end))&&positions.every(p=>p.name?.trim()&&p.location?.trim()&&['鼓楼','仙林','浦口','苏州'].includes(p.campus)&&Number.isInteger(Number(p.capacity))&&Number(p.capacity)>0&&positionWithinActivity(p,config.window)));
   const scheduled=event['状态']==='报名中'&&Date.parse(config.publishAt)>Date.now();
   // Group configuration can close registration while older parent records stay
   // 报名中. Re-publication is idempotent; the API rechecks approval and all children.

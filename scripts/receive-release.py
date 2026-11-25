@@ -115,7 +115,7 @@ def deploy(stream):
         raise ValueError('Release exceeds size limit')
     if payload == b'NJRC-MANIFEST-V1\n':
         previous_path = STATE / 'release.json'
-        previous = json.loads(previous_path.read_text()) if previous_path.exists() else {'files': {}}
+        previous = json.loads(previous_path.read_text()) if previous_path.exists() else {'commit': '', 'files': {}}
         actual = {}
         for name in previous.get('files', {}):
             target = ROOT / name
@@ -123,7 +123,7 @@ def deploy(stream):
                 value = digest(target)
                 if value is not None:
                     actual[name] = value
-        print(json.dumps({'files': actual}))
+        print(json.dumps({'commit': previous.get('commit', ''), 'files': actual}))
         return
     STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (STATE / 'deploy.lock').open('w') as lock:

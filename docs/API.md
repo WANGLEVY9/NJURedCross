@@ -72,6 +72,8 @@
 
 未登录调用写接口或 `/api/portal/me` 返回 `401` 且 `code=login_required`；缺少 CSRF 令牌返回 `403` 且 `code=csrf_failed`。
 
+`REGISTRATION_STAFF_EMAIL_DOMAINS` 为可选的逗号分隔精确邮箱域名列表。`registration-config` 只返回规范化且格式合法的域名；当注册邮箱后缀命中该列表时，`POST /api/auth/register` 要求 `staffDeclared` 为 `是` 或 `否`，缺失或 `未确认` 返回 `400` 且 `code=staff_confirmation_required`。该字段写入私有账号资料，不作为角色、权限或管理员身份依据；列表为空时无需声明。
+
 活动是否对公众可见的判定：状态属于 `报名中` / `进行中` / `已结束`，且公开范围不包含 `不公开`、`仅管理员`、`内部限定`。
 
 ### 管理端（需 `super_admin`，或带对应权限范围的 `platform_admin`；写操作另需 CSRF）
@@ -97,7 +99,7 @@
 | --- | --- | --- |
 | `GET /api/auth/session` | 当前会话 | 匿名可读 |
 | `POST /api/auth/login`、`POST /api/auth/logout` | 登录与退出 | 退出要求会话与 CSRF |
-| `GET /api/auth/registration-config` | 注册可用性 | 匿名可读 |
+| `GET /api/auth/registration-config` | 注册可用性、密码策略、邮箱域名与需要教职工声明的规范化域名 | 匿名可读 |
 | `POST /api/auth/register`、`POST /api/auth/email-codes` | 注册与发码 | 校园邮箱、来源、验证码与限频 |
 | `POST /api/auth/verify-email`、`POST /api/auth/reset-password` | 邮箱验证与密码重置 | 一次性验证码与密码策略 |
 | `POST /api/auth/change-password/code`、`POST /api/auth/change-password` | 已登录账号修改密码 | 会话、CSRF 与验证码 |
@@ -118,6 +120,7 @@
 | 管理流程 | `/api/volunteer/workflow`及其子路径 | 管理角色、events范围、写入CSRF |
 | 献血车整周准备 | `POST /api/volunteer/workflow/blood-roster` | 模板与日期、容量、时长校验 |
 | 导出草稿 | `GET /api/volunteer/workflow/events/:id/export-preview` | 活动管理权限；不是xlsx下载 |
+| 下载报名信息表 | `GET` / `HEAD` `/api/volunteer/workflow/events/:id/registration-export` | 活动管理权限、负责人/范围校验与审计；私有 `no-store` xlsx |
 | 在线时长审核表 | `GET /api/volunteer/workflow/events/:id/hours-review` | 活动管理权限；待审核/退回/已审明细 |
 | 批量签到并录入 | `POST /api/volunteer/workflow/events/:id/attendance-batch` | 活动管理权限、CSRF；1～200人，同活动，逐人返回结果 |
 | 编辑待审核服务明细 | `POST /api/volunteer/workflow/events/:id/hours-edit` | 七项服务字段白名单、核对摘要、独立审核人；CSRF；不改变审批状态 |
@@ -132,3 +135,5 @@
 
 
 献血车月度复核：`hours-review`、`members`、`export-preview`、`hours-export` 和 `export.xlsx` 的 GET/HEAD 下载可带 `month=YYYY-MM`（HEAD 仅下载接口）。省略月份保持单活动范围。`hours-edit` / `hours-approve` 的 JSON body 可带同样的 `month`；跨月或非献血活动使用月度参数会拒绝。编辑 items 每项为 `{id, expectedDigest, details}`，details 仅接受 `serviceHours, trainingHours, travelHours, work, location, dates, remark`。月份按原场次日期判定，手改正式工作日期不会改变台账归属月份。服务明细和身份资料仅向有 events 权限的管理员返回。
+
+`registration-export` 是报名进行中可用的受控导出：服务端按活动范围读取当前报名记录，校验负责人/权限证据后生成包含 `姓名 / 学号 / 邮箱 / 报名状态 / 岗位 / 日期 / 时段 / 报名ID` 的 xlsx，并写入 `workflow.registrations.export` 审计。响应为 `private, no-store`，`HEAD` 不返回正文。邮箱用于导出联络，不作为管理端报名工作区表格的常驻显示列；默认页面表格不回显该字段。

@@ -1,0 +1,24 @@
+/* Console-wide dual-viewport hardening. Shared chrome belongs to admin.css;
+   these narrow rules fix measured legibility and touch-target defects. */
+.console .nav__brand-text span {
+  font-size: var(--fs-caption);
+  letter-spacing: var(--tracking-label);
+}
+
+.console .nav__workspace-text small,
+.console .who__text small {
+  font-size: var(--fs-caption);
+}
+
+.console .kbd,
+.console .menu__kbd {
+  font-size: var(--fs-caption);
+}
+
+@media (max-width: 960px) {
+  .console .nav__item {
+    min-height: 44px;
+    height: auto;
+  }
+}
+

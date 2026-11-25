@@ -21,5 +21,5 @@ export function serviceFlow(items, label = '参与流程') {
   return h('section', { class: 'service-flow', aria: { label } },
     ...items.map(({ title, description, iconName }, index) => h('div', { class: 'service-flow__item' },
       h('span', { class: 'service-flow__step', aria: { hidden: 'true' } }, icon(iconName || 'check', 'ico ico--sm')),
-      h('div', null, h('h3', { text: `${index + 1}. ${title}` }), h('p', { text: description })))));
+      h('div', null, h('h2', { class: 't-h3', text: `${index + 1}. ${title}` }), h('p', { text: description })))));
 }

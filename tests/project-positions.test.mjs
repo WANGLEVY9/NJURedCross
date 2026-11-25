@@ -369,7 +369,7 @@ test('interrupted position generation resumes without duplicate rows or opening 
 });
 
 
-test('whole-day grouped projects use the earliest position for cutoff and publication',async()=>{
+test('whole-day grouped projects allow cutoff after positions start but keep early publication',async()=>{
  const f=await fixture({now:()=>Date.parse('2026-11-12T12:00:00+08:00')},{window:{start:'2026-11-15T00:00:00+08:00',end:'2026-11-15T23:59:00+08:00'}});
  const positions=f.positions.map(p=>({...p,start:'2026-11-15T16:00:00+08:00',end:'2026-11-15T17:30:00+08:00',flexibleCapacity:1}));
  await f.w.configurePositions(f.parent._id,{...f.payload(),positions,deadline:'2026-11-15T14:00:00+08:00'},'owner');
@@ -379,8 +379,11 @@ test('whole-day grouped projects use the earliest position for cutoff and public
  assert.equal(f.tables[ORDINARY_GROUP_TABLE][0]['报名开关'],'开放');
  await f.w.publish(f.parent._id,{publishAt:null});
  assert.equal(f.tables[WF.events][0]['状态'],'报名中');
- const before=structuredClone(f.tables);
  for(const deadline of ['2026-11-15T16:00:00+08:00','2026-11-15T17:00:00+08:00']){
+  await f.w.configurePositions(f.parent._id,{...f.payload(),positions,deadline},'owner');
+ }
+ const before=structuredClone(f.tables);
+ for(const deadline of ['2026-11-15T23:59:00+08:00','2026-11-16T00:00:00+08:00']){
   await assert.rejects(f.w.configurePositions(f.parent._id,{...f.payload(),positions,deadline},'owner'),{statusCode:400});
   assert.deepEqual(f.tables,before);
  }
@@ -392,6 +395,23 @@ test('calendar includes only approved signed events without participant records'
  await f.w.configurePositions(f.parent._id,f.payload(),'owner');await f.w.approve(f.parent._id,'reviewer');
  const data=await f.w.calendar();assert.equal(data.events.length,1);assert.equal(data.events[0]['状态'],'可发布');assert.equal(JSON.parse(data.events[0]['报名页配置']).positionDraft.positions.length,2);assert.equal(data.registrations,undefined);
  f.tables[WF.events][0]['活动名称']='changed after approval';assert.equal((await f.w.calendar()).events.length,0);
+});
+test('registration export includes all 900 records, text student IDs and contact before hours review',async()=>{
+ const f=await fixture();
+ f.tables[WF.registrations]=Array.from({length:900},(_,i)=>({_id:`registration-${i}`,活动ID:f.parent['活动ID'],报名ID:`WR-${i}`,姓名:`合成${i}`,学号:`000${i}`,邮箱:`synthetic-${i}@example.invalid`,报名状态:i%2?'已确认':'待筛选',岗位:'引导',报名日期:'2030-10-29',报名时段:'09:00-12:00'}));
+ const file=await f.w.registrationTemplate(f.parent._id,'owner');
+ const {default:ExcelJS}=await import('exceljs'),book=new ExcelJS.Workbook();await book.xlsx.load(file.buffer);
+ const sheet=book.getWorksheet('报名信息表');
+ assert.equal(sheet.rowCount,901);assert.equal(sheet.getCell('B2').value,'0000');
+ assert.equal(sheet.getCell('C901').value,'synthetic-899@example.invalid');
+ assert.equal(sheet.getCell('H901').value,'WR-899');
+});
+test('registration export rejects denied current authority and failed scoped reads',async()=>{
+ let denied=true;
+ const f=await fixture({approvalRouting:{assign:async()=>null,assertRegistrar:async()=>{if(denied)throw Object.assign(Error('denied'),{statusCode:403});}}});
+ await assert.rejects(f.w.registrationTemplate(f.parent._id,'other'),{statusCode:403});
+ denied=false;assert.ok((await f.w.registrationTemplate(f.parent._id,'owner')).buffer.length);
+ await assert.rejects(f.w.registrationTemplate('missing','owner'));
 });
 
 

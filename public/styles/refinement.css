@@ -151,3 +151,82 @@ h1, h2, h3 { text-wrap: balance; }
   .feedback-item__head time { width:100%; margin-left:0; }
   .feedback-item__foot { align-items:flex-start; flex-direction:column; }
 }
+
+/* Dual-viewport baseline: final cascade for brand marks and carousel targets. */
+.portal .plogo__text span,
+.console .nav__brand-text span {
+  font-size: max(12px, var(--fs-caption));
+}
+
+.home-redesign .home-banner__dots button,
+.events-hero__dots button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.home-redesign .home-banner__dots button::after {
+  width: 7px;
+  height: 7px;
+  margin: 0;
+  border-radius: 50%;
+  background: #fff9;
+}
+
+.home-redesign .home-banner__dots button[aria-pressed=true]::after {
+  background: #bc1539;
+  box-shadow: 0 0 0 2px #fff9;
+}
+
+.events-hero__dots button::after {
+  content: '';
+  display: block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #d6bdb2;
+}
+
+.events-hero__dots button[aria-current=true]::after {
+  background: var(--plaza-red);
+}
+
+.home-redesign .home-banner__dots,
+.events-hero__dots {
+  gap: 0;
+}
+
+.home-redesign .home-banner__dots {
+  padding: 0;
+}
+
+@media (max-width: 960px) {
+  .home-redesign .home-banner__arrow,
+  .events-hero__arrow {
+    width: 44px;
+    height: 44px;
+  }
+
+  .home-redesign .home-banner__pause,
+  .events-hero__pause {
+    min-height: 44px;
+    padding-inline: var(--s3);
+    font-size: var(--fs-caption);
+  }
+}
+
+@media (min-width: 961px) and (hover: hover) and (pointer: fine) {
+  .home-redesign .home-banner__dots button,
+  .events-hero__dots button {
+    width: 32px;
+    height: 32px;
+  }
+}

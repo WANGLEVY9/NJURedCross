@@ -79,7 +79,7 @@
 @media(max-width:640px) {.portal .events-page.event-browser--aligned .discovery-filters {grid-template-columns:minmax(0,1fr);}}
 .events-page .discovery-campus {flex-basis:100%;}.events-page .active-filters {flex-basis:100%;}
 .events-results-heading {display:flex;justify-content:space-between;align-items:center;gap:12px;}
-.events-results-heading h2 {font-family:var(--plaza-serif);font-size:24px;color:#352d29;margin:0;border-left:5px solid var(--plaza-red);padding-left:12px;line-height:1.2;}
+.events-results-heading h2 {font-family:var(--plaza-serif);font-size:24px;color:#352d29;margin:0;padding:0 0 8px;border-bottom:1px solid color-mix(in srgb,var(--plaza-red) 40%,transparent);line-height:1.2;}
 .events-page .events-results-heading+ [role=status] {margin-top:-14px;}
 .portal .events-page .event-list,.portal .events-page .discovery-results[data-layout] .event-list {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;}
 .portal .events-page .discovery-results[data-layout] .event-list>.event-row {grid-column:auto;grid-template-columns:92px minmax(0,1fr);}
@@ -101,20 +101,15 @@
 .portal .events-page .event-row--category .event-row__action {grid-column:2;grid-row:2;justify-self:end;margin:0;align-self:end;}.events-page .event-row__action .btn {font-size:15px;min-height:42px;padding:9px 16px;}
 .events-page .event-row__action .ico {width:20px;height:20px;}
 /* 六个类别的日期条与徽章按参考稿分别着色；文字对比度均达到 4.5:1。 */
-.events-page .event-row[data-category='主席团专项'] {--category-label-bg:#f4e9fb;--category-label-ink:#7a3fa8;}
-.events-page .event-row[data-category='博爱中心'] {--category-label-bg:#fdeade;--category-label-ink:#a84a24;}
-.events-page .event-row[data-category='生命中心'] {--category-label-bg:#e2f2e6;--category-label-ink:#276b44;}
-.events-page .event-row[data-category='综事中心'] {--category-label-bg:#e6eefb;--category-label-ink:#35599f;}
-.events-page .event-row[data-category='一加助残专项'] {--category-label-bg:#e4f3e8;--category-label-ink:#276b44;}
-.events-page .event-row[data-category='献血车专项'] {--category-label-bg:#fde8e6;--category-label-ink:#a82330;}
-.events-page .event-row[data-category='排班类'] {--category-label-bg:#F9F1C0;--category-label-ink:#806515;}
-.events-page .event-row[data-category='主席团专项'] .badge {background:#f4e9fb;color:#6d3596;}
-.events-page .event-row[data-category='博爱中心'] .badge {background:#fdeade;color:#9c4220;}
-.events-page .event-row[data-category='生命中心'] .badge {background:#e2f2e6;color:#276b44;}
-.events-page .event-row[data-category='综事中心'] .badge {background:#e6eefb;color:#35599f;}
-.events-page .event-row[data-category='一加助残专项'] .badge {background:#e4f3e8;color:#276b44;}
-.events-page .event-row[data-category='献血车专项'] .badge {background:#fde8e6;color:#a82330;}
-.events-page .event-row[data-category='排班类'] .badge {background:#F9F1C0;color:#806515;}
+.events-page :is(.event-row, .badge)[data-category='主席团专项'] {--category-label-bg:#f4e9fb;--category-label-ink:#6d3596;}
+.events-page :is(.event-row, .badge)[data-category='博爱中心'] {--category-label-bg:#fdeade;--category-label-ink:#9c4220;}
+.events-page :is(.event-row, .badge)[data-category='生命中心'] {--category-label-bg:#e2f2e6;--category-label-ink:#276b44;}
+.events-page :is(.event-row, .badge)[data-category='综事中心'] {--category-label-bg:#e6eefb;--category-label-ink:#35599f;}
+.events-page :is(.event-row, .badge)[data-category='一加助残专项'] {--category-label-bg:#e4f3e8;--category-label-ink:#276b44;}
+.events-page :is(.event-row, .badge)[data-category='献血车专项'] {--category-label-bg:#fde8e6;--category-label-ink:#a82330;}
+.events-page :is(.event-row, .badge)[data-category='排班类'],
+.events-page :is(.event-row, .badge)[data-category='排班专项'] {--category-label-bg:#F9F1C0;--category-label-ink:#806515;}
+.events-page .event-row[data-category] .badge {background:var(--category-label-bg);color:var(--category-label-ink);}
 .events-page .event-row .badge {font-size:14px;}.events-page .event-row .status-indicator {font-size:13px;}
 .events-guide {display:flex;align-items:center;gap:22px;padding:20px;background:#faeeea;border-radius:12px;color:var(--plaza-red);}
 .events-guide h2 {font-size:18px;white-space:nowrap;margin:0;}.events-guide ol {list-style:none;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;padding:0;margin:0;flex:1;}
@@ -302,4 +297,27 @@ body.portal:has(.plaza-example) {display:block;height:auto;min-height:100vh;over
  .portal .outreach-page .outreach-channel {padding:22px;gap:14px;}
  .portal .materials-page .square-card {min-height:200px;padding:22px;gap:12px;}
  .portal .materials-page .square-card__icon {width:48px;height:48px;}
+}
+
+/* Final cascade for plaza route bundle. */
+.portal .plogo__text span { font-size: max(12px, var(--fs-caption)); }
+.events-hero__dots { gap: 0; }
+.events-hero__dots button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  touch-action: manipulation;
+}
+.events-hero__dots button::after { content: ''; display: block; width: 10px; height: 10px; border-radius: 50%; background: #d6bdb2; }
+.events-hero__dots button[aria-current=true]::after { background: var(--plaza-red); }
+.events-hero__arrow { width: 44px; height: 44px; }
+.events-hero__pause { min-height: 44px; font-size: var(--fs-caption); padding-inline: var(--s3); }
+@media (min-width: 961px) and (hover: hover) and (pointer: fine) {
+  .events-hero__dots button { width: 32px; height: 32px; }
+  .events-hero__arrow { width: 42px; height: 42px; }
+  .events-hero__pause { min-height: 32px; }
 }

@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { PDFDocument, StandardFonts } from 'pdf-lib';
 import { extractSupportingFields } from '../lib/reimbursements/supporting-fields.js';
+import { extractInvoiceFields } from '../lib/reimbursements/invoice-fields.js';
 import { processLocalAnalysis } from '../lib/reimbursements/analysis-processor.js';
 import { reimbursementCrossChecks } from '../public/app/shared/reimbursement-cross-checks.js';
+import { reimbursementApprovalIssue, reimbursementEvidence, schoolExpenseLimit } from '../lib/reimbursements/evidence-policy.js';
 import { createInvoiceChecks } from '../public/app/shared/invoice-checks.js';
 import { reimbursementTableFixture } from './helpers/reimbursement-table-fixture.js';
 import { setImmediate } from 'node:timers/promises';
@@ -24,6 +26,16 @@ function fixture({ invoice = '100.00', payment = '80.00', claimed = 8000, name =
   return { bundle, request, analyses };
 }
 const verify = f => reimbursementCrossChecks(f.request, f.bundle, f.analyses)[0];
+
+test('a single PDF invoice product uses the item column and strips explicit promotion labels', () => {
+  const cell = (text, x, y) => ({ text, x, y, width: .09, height: .02, confidence: null });
+  const invoice = extractInvoiceFields([
+    cell('项目名称', .1, .4), cell('规格型号', .31, .4), cell('税额', .85, .4),
+    cell('*文具*相纸（促销套装）', .1, .44), cell('20.00', .75, .44),
+    cell('合计', .1, .5), cell('价税合计（小写）￥20.00', .1, .55),
+  ]);
+  assert.deepEqual(invoice.goodsNames, ['相纸']);
+});
 
 test('explicit supporting labels extract names and payments without using prices, discounts or filenames', () => {
   const fields = extractSupportingFields(textBoxes(['商品名称：活动用抽纸', '商品总价：100.00', '优惠金额：20.00', '实付款：￥80.00']));
@@ -93,6 +105,33 @@ test('a multi-page invoice is counted once, while duplicate invoice files across
   assert.equal(verify(f).amount.state, 'different'); assert.match(verify(f).amount.message, /重复/);
 });
 
+test('amount policy reads stored recognition metadata without loading originals', () => {
+  const f = fixture({ claimed: 10000 });
+  f.bundle.files = f.bundle.originalUrls.map(file => ({
+    ...file,
+    get bytes() { throw new Error('finance eligibility must not read private material bodies'); },
+  }));
+  f.bundle.sources[0].checks = [{ ...f.analyses[0], page: 1, state: 'matched' }];
+  f.bundle.analyses = f.analyses.slice(1);
+  const verified = reimbursementEvidence(f.request, f.bundle);
+  assert.equal(verified.filenameCents, 8000);
+  assert.equal(schoolExpenseLimit(f.request.expenseItems[0], verified), 8000);
+  f.bundle.analyses[1].supporting.paidAmount = field('', 'conflict');
+  assert.equal(reimbursementEvidence(f.request, f.bundle).filenameCents, 10000);
+});
+
+test('one order with several items gets one verified filename amount rather than repeating that amount per item', () => {
+  const f = fixture({ claimed: 10000 });
+  f.bundle.analyses = f.analyses;
+  Object.assign(f.request, { materialRulesVersion: 1, singleOrderConfirmed: true });
+  Object.assign(f.request.expenseItems[0], { amountCents: 6000, category: '物资采买' });
+  f.request.expenseItems.push({ id: 'b', amountCents: 4000, label: '另一项', category: '物资采买' });
+  const verified = reimbursementEvidence(f.request, f.bundle);
+  assert.equal(verified.filenameCents, 8000);
+  assert.equal(verified.orderCents, 8000);
+  assert.equal(verified.amounts.size, 0);
+});
+
 test('initial-review queue serially checks only associated evidence types and skips unrelated or Word materials', async () => {
   const calls = [], checks = createInvoiceChecks(async (id, page) => { calls.push(page); return { analysis: { page } }; }, { includeSupporting: true });
   checks.ensure({ id: 'mixed', pageCount: 4, sources: [
@@ -131,4 +170,28 @@ test('Table/Box restore supporting-page results and original bytes without chang
   const restored = f.makeService(options);
   assert.equal((await restored.analyze(owner, bundle.id, 1)).cached, true);
   assert.equal(inputs.length, 1); assert.equal((await restored.get(owner, request.id)).request.status, 'pending');
+});
+
+test('shared payment uses the explicit order share, with an upper bound from the recognized bill total', () => {
+  const f = fixture({ invoice: '90.00', payment: '180.00', claimed: 9000 });
+  f.bundle.sources[2].materialType = '共用付款账单';
+  f.bundle.analyses = f.analyses;
+  f.request.sharedPaymentCents = 7000;
+  assert.equal(verify(f).referenceCents, 7000);
+  f.request.sharedPaymentCents = 18001;
+  const invalid = reimbursementEvidence(f.request, f.bundle);
+  assert.match(reimbursementApprovalIssue(f.request, invalid), /超过共用付款账单总额/);
+});
+
+test('recognized differences and tax IDs are enforced at approval', () => {
+  const f = fixture({ claimed: 10000 });
+  f.bundle.analyses = f.analyses;
+  Object.assign(f.request, { materialRulesVersion: 1, singleOrderConfirmed: true });
+  f.request.expenseItems[0].category = '物资采买';
+  assert.match(reimbursementApprovalIssue(f.request, reimbursementEvidence(f.request, f.bundle)), /注明原因/);
+  f.request.voucherNote = '合成优惠券20元';
+  assert.equal(reimbursementApprovalIssue(f.request, reimbursementEvidence(f.request, f.bundle)), '');
+  f.analyses[0].buyer = { state: 'matched' };
+  f.analyses[0].invoice.fields.buyerTaxId = field('000000000000000000');
+  assert.match(reimbursementApprovalIssue(f.request, reimbursementEvidence(f.request, f.bundle)), /纳税人识别号不符/);
 });

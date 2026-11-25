@@ -44,9 +44,9 @@ input, textarea { caret-color: var(--accent); }
 .portal .program__body p { line-height: var(--reading-leading); }
 
 /* A calmer, more compact workspace; preserve user-selected density and theme colours. */
-.console .nav__item { border-radius: 8px; min-height: 42px; padding-inline: 12px; margin-bottom: 4px; }
+.console .nav__item { border-radius: 8px; min-height: 40px; padding-inline: 12px; }
 .console .nav__item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.console .nav__item:hover .ico { transform: none; }
+.console .nav__item:hover .ico { color: var(--accent); }
 .console .nav__workspace { border-radius: 10px; }
 .console .wsregion { border-radius: var(--surface-radius); padding: 24px; }
 .console .wsregion__head { align-items: center; padding-bottom: 16px; }
