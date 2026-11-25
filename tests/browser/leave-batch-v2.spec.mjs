@@ -10,6 +10,7 @@ test('leave range selection and select-all submit thirty decisions with empty ex
  // asynchronous first-visit reminder so its scrim cannot intercept clicks.
  await page.addInitScript(()=>{sessionStorage.setItem('njurc:registration-reminder:v1','shown');});
  await page.goto('/login');
+ await expect.poll(()=>page.evaluate(()=>Boolean(document.getElementById('main')))).toBe(true);
  await page.evaluate(()=>{document.getElementById('overlay-root')?.replaceChildren();});
  await page.evaluate(async()=>{
   const {batchLeaveButton}=await import('/app/console/pages/activity-leave-review.js');

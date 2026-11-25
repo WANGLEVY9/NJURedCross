@@ -1,4 +1,5 @@
 import {h,setVars} from '../../core/dom.js';
+import {bindActivityWorkspaceScroll} from '../activity-workspace-scroll.js';
 import {panel,field,button,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import {notify,reportError} from '../../core/toast.js';
@@ -26,6 +27,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
     });
   }
   const noticeObserver=new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(width!==observedWidth){observedWidth=width;scheduleNoticeSize();}});noticeObserver.observe(root);
+  const releaseScroll=bindActivityWorkspaceScroll(form,{enabled:()=>root.closest('.activity-v2')!==null});
 
   function update(key,{automatic=false}={}){if(!automatic)manuallyChanged=true;if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}if(automatic&&!manuallyChanged)pristine=JSON.stringify(content);scheduleNoticeSize();status.textContent=dirty()?'有未保存的修改':'已保存';if(previewSubmit)previewSubmit.disabled=true;}
   function input(key,label,type='text',extra={}){
@@ -135,5 +137,5 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),form);
   renderDetails();for(const b of [saveButton,previewButton])b.disabled=!editable;
   if(projectPeople)void projectPeople.refresh();else void refreshResponsible();
-  return {node:root,saveButton,previewButton:showSubmissionActions?previewButton:null,hasUnsaved:()=>JSON.stringify(content)!==pristine,isSaving:()=>busy,dispose:()=>{disposed=true;projectPeople?.dispose();cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
+  return {node:root,saveButton,previewButton:showSubmissionActions?previewButton:null,hasUnsaved:()=>JSON.stringify(content)!==pristine,isSaving:()=>busy,dispose:()=>{disposed=true;projectPeople?.dispose();releaseScroll();cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};
 }

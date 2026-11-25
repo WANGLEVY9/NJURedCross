@@ -273,9 +273,14 @@ body.is-resizing-activity-directory {
    in one fixed-height toolbar. */
 .activity-v2-detail {
   background: var(--surface);
+  min-width: 0;
+  position: relative;
 }
 
 .activity-v2-heading {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   align-items: center;
   gap: var(--s4);
   padding: var(--s3) var(--s4);
@@ -334,6 +339,9 @@ body.is-resizing-activity-directory {
 
 .activity-draft-toolbar,
 .activity-v2 .activity-draft-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
   align-items: center;
   gap: var(--s2);
   padding: var(--s2) var(--s4);
@@ -447,6 +455,122 @@ body.is-resizing-activity-directory {
 
 .activity-v2 .panel__body {
   padding: var(--s4);
+}
+
+/* One detail surface owns the vertical scroll; nested form groups are aligned
+   to the same 24px rhythm instead of introducing mixed padding scales. */
+.activity-v2 .activity-draft-workspace__form {
+  overscroll-behavior: auto;
+  scrollbar-gutter: stable;
+  padding: var(--s5) var(--s6);
+  gap: var(--s5);
+}
+
+.activity-v2 .activity-draft-workspace__form>.panel,
+.activity-v2 .activity-draft-workspace__fields>.panel {
+  border-color: var(--workspace-line);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.activity-v2 .activity-draft-workspace__form>.panel>.panel__head {
+  border-bottom: 1px solid var(--workspace-line);
+}
+
+.activity-v2 .activity-draft-grid {
+  gap: var(--s3) var(--s4);
+  align-items: start;
+}
+
+.activity-v2 .activity-draft-workspace__form :is(.input, .select, .textarea, .select-menu__trigger, input:not([type=checkbox]):not([type=radio]), textarea) {
+  width: 100%;
+  min-height: var(--workspace-control-h);
+  border-radius: var(--workspace-radius-sm);
+  border-color: var(--workspace-line);
+  background: var(--surface);
+}
+
+.activity-v2 .activity-draft-table {
+  border: 1px solid var(--workspace-line);
+  border-radius: var(--workspace-radius-sm);
+  background: var(--surface);
+  overflow: auto;
+}
+
+.activity-v2 .activity-draft-table table {
+  min-width: 900px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.activity-v2 .activity-draft-table th:nth-child(1),
+.activity-v2 .activity-draft-table td:nth-child(1) { width: 22%; }
+.activity-v2 .activity-draft-table th:nth-child(2),
+.activity-v2 .activity-draft-table td:nth-child(2) { width: 20%; }
+.activity-v2 .activity-draft-table th:nth-child(3),
+.activity-v2 .activity-draft-table td:nth-child(3) { width: 32%; }
+.activity-v2 .activity-draft-table th:nth-child(4),
+.activity-v2 .activity-draft-table td:nth-child(4) { width: 16%; }
+.activity-v2 .activity-draft-table th:nth-child(5),
+.activity-v2 .activity-draft-table td:nth-child(5) { width: 10%; }
+
+.activity-v2 .activity-draft-table th,
+.activity-v2 .activity-draft-table td {
+  padding: var(--s3);
+  border-bottom: 1px solid var(--workspace-line);
+  vertical-align: top;
+}
+
+.activity-v2 .activity-draft-table th {
+  background: var(--workspace-soft);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  color: var(--workspace-muted);
+  text-align: left;
+}
+
+.activity-v2 .activity-draft-table tr.activity-position-heading th {
+  padding: var(--s3);
+  border-bottom: 0;
+  background: var(--surface);
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+  color: var(--text-primary);
+}
+
+.activity-v2 .activity-draft-table td[data-label="操作"] {
+  vertical-align: middle;
+}
+
+.activity-v2 .activity-draft-table td[data-label="操作"]>.btn {
+  min-height: 36px;
+  width: 100%;
+  padding: 0 var(--s3);
+  margin-bottom: var(--s1);
+}
+
+.activity-v2 .activity-draft-table .field {
+  min-width: 0;
+}
+
+.activity-v2 .activity-draft-table .field+.field {
+  margin-top: var(--s2);
+}
+
+.activity-v2 .activity-draft-table tr:not(.activity-position-heading):hover>td {
+  background: var(--workspace-soft);
+}
+
+.activity-v2 .activity-draft-workspace__form textarea {
+  min-height: 112px;
+  resize: vertical;
+}
+
+.activity-v2 .activity-draft-workspace__form>.panel>.panel__body>.activity-draft-grid:has(.activity-notice-field),
+.activity-v2 .activity-draft-workspace__form>.panel>.panel__body>.activity-notice-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .activity-v2 .field>label,
@@ -613,7 +737,12 @@ body.is-resizing-activity-directory {
 
   .activity-v2 .activity-draft-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--s4);
+    gap: var(--s3) var(--s4);
+  }
+
+  .activity-v2 .activity-draft-grid>.activity-draft-field-wide,
+  .activity-v2 .activity-draft-grid>.activity-project-people {
+    grid-column: 1 / -1;
   }
 }
 
@@ -627,6 +756,10 @@ body.is-resizing-activity-directory {
     order: 3;
     width: 100%;
     overflow-x: auto;
+  }
+
+  .activity-v2 .activity-draft-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -689,6 +822,7 @@ body.is-resizing-activity-directory {
   }
 
   .activity-v2 .activity-draft-toolbar {
+    position: static;
     display: flex;
     flex-wrap: nowrap;
     gap: var(--s2);
@@ -747,6 +881,11 @@ body.is-resizing-activity-directory {
     gap: var(--s3);
   }
 
+  .activity-v2 .activity-draft-workspace__form {
+    padding: var(--s3);
+    gap: var(--s3);
+  }
+
   .activity-v2 .activity-draft-grid,
   .activity-v2 .activity-project-people {
     grid-template-columns: minmax(0, 1fr);
@@ -758,6 +897,10 @@ body.is-resizing-activity-directory {
 
   .activity-v2 .activity-draft-table {
     overflow: visible;
+  }
+
+  .activity-v2 .activity-draft-table table {
+    min-width: 0;
   }
 
   .activity-v2 .activity-draft-table table,
@@ -816,6 +959,10 @@ body.is-resizing-activity-directory {
 
   .activity-v2 .activity-draft-table td[data-label]>.field+.field {
     margin-top: var(--s2);
+  }
+
+  .activity-v2 .activity-draft-table td[data-label] :is(.input, .select, .textarea, input:not([type=checkbox]):not([type=radio]), textarea) {
+    width: 100%;
   }
 
   .activity-v2 .activity-draft-table td[data-label="操作"] {
