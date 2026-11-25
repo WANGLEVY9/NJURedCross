@@ -5,14 +5,15 @@ import { getDocument, OPS } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { processPdfs } from '../lib/reimbursements/pdf.js';
 import { pictureFixture } from './helpers/reimbursement-materials.js';
 
-async function invoiceBytes(label, { pages = 1, size = [595, 842], rotate = 0 } = {}) {
+async function invoiceBytes(label, { pages = 1, size = [595, 842], rotate = 0, useObjectStreams = true } = {}) {
   const doc = await PDFDocument.create();
   for (let index = 0; index < pages; index++) {
     const page = doc.addPage(size);
     page.setRotation(degrees(rotate));
     page.drawText(`${label}-${index + 1}`, { x: 40, y: size[1] - 80, size: 14 });
+    page.drawRectangle({ x: 30, y: size[1] - 110, width: 40, height: 12 });
   }
-  return Buffer.from(await doc.save());
+  return Buffer.from(await doc.save({ useObjectStreams }));
 }
 
 async function readPages(bytes) {
@@ -29,6 +30,31 @@ async function readPages(bytes) {
     }
   } finally { await task.destroy(); }
   return pages;
+}
+
+/** Reproduces a producer that puts the first indirect object after an inline
+ * PDF comment; pdf-lib otherwise loses that object at its unchanged xref offset. */
+function inlineHeaderPdf(bytes) {
+  const source = Buffer.from(bytes);
+  const firstObject = source.subarray(16).toString('latin1').match(/^\d+ \d+ obj/);
+  if (!firstObject) throw new Error('Expected an indirect object in the synthetic PDF');
+  const comment = Buffer.from('%%SYNTH:1.0 ');
+  const patched = Buffer.concat([source.subarray(0, 15), comment, source.subarray(16)]);
+  const delta = comment.length - 1;
+  const text = patched.toString('latin1');
+  const xref = text.lastIndexOf('\nxref\n') + 1;
+  const lines = text.slice(xref, text.indexOf('trailer', xref)).split('\n');
+  for (let index = 2; index < lines.length && /^\d{10} \d{5} /.test(lines[index]); index++) {
+    const offset = Number(lines[index].slice(0, 10));
+    if (offset > 0) lines[index] = String(offset + delta).padStart(10, '0') + lines[index].slice(10);
+  }
+  const shifted = lines.join('\n');
+  const trailer = text.indexOf('trailer', xref);
+  const combined = Buffer.from(text.slice(0, xref) + shifted + text.slice(trailer), 'latin1');
+  const header = combined.indexOf(Buffer.from('startxref\n')) + 10;
+  const tail = combined.indexOf(10, header);
+  combined.write(`${xref}`.padStart(tail - header, '0'), header, 'latin1');
+  return combined;
 }
 
 const supporting = (name, materialType, bytes) => ({ name, kind: 'supporting', materialType, bytes });
@@ -78,7 +104,7 @@ test('a PDF order pairs with a payment image and keeps its extra pages', async (
   const pages = await readPages(result.merged);
   assert.deepEqual(pages.map(page => page.text), ['ORDER-1', 'ORDER-2']);
   assert.equal(pages[0].images, 1);
-  assert.equal(pages[1].images, 0);
+  assert.equal(pages[1].images, 1);
 });
 
 test('rotated PDF evidence keeps the order on the left and payment on the right', async () => {
@@ -159,4 +185,41 @@ test('order, logistics and payment documents occupy the left, center and right o
   const [page] = await readPages(result.merged);
   assert.equal(page.text, 'ORDER-1LOGISTICS-1PAYMENT-1');
   assert.ok(page.locations[0][0] < 198 && page.locations[1][0] > 198 && page.locations[1][0] < 397 && page.locations[2][0] > 397);
+});
+
+test('an invoice whose first object shares a PDF comment line keeps its text and images', async () => {
+  const invoice = await invoiceBytes('INLINE-HEADER', { size: [609.44, 394.01], useObjectStreams: false });
+  const bytes = inlineHeaderPdf(invoice);
+  const result = await processPdfs([{ name: 'invoice.pdf', kind: 'invoice', bytes }]);
+  assert.equal(result.pageCount, 1);
+  assert.equal(result.sources[0].startPage, 1);
+  assert.equal((await readPages(result.merged))[0].text, 'INLINE-HEADER-1');
+  assert.ok((await PDFDocument.load(result.merged)).getPages().every(page => page.node.Contents()), 'no blank evidence pages');
+  await assert.rejects(PDFDocument.load(bytes).then(doc => doc.getPageCount()),
+    'the fixture reproduces pdf-lib losing the inline object');
+});
+
+test('courier receipts and route captures join the order and payment screenshots on one page', async () => {
+  const result = await processPdfs([
+    supporting('waybill.pdf', '快递单', await invoiceBytes('WAYBILL')),
+    supporting('route.pdf', '快递起终点截图', await invoiceBytes('ROUTE')),
+    supporting('logistics.pdf', '物流截图', await invoiceBytes('LOGISTICS')),
+    supporting('order.pdf', '订单截图', await invoiceBytes('ORDER')),
+    supporting('payment.pdf', '付款截图', await invoiceBytes('PAYMENT')),
+    { name: 'invoice.pdf', kind: 'invoice', bytes: await invoiceBytes('INVOICE') },
+  ]);
+  assert.equal(result.pageCount, 3);
+  assert.deepEqual(result.sources.map(source => source.startPage), [2, 2, 3, 2, 3, 1]);
+  const pages = await readPages(result.merged);
+  assert.equal(pages[0].text, 'INVOICE-1');
+  assert.equal(pages[1].text, 'ORDER-1WAYBILL-1ROUTE-1');
+  assert.equal(pages[2].text, 'LOGISTICS-1PAYMENT-1');
+});
+
+test('multiple pages of combined screenshots fill three columns per sheet', async () => {
+  const result = await processPdfs([
+    supporting('shots.pdf', '订单和付款截图', await invoiceBytes('SHOT', { pages: 4 })),
+  ]);
+  assert.equal(result.pageCount, 2);
+  assert.deepEqual((await readPages(result.merged)).map(page => page.text), ['SHOT-1SHOT-2SHOT-3', 'SHOT-4']);
 });
