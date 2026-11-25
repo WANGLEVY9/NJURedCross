@@ -537,7 +537,8 @@ test('投递结论：区分已发出 / 发送失败 / 无收件人', () => {
 });
 
 test('投递结语：只有 truly sent 才出现「已发投稿人」，失败原因各有补救动作', () => {
-  assert.equal(deliverySummary('sent'), '退回意见已发投稿人');
+  // 2026-11-25：退回邮件开始随信附《审核意见》.docx，结语必须如实说明「含附件」。
+  assert.equal(deliverySummary('sent'), '退回意见（含意见 Word 附件）已发投稿人');
   // 通过不再即时发信：统一回「已排入汇总」，语气不承诺「已发送」。
   assert.equal(deliverySummary('digest'), '待办已排入 08:00 / 20:00 汇总提醒');
   assert.ok(deliverySummary('failed').includes('发送失败'));

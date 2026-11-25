@@ -122,7 +122,7 @@ import * as showcaseApi from './lib/attachment/showcase.js';
 import * as reviewFlow from './lib/attachment/review.js';
 import * as digestFlow from './lib/attachment/digest.js';
 import {liaisonMailRecipients} from './lib/attachment/liaison-mail-recipients.js';
-import { applyReviewStep, authorizeOpinionExport } from './lib/attachment/review-policy.js';
+import { applyReviewStep, authorizeOpinionExport, authorizeOpinionResend } from './lib/attachment/review-policy.js';
 import { findDirectoryMembers, normalizeMemberQuery } from './lib/attachment/members.js';
 import { syncTemplateRow, isWrittenArticleSubmission } from './lib/attachment/template-sync.js';
 import * as taskApi from './lib/attachment/tasks.js';
@@ -145,7 +145,7 @@ import {
   readAgentBusinessContext,
 } from './lib/agent/business-context.js';
 import { createFileAgentTaskStore } from './lib/agent/task-store.js';
-import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor, attachmentFromRow, ATTACHMENT_STATUS, ATTACHMENT_PROVIDER_NJUBOX } from './lib/attachment/store.js';
+import { SUBMISSION_ATTACHMENT_TABLE, MEDIA_TABLE, SHOWCASE_TABLE, formatAttachmentRefs, parseAttachmentRefs, normalizePenName, PEN_NAME_MIN, PEN_NAME_MAX, ARTICLE_CATEGORIES, SHOWCASE_GROUPS, LIAISON_TABLE, CHECKLIST_TABLE, TASK_TABLE, TASK_CLAIM_TABLE, SKILL_TABLE, PUBLISH_FORMS, normalizePublishForm, parseReviewTrail, canSchedule, canReturnAtLevel, submissionKindFor, attachmentFromRow, ATTACHMENT_STATUS, ATTACHMENT_PROVIDER_NJUBOX, mergeReviewTrailEntry } from './lib/attachment/store.js';
 import { downloadBuffer as downloadBoxBuffer } from './lib/attachment/box.js';
 import { createSessionRevocations } from './lib/identity/session-revocations.js';
 import {
@@ -2158,6 +2158,37 @@ function reviewChainView(source, assignees = []) {
     current: state.current,
     assignees: picked,
     trail,
+  };
+}
+
+/* --- 审核意见 Word 附件 --- */
+const OPINION_DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+/**
+ * 生成《审核意见》.docx 作为邮件附件（退回与重发共用）。
+ *
+ * 2026-11-25：此前退回邮件只有正文，前端却承诺「会收到带检查清单的 Word」——
+ * 投稿人收到信也说「看不到附件」。现在把同一份 Word 真正挂上；
+ * checklist 用模板全量 + 本轮勾选状态，重发时按轨迹里的模板ID 还原。
+ */
+function opinionAttachmentFor({ shape, entry, opinions, template, checkedIds }) {
+  const checklist = (Array.isArray(template) ? template : [])
+    .map((item) => ({ ...item, checked: checkedIds.has(String(item.id)) }));
+  const docx = reviewFlow.buildOpinionDocx({
+    submission: {
+      title: shape.title,
+      articleCategory: reviewFlow.reviewScopeOf(shape) || '未登记',
+      editor: shape.editor || '',
+      reviewLevelText: `第 ${entry.level} 级 · ${entry.name}`,
+    },
+    checklist,
+    opinions,
+    meta: { level: entry.level, generatedAt: new Date().toISOString() },
+  });
+  return {
+    filename: `审核意见-${String(shape.title || shape.id || '未命名稿件').replace(/[\\/:*?"<>|]/g, '_').slice(0, 40)}.docx`,
+    content: docx,
+    contentType: OPINION_DOCX_TYPE,
   };
 }
 
@@ -6249,6 +6280,8 @@ if (url.pathname.startsWith('/api/public/')) {
           readChecklist, shapeOf: reviewShapeOf,
           // 初审「含美编招募」：按姓名或学号精确命中名册唯一一人，服务端只认名册不认手填。
           readMember: query => findDirectoryMembers(client, query),
+          // 退回要等邮件发完才能把投递结果写进轨迹，这里先不落库，末尾一次写入。
+          deferWrite: true,
         });
         const opinions = Array.isArray(body.opinions) ? body.opinions : [];
         // 2026-11-11：作用域只认「推文类别」（文创设计退化为内容类型）；缺失即空串，
@@ -6265,6 +6298,17 @@ if (url.pathname.startsWith('/api/public/')) {
         // 通过固定为 digest（等汇总）。
         let deliveryStatus = '';
         if (decision === 'return') {
+          // 逐条意见以轨迹里规范化后的为准（同一次请求，两处必须一致）。
+          const normalizedOpinions = Array.isArray(advance.entry.opinions)
+            ? advance.entry.opinions
+            : reviewFlow.normalizeOpinions(opinions);
+          const checkedIds = new Set((Array.isArray(body.checklist) ? body.checklist : [])
+            .map((item) => String(item && typeof item === 'object' ? (item.id ?? item['模板ID'] ?? '') : item))
+            .filter(Boolean));
+          const attachment = opinionAttachmentFor({
+            shape, entry: advance.entry, opinions: normalizedOpinions,
+            template: await readChecklist(client), checkedIds,
+          });
           deliver = await reviewFlow.deliverOpinion({
             mail: sendMail,
             configured: mailConfigured,
@@ -6279,15 +6323,31 @@ if (url.pathname.startsWith('/api/public/')) {
             },
             entry: advance.entry,
             next: advance.next,
-            opinions,
+            opinions: normalizedOpinions,
             assignees: stepAssignees,
             // 对接人与美编改走汇总；这里只发作者，避免一次退回连发 4 封。
             audience: ['submitter'],
+            attachments: [attachment],
+            attachmentName: attachment.filename,
           });
           deliveryStatus = reviewFlow.deliveryOutcome(deliver);
+          // 溯源：把「发给了谁、什么时候、有没有失败」写进这一轮退回条目。
+          // 投稿人说没收到时，负责人不必再猜，也不必重新退一次。
+          const mergedTrail = mergeReviewTrailEntry(
+            advance.patch.审核轨迹,
+            { level: advance.entry.level, at: advance.entry.at, decision: 'return' },
+            { delivery: reviewFlow.deliveryRecord(deliver) },
+          );
+          advance.patch.审核轨迹 = mergedTrail;
+          // 响应里的 step 也要带投递结果，前端不必再拉一次链才看得到失败原因。
+          const mergedEntry = parseReviewTrail(mergedTrail)
+            .find((item) => item.level === advance.entry.level && item.at === advance.entry.at);
+          if (mergedEntry) advance.entry = mergedEntry;
         } else {
           deliveryStatus = 'digest';
         }
+        // 状态 + 轨迹（含投递结果）一次写入；deferWrite 保证没有中间态。
+        await client.updateRow(outreachSubmissionTable, existing._id, advance.patch);
         // 2026-11-24：文字稿件终审通过 → 自动在「新媒体审核表」建一行（免人工二次抄写）。
         // 台账写入失败不回滚审核结果（用户已点通过），但必须把原因带回前端并留审计。
         let templateSync = null;
@@ -6381,6 +6441,86 @@ if (url.pathname.startsWith('/api/public/')) {
       });
       res.end(docx);
       return true;
+    }
+    // POST /api/outreach/reviews/:contentId/opinion/resend —— 重发某一轮退回意见
+    //
+    // 2026-11-25：投稿人说「没收到 / 看不到附件」时，负责人不必再退一次
+    // （制度同一级只允许一轮意见，再退会被 409 拦住）。这里重发**同一轮**意见：
+    // 不改审核状态、不推进层级、不新增退回次数，只在轨迹里追加一条重发记录。
+    const reviewResend = url.pathname.match(/^\/api\/outreach\/reviews\/([^/]+)\/opinion\/resend$/);
+    if (reviewResend && req.method === 'POST') {
+      const contentId = decodeURIComponent(reviewResend[1]);
+      const body = await readJson(req);
+      return await withOutreachReview(async () => {
+        const rows = await readOutreachSubmissionRows(client);
+        const existing = rows.find((row) => String(row['投稿ID'] || '') === contentId);
+        if (!existing) return json(res, 404, { ok: false, message: '投稿不存在，无法重发意见。' });
+        const shape = reviewShapeOf(existing);
+        const assignees = await readOutreachAssignees(client);
+        authorizeOpinionResend(shape, accountsByUsername.get(session.username), assignees);
+        const returns = parseReviewTrail(shape.reviewTrail)
+          .filter((entry) => entry && entry.decision === 'return');
+        if (!returns.length) {
+          return json(res, 409, { ok: false, message: '这篇稿件还没有已留存的退回意见，无需重发。' });
+        }
+        const wantedAt = String(body.at || '').trim();
+        const entry = wantedAt
+          ? returns.find((item) => String(item.at || '') === wantedAt)
+          : returns[returns.length - 1];
+        if (!entry) {
+          return json(res, 404, { ok: false, message: '找不到该轮退回意见（可能已被清理），请刷新后重试。' });
+        }
+        const resends = Array.isArray(entry.delivery?.resends) ? entry.delivery.resends : [];
+        const attempt = resends.length + 1;
+        const normalizedOpinions = reviewFlow.normalizeOpinions(entry.opinions);
+        const checkedIds = new Set((Array.isArray(entry.checklist) ? entry.checklist : []).map(String));
+        const attachment = opinionAttachmentFor({
+          shape, entry, opinions: normalizedOpinions,
+          template: await readChecklist(client), checkedIds,
+        });
+        const deliver = await reviewFlow.deliverOpinion({
+          mail: sendMail,
+          configured: mailerStatus().configured,
+          category: reviewFlow.reviewScopeOf(shape),
+          submission: {
+            id: contentId, title: shape.title, editor: shape.editor,
+            editorEmail: accountsByUsername.get(shape.editor)?.email || '',
+            submitterEmail: shape.submitterEmail || '',
+          },
+          entry, next: null,
+          opinions: normalizedOpinions,
+          assignees: reviewFlow.assigneesForCategory(assignees, reviewFlow.reviewScopeOf(shape)),
+          audience: ['submitter'],
+          attachments: [attachment],
+          attachmentName: attachment.filename,
+          attempt,
+        });
+        const record = reviewFlow.deliveryRecord(deliver);
+        const updatedTrail = mergeReviewTrailEntry(shape.reviewTrail, {
+          level: entry.level, at: entry.at, decision: 'return',
+        }, {
+          delivery: {
+            ...(entry.delivery && typeof entry.delivery === 'object' ? entry.delivery : {}),
+            ...record,
+            resends: [...resends, {
+              at: record.at, by: session.username, attempt,
+              status: record.status, recipients: record.recipients, failures: record.failures,
+            }],
+          },
+        });
+        await client.updateRow(outreachSubmissionTable, existing._id, { 审核轨迹: updatedTrail });
+        await recordAudit(req, session, 'outreach.review.opinion.resend', contentId, 'success', {
+          level: entry.level, at: String(entry.at || ''), attempt, status: record.status,
+        });
+        return json(res, 200, {
+          ok: true,
+          delivery: record,
+          deliveryStatus: record.status,
+          attempt,
+          chain: reviewChainView({ ...existing, 审核轨迹: updatedTrail }, assignees),
+          message: `第 ${attempt} 次重发：${reviewFlow.deliverySummary(record.status)}`,
+        });
+      });
     }
     const outreachPublication = url.pathname.match(/^\/api\/outreach\/publications\/([^/]+)\/schedule$/);
     if (outreachPublication && req.method === 'POST') {

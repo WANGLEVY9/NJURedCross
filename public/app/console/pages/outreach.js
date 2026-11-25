@@ -96,6 +96,8 @@ function openReviewDrawer({
   /* ---- 审核链进度 ---- */
   const chainSlot = h('div', { class: 'stack-2' });
   const assigneeSlot = h('div', { class: 'stack-2' });
+  /* ---- 审核记录（退回意见 + 邮件投递溯源）---- */
+  const historySlot = h('div', { class: 'stack-3' });
 
   /* ---- 美编登记（文字稿件初审「含美编招募」）----
      制度把招募放在初审，但系统原先没有登记口，导致终审写不进「新媒体审核表」的
@@ -135,7 +137,7 @@ function openReviewDrawer({
         ? `通过前须逐项确认全部检查项（已确认 ${checked.size}/${total}）；末级通过后进入渠道排期，仍需人工确认才对外发布。`
         : '通过前须逐项确认全部检查项；末级通过后进入渠道排期，仍需人工确认才对外发布。';
     }
-    return '退回后投稿人会收到带检查清单的《审核意见》Word；同一级最多退回一次。';
+    return '退回后投稿人会收到《审核意见》邮件（正文 + Word 附件）；同一级最多退回一次，对方未收到可在下方审核记录中重发。';
   }
 
   function setDecision(value) {
@@ -272,6 +274,7 @@ function openReviewDrawer({
   /* ---- 渲染：审核链 + 责任人 ---- */
   function renderChain() {
     clear(chainSlot);
+    clear(historySlot);
     if (!chain) return;
     // 服务端 reviewChainView 返回 steps（含 done/returnRounds）；旧字段名 chain 仅作兜底。
     const nodes = Array.isArray(chain.steps) ? chain.steps : (Array.isArray(chain.chain) ? chain.chain : []);
@@ -292,6 +295,137 @@ function openReviewDrawer({
         : notice(`当前待「${chain.current?.name || '—'}」处理。`, { tone: 'info', iconName: 'info' }),
     );
     syncStageControls();
+    renderHistory();
+  }
+
+  /* ---- 审核记录：每一轮意见的原文、投递结果与重发入口 ----
+     2026-11-25：投稿人反馈「没收到修改意见」时，审核人原先只能整篇再退一次
+     （制度不允许），或者翻聊天记录找原文。现在把轨迹里的意见、附件与投递状态
+     直接摊在抽屉里，并允许对同一轮意见重发，不改变审核状态与退回次数。 */
+  const DELIVERY_LABELS = {
+    sent: ['邮件已发送', 'success'],
+    partial: ['部分送达（缺投稿人邮箱）', 'warning'],
+    failed: ['发送失败（已进重试队列）', 'danger'],
+    not_configured: ['邮件服务未配置', 'neutral'],
+    no_submitter: ['投稿人未留邮箱', 'warning'],
+    no_category: ['未登记推文栏目', 'warning'],
+    no_liaison: ['栏目无对接人', 'warning'],
+    no_recipient: ['无可用收件人', 'warning'],
+    digest: ['走每日汇总', 'neutral'],
+  };
+
+  function deliveryBadge(status) {
+    const [label, tone] = DELIVERY_LABELS[status] || ['投递未记录', 'neutral'];
+    return badge(label, { tone });
+  }
+
+  function deliveryLine(delivery) {
+    if (!delivery || !delivery.status) {
+      return h('p', { class: 't-caption t-faint', text: '投递结果未记录（该轮退回发生在本功能上线前，无法追溯是否送达）。' });
+    }
+    const recipients = (Array.isArray(delivery.recipients) ? delivery.recipients : [])
+      .map((item) => item.to).filter(Boolean).join('、');
+    const failures = (Array.isArray(delivery.failures) ? delivery.failures : [])
+      .map((item) => item.reason || item.tag).filter(Boolean).join('；');
+    return h('div', { class: 'stack-1' },
+      h('div', { class: 'row-2 row-wrap' },
+        deliveryBadge(delivery.status),
+        h('span', { class: 't-caption t-faint', text: [delivery.at ? fmt.fullDateTime(delivery.at) : '', recipients].filter(Boolean).join(' · ') }),
+      ),
+      failures ? h('p', { class: 't-caption t-faint', text: `未送达：${failures}` }) : null,
+    );
+  }
+
+  function renderHistory() {
+    clear(historySlot);
+    const trail = Array.isArray(chain?.trail)
+      ? chain.trail.filter((entry) => entry && (entry.decision === 'return' || entry.decision === 'approve'))
+      : [];
+    if (!trail.length) {
+      historySlot.append(h('p', { class: 't-caption t-faint', text: '还没有审核记录。' }));
+      return;
+    }
+    historySlot.append(h('p', { class: 't-label', text: '审核记录（退回意见与邮件投递）' }));
+    const items = [...trail].reverse().map((entry) => {
+      const isReturn = entry.decision === 'return';
+      const delivery = entry.delivery && typeof entry.delivery === 'object' ? entry.delivery : null;
+      const resends = Array.isArray(delivery?.resends) ? delivery.resends : [];
+      const entryOpinions = Array.isArray(entry.opinions) ? entry.opinions : [];
+      const actions = h('div', { class: 'row-2 row-wrap' });
+      if (isReturn) {
+        actions.append(button({
+          label: '重发意见邮件', variant: 'secondary', size: 'sm', iconName: 'send',
+          title: '重发同一轮意见，不改变审核状态，也不占用新一轮退回次数',
+          onClick: () => resendOpinion(entry),
+        }));
+      }
+      actions.append(button({
+        label: '下载意见 Word', variant: 'ghost', size: 'sm', iconName: 'download',
+        onClick: () => downloadEntryOpinion(entry),
+      }));
+      return {
+        state: isReturn ? 'blocked' : 'done',
+        title: `第 ${entry.level} 级 · ${entry.name || '审核'}`,
+        badge: badge(isReturn ? '退回修改' : '通过', { tone: isReturn ? 'warning' : 'success' }),
+        at: entry.at,
+        extra: h('div', { class: 'stack-3' },
+          h('p', { class: 't-caption t-faint', text: `审核人：${entry.reviewerName || entry.reviewer || '—'}${Array.isArray(entry.checklist) && entry.checklist.length ? ` · 已确认 ${entry.checklist.length} 项` : ''}` }),
+          entry.note
+            ? h('div', { class: 'stack-2' }, ...String(entry.note).split('\n').map((line) => h('p', { class: 't-secondary', text: line || '\u00a0' })))
+            : null,
+          entryOpinions.length
+            ? h('ol', {}, ...entryOpinions.map((item) => h('li', {
+                text: `[${item.position || '未标注位置'}] ${item.problem || ''}${item.requirement ? ` → ${item.requirement}` : ''}`,
+              })))
+            : null,
+          isReturn ? deliveryLine(delivery) : null,
+          resends.length
+            ? h('div', { class: 'stack-1' }, ...resends.map((item) => h('p', {
+                class: 't-caption t-faint',
+                text: `第 ${item.attempt || '?'} 次重发 · ${fmt.fullDateTime(item.at)} · ${DELIVERY_LABELS[item.status]?.[0] || item.status || '未记录'}${item.by ? ` · ${item.by}` : ''}`,
+              })))
+            : null,
+          actions,
+        ),
+      };
+    });
+    historySlot.append(timeline(items));
+  }
+
+  async function resendOpinion(entry) {
+    try {
+      const payload = await consoleApi.outreach.resendOpinion(reviewFlow.contentId, { at: entry.at });
+      if (payload?.chain) chain = payload.chain;
+      renderChain();
+      const sent = payload?.deliveryStatus === 'sent';
+      if (sent) notify.success('退回意见已重发', payload?.message || '请查看审核记录中的投递结果。');
+      else notify.warning('重发未成功', payload?.message || '请查看审核记录中的投递结果。');
+    } catch (error) {
+      reportError(error, '重发意见失败');
+    }
+  }
+
+  async function downloadEntryOpinion(entry) {
+    const checkedIds = new Set((Array.isArray(entry.checklist) ? entry.checklist : []).map(String));
+    const payload = {
+      level: entry.level,
+      levelName: entry.name || '',
+      decision: entry.decision,
+      note: entry.note || '',
+      checklist: checklist.map((item) => ({ ...item, checked: checkedIds.has(String(item.id)) })),
+      opinions: Array.isArray(entry.opinions) ? entry.opinions : [],
+    };
+    try {
+      const { blob, disposition } = await consoleApi.outreach.opinion(reviewFlow.contentId, payload);
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = opinionFilename(disposition, `审核意见-${entry.level}-${title}.docx`);
+      link.click();
+      URL.revokeObjectURL(link.href);
+      notify.success('审核意见已下载', '可直接回传给投稿人。');
+    } catch (error) {
+      reportError(error, '意见 Word 未生成');
+    }
   }
 
   /* ---- 阶段化控件：初审登记美编 / 终审填预期发布时间 ---- */
@@ -447,7 +581,7 @@ function openReviewDrawer({
     categorySlot.append(readonlyField({ label: '当前投稿栏目', name: 'category', value: value || '未配置' }));
   }
   renderCategory(reviewFlow?.category);
-  if (reviewFlow) decisions.append(chainSlot, categorySlot, assigneeSlot, editorSlot, editorError, publishDateField);
+  if (reviewFlow) decisions.append(chainSlot, historySlot, categorySlot, assigneeSlot, editorSlot, editorError, publishDateField);
   decisions.append(reviewFormBlock, h('div', { class: 'field' }, h('p', { class: 'field__label', text: '最终决策' }), decisionControl, hintNode), noteField);
   const body = h('div', { class: 'review-workspace' }, preview, decisions);
 
@@ -569,7 +703,7 @@ function openReviewDrawer({
       return;
     }
     if (decision === 'return' && chain && !chain.canReturn) {
-      noteField.setError('当前级别已经退回修改过一次，请先修改后重新提交');
+      noteField.setError('当前级别已提过一轮修改意见（同一级限一轮）；若对方没收到，请在下方「审核记录」里重发，不必再退一次');
       shake(noteField);
       return;
     }
