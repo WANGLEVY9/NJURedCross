@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,rm,writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {compileWorkspaceRoleAssignments,withWorkspaceSuperAdmins} from '../lib/events/workspace-role-policy.js';
-import {createWorkspaceRoleStore} from '../lib/events/workspace-role-store.js';
+import {createWorkspaceRoleStore,roleSettingsAccounts} from '../lib/events/workspace-role-store.js';
 import {readWorkspaceRoster} from '../lib/events/workspace-providers.js';
 import {workspaceResponsibleOptions} from '../lib/events/workspace-responsible.js';
 import {createWorkspaceDraftAuthorization,workspaceDraftAccess} from '../lib/events/workspace-draft-access.js';
@@ -81,6 +81,22 @@ test('role settings reject ordinary actors, stale versions and spoofed identity 
   assert.equal(JSON.parse(await readFile(path,'utf8')).version,1);
   snapshot=accounts.map(row=>row.accountId==='super'?{...row,role:'platform_admin'}:row);
   await assert.rejects(store.save('super',{version:1,assignments}),{statusCode:403});
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('role settings expose already assigned accounts that lost the events module scope',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'workspace-role-scope-')),path=join(dir,'roles.json');
+ const drifted=accounts.map(row=>row.accountId==='initial'?{...row,permissions:''}:row);
+ try{
+  const store=createWorkspaceRoleStore(path,async()=>drifted);
+  const existing=[{accountId:'initial',roles:['R03']}];
+  await writeFile(path,JSON.stringify({version:1,assignments:existing}));
+  const settings=await store.settings('super');
+  assert.deepEqual(settings.accounts.filter(row=>row.id==='initial').map(row=>row.hasEventsScope),[false]);
+  assert.ok(settings.accounts.some(row=>row.id==='super'&&row.hasEventsScope));
+  assert.equal(settings.accounts.some(row=>row.id==='life-final'&&row.hasEventsScope),true);
+  assert.equal(roleSettingsAccounts(drifted,[{accountId:'initial',roles:['R03']}]).find(row=>row.id==='initial').hasEventsScope,false);
+  await assert.rejects(store.save('super',{version:1,assignments:existing}),/活动管理模块权限/);
  }finally{await rm(dir,{recursive:true,force:true});}
 });
 

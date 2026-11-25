@@ -43,3 +43,11 @@ node --env-file=.env.identity-test scripts/run-coordinated-script.mjs migrate-ad
 ```
 
 试跑先核对账号与权限原值。执行在共享维护锁内落写前快照，再逐行回读核验。迁移期间暂停直接在 NJUTable 修改该列。中断后保留原计划和快照，重复原命令可跳过已验证的目标值；遇到不同的权限、账号或角色会停下。回滚读取写前快照，仅把仍符合该计划的行恢复为空值。演练通过并核对授权后，再安排正式切换。回滚时如需恢复旧默认值，由维护人单独启用兼容开关。
+
+## 2026-11-25 生产空权限恢复
+
+PR #113 合入后，`PLATFORM_LEGACY_EMPTY_ADMIN_PERMISSIONS` 默认为关闭，而生产身份 Base 的 38 个 `platform_admin` 账号「权限范围」仍全部为空；7 个 `super_admin` 不受影响。旧代码把空值视为全部模块，新代码按最小权限把空值视为无模块，因此「活动权限与负责人配置」里普通管理账号被过滤成「请选择平台账号」，保存已有活动角色也会被服务端拒绝。金中宸对应 R11／`super_admin`，所以仍能显示「平台总权限」。
+
+恢复时先运行只读 preview 与 `--prepare=a1-production-events-20261125`，核对计划中 38 条均为空值、账号 ID 唯一且 Base UUID 一致；依据既有活动角色配置逐条审阅为 `["events"]`，再依次执行 `--plan`、`--apply --confirm=MIGRATE-ADMIN-PERMISSIONS`。回读结果为 38 个普通管理账号均具有 `events`、0 个空值。快照保存在私有 `PLATFORM_WRITE_STATE_DIR/admin-permission-migrations/`，可按 `--rollback --confirm=ROLLBACK-ADMIN-PERMISSIONS` 恢复。该迁移只改「权限范围」列，不改角色、状态、邮箱验证或其它表。
+
+配置面板同时补了诊断：已配置活动角色但缺少 `events` 的账号仍会显示姓名，并标注「缺少活动模块权限」；弹窗顶部提示需在账号表补齐 `events` 后刷新，避免把权限漂移误判成人员被删除。添加账号仍只列出具有 `events` 的可用管理账号。
