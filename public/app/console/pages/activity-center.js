@@ -1,4 +1,5 @@
 import {setFormControlsLocked} from '../../ui/form-lock.js';
+import {ACTIVITY_FEEDBACK_TEMPLATES} from '../../shared/activity-feedback.js';
 import { openActivityChangeDrawer, activityChangePanel, isActivityChangeSupported } from './activity-change-editor.js';
 import { activityHeaderActions } from './activity-header-actions.js';
 import {ACTIVITY_CENTERS,HALF_HOURS,serviceDuration} from '../../shared/activity-management.js';
@@ -411,7 +412,9 @@ export default async function activityCenter(context,shell){
   const capacity=f('capacity','推荐录取名额','number',{min:1,step:1,value:seed.capacity||20,hint:'用于名单录取参考，不代表自动录取。'});
   const limit=f('registrationLimit','上限名额','number',{min:1,step:1,value:seed.registrationLimit||seed.capacity||30,hint:'报名人数上限不得低于推荐录取名额；项目活动仍遵循原有容量规则。'});
   const content=f('content','活动内容','text',{value:seed.content||seed.work||'',multiline:true,rows:3,maxlength:500});
-  const arrangements=panel({title:'活动安排',body:h('div',{class:'stack-4'},modernWindow?range:h('div',{class:'stack-3'},date,period),location,h('div',{class:'activity-formgrid'},capacity,limit),content)});
+  const feedbackTemplate=f('feedbackTemplate','活动反馈模板','text',{required:false,value:seed.feedbackTemplate||'',options:[
+    {value:'',label:'按活动标签自动选择'},...Object.entries(ACTIVITY_FEEDBACK_TEMPLATES).map(([value,{label}])=>({value,label}))]});
+  const arrangements=panel({title:'活动安排',body:h('div',{class:'stack-4'},modernWindow?range:h('div',{class:'stack-3'},date,period),location,h('div',{class:'activity-formgrid'},capacity,limit),content,feedbackTemplate)});
   const training=f('trainingHours','培训时长（小时）','number',{min:0,step:'any'});
   const travel=f('travelHours','交通时长（小时）','number',{min:0,step:'any'});
   const service=f('serviceHours','服务时长（小时）','number',{min:0.01,step:'any',hint:modernWindow?'填写每位志愿者的服务时长，不自动按活动跨度计时。':'根据活动时段自动计算。'});service.control.readOnly=!modernWindow;

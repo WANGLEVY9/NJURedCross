@@ -9,6 +9,7 @@ import {canViewPositionRoster} from '../../shared/position-access.js';
 import {bloodCalendar} from '../blood-calendar.js';
 import {workflowEventPath,workflowGroupFor} from '../workflow-links.js';
 import {registrationPresentation} from '../registration-presentation.js';
+import {activityFeedbackButton} from '../activity-feedback.js';
 import {isLegacyHongyangAutoConfirmedRegistration} from '../../shared/registration-leave.js';
 import {ordinarySessions} from '../ordinary-sessions.js';
 import {patchQuery} from '../../core/router.js';
@@ -108,7 +109,7 @@ export default async function workflowEventsPage(context={}){
     h('div',{class:'blood-registration__heading'},h('h3',{text:r.eventName}),h('div',{class:'row-2 row-wrap'},badge(state.label,{tone:state.tone,iconName:state.symbol}),r.leaveStatus?badge(`请假${r.leaveStatus}`,{tone:'warning',iconName:'clock'}):null)),
     activityFacts([{label:'服务时间',value:activitySchedule(r.date,r.slot),iconName:'calendar'},{label:'服务点位',value:r.location,iconName:'pin'},{label:'服务岗位',value:r.position,iconName:'users'}]),
     h('div',{class:'blood-registration__journey'},h('ol',{class:'registration-progress','aria-label':'报名处理进度'},...state.steps.map((step,index)=>h('li',{data:{done:String(step.done),current:String(step.current)},'aria-current':step.current?'step':null},h('span',{class:'registration-progress__mark','aria-hidden':'true'},step.done?icon('check','ico ico--sm'):String(index+1)),h('span',{text:step.text}),h('span',{class:'sr-only',text:step.done?'，已完成':step.current?'，当前步骤':'，未完成'})))),h('p',{class:'blood-registration__hint',text:state.hint})),
-    h('div',{class:'blood-registration__actions'},
+    h('div',{class:'blood-registration__actions'},activityFeedbackButton(r),
      participationAction('活动详情','参与安排与说明','file',r.blood?bloodRecordDetails(r):definitionList([['报名编号',r.code],['报名结果',r.result||'—'],...(r.category?[['活动类别',r.category]]:[]),...(r.region?[['地区',r.region]]:[]),['时长录入',r.hours?.label||r.entryStatus||'待录入'],...(r.hours?.hours?[['核定志愿时长',`${r.hours.hours.serviceHours} 小时（培训 ${r.hours.hours.trainingHours}、交通 ${r.hours.hours.travelHours} 另列）`]]:[]),...(r.tableHours!=null?[['报名表时长',`${r.tableHours} 小时`]]:[])]),r.eventStatus==='停点'?notice(`本班次已停点：${r.stopReason||'请联系负责人'}。`,{tone:'warning'}):null,r.reason?notice(r.reason,{tone:'neutral'}):null,r.remark?notice(`备注：${r.remark}`,{tone:'neutral'}):null,r.notes?notice(r.notes,{tone:'neutral'}):null),
      r.leaveAllowed!==false&&['报名中','进行中','停点'].includes(r.eventStatus)&&['待筛选','已确认'].includes(r.status)&&(!autoLeave||!r.attendanceSubmitted)&&r.leaveStatus!=='待审批'?participationAction(cancellation,autoLeave?'填写原因':'填写原因','calendar',reason,h('div',{class:'blood-registration__submit'},leave)):null,
      (r.attendanceOpen===true||r.attendanceOpen===undefined&&r.eventStatus==='报名中')&&r.status==='已确认'&&r.leaveStatus!=='待审批'?(r.attendanceSubmitted?notice('签到已提交。',{tone:'info'}):participationAction('现场签到','上传照片','camera',r.blood?bloodCheckinGuide():null,photo,h('div',{class:'blood-registration__submit'},attendance),requestBox)):null));

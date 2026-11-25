@@ -1,6 +1,7 @@
 import {h,icon} from '../core/dom.js';
 import {activityFacts,badge,statusIndicator} from '../ui/primitives.js';
 import * as fmt from '../core/format.js';
+import {eventActivityFeedback} from './activity-feedback.js';
 
 export const isClosedActivity = event => ['进行中','已结束'].includes(event?.status);
 
@@ -21,5 +22,5 @@ export function closedActivityPage(event) {
       sessions.length?h('section',{class:'stack-4'},h('h2',{class:'t-h2',text:'场次安排'}),...sessions.map(session=>h('article',{class:'panel'},h('div',{class:'panel__body'},activityFacts([
         {label:'时间',value:fmt.dateRange(session.startAt,session.endAt),iconName:'calendar'},
         {label:'地点',value:session.location||event.location||'待公布',iconName:'pin'},
-      ]))))):null))};
+      ]))))):null,eventActivityFeedback(event)))};
 }

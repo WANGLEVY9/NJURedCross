@@ -14,6 +14,7 @@
 | 发布记录 | `/var/lib/njuredcross-deploy/release.json` |
 | 照片目录 | `/var/lib/njuredcross-evidence` |
 | 运行状态目录 | `.write-state`（邮件、物资、写锁、`jobs.sqlite` 队列） |
+| 活动反馈 | `.write-state/activity-feedback-*.sqlite`（按活动数据源隔离，随私有运行状态备份与恢复） |
 
 当前典型环境为单个 Node.js 服务、systemd 和 HTTPS 反向代理。完整 Node 服务默认监听所有网卡，部署时通过防火墙/代理限制直接访问；仅界面 preview 绑定回环。身份使用私有 Base，生产设置 `NODE_ENV=production`，启用 HTTPS/Secure Cookie。
 

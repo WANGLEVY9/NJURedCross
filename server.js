@@ -5,6 +5,7 @@ import {createHoursPostingStore} from './lib/events/hours-posting-store.js';
 import {createActivityLifecycleStore} from './lib/events/activity-lifecycle-store.js';
 import {createBloodWeekStore} from './lib/events/blood-week-store.js';
 import {createBloodNotificationReview} from './lib/events/blood-notification-review.js';
+import {createActivityFeedbackStore} from './lib/events/activity-feedback.js';
 import {createWorkspaceRoleStore} from './lib/events/workspace-role-store.js';
 import {openMailSettings,publicParticipationGuide} from './lib/mail/templates.js';
 import {workspaceNotificationItems} from './lib/events/workspace-notifications.js';
@@ -870,7 +871,13 @@ function getWorkspaceRoleStore(){
  return workspaceRoleStore??=createWorkspaceRoleStore(path,rosterAccounts);
 }
 const approvalRouting=createActivityApprovalRouter({legacy:legacyApprovalRouting,getRoster:getWorkspaceRoster});
-let workflowInstance, wishlistPending, registrationNotifications;
+let workflowInstance, wishlistPending, registrationNotifications, activityFeedbackStore;
+async function getActivityFeedback(){
+ const {expected}=workflowMode(process.env);
+ const suffix=createHash('sha256').update(expected).digest('hex').slice(0,16);
+ return activityFeedbackStore??=observer.dependency('storage','activity-feedback-open',()=>createActivityFeedbackStore(join(writeStateDir,`activity-feedback-${suffix}.sqlite`)))
+  .catch(error=>{activityFeedbackStore=null;throw error;});
+}
 const permitsBloodMail=async(event,row)=>(await getWorkflow()).permitsBloodMail(event,row);
 let registrationDeliveryRunning=false,registrationDeliveryQueued=false;
 async function reconcileRegistrationNotifications(data){
@@ -5647,7 +5654,7 @@ async function dispatchApi(req, res, url) {
     }
 
     if(['/api/volunteer/workflow','/api/portal/workflow','/api/public/workflow/events'].some(prefix=>url.pathname===prefix||url.pathname.startsWith(`${prefix}/`))) {
-      return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
+      return await workflowRoutes(req,res,url,{getWorkspaceRoleStore,getWorkspaceDrafts,getWorkspaceSubmissions,getWorkspaceRoster,getWorkspaceProfileData,getWorkspaceBridge,approvalRouting,getWorkflow,getActivityFeedback,getPublicWorkflowData,getWishlist,getManagedSources:async()=>getEventsOverview(await getBase(),{notificationsOnly:true}).then(data=>data.events),requireConsoleAccess,requirePortalSession,requireCsrf,readJson,json,
         ...(organizationEvents?{getEventAuthority:eventAuthority,getAuthorityBase:getVolunteerBase,queueApprovalReminders}:{}),...(process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?{queueRegistrationNotifications}:{}),notifyRegistrationDecisions,getDirectory:eventDirectory,
         ...(profileAccess?{getParticipantDirectory:async(accounts,registrations)=>participantDirectory(accounts,registrations,await getProfileBase())}:{}),getResultMailStatus:getMailDeliveryStatuses,sendHoursMail:sendMail,queueFinalHoursMail,queueHoursSync,sendResultMail:async message=>process.env.PLATFORM_REGISTRATION_NOTIFICATIONS==='true'?(await getRegistrationNotifications()).dispatch(message):mailerStatus().configured?sendMail(message):{ok:false},
         actor:businessAccountRef,getAccount:async session=>{

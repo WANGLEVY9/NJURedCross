@@ -2,6 +2,7 @@ import { h, setVars, icon } from '../core/dom.js';
 import { formatHours } from './member-hero.js';
 import { button, notice, badge } from '../ui/primitives.js';
 import { patchQuery } from '../core/router.js';
+import { activityFeedbackButton } from './activity-feedback.js';
 
 /** Keep forms mounted while switching views, so unsaved edits stay intact. */
 export function memberWorkspace({ profile, records, warmth, skills }) {
@@ -109,7 +110,7 @@ export function memberHours(data) {
     h('div', { class: 'member-hours__record-actions' },
       record.hours?.hours?h('p',{class:'t-caption',text:`志愿时长 ${format(record.hours.hours.serviceHours)} 小时（培训 ${format(record.hours.hours.trainingHours)} · 交通 ${format(record.hours.hours.travelHours)} 另列）`}):null,
       badge(progress(record)?.label|| (record.entryStatus === '网站已入账' ? '时长已入账' : record.status === '已签到' ? '已签到 · 待核对时长' : record.result || record.status || '待处理'), { tone: progress(record)?.tone||(record.entryStatus === '网站已入账' ? 'success' : 'neutral') }),
-      button({ label: '查看报名进度', href: `/workflow-events?view=records&registration=${encodeURIComponent(record.code)}`, variant: 'ghost', size: 'sm' })));
+      activityFeedbackButton(record),button({ label: '查看报名进度', href: `/workflow-events?view=records&registration=${encodeURIComponent(record.code)}`, variant: 'ghost', size: 'sm' })));
   const empty = !records.length ? h('div', { class: 'stack-3' },
     h('p', { class: 't-secondary', text: '尚无活动报名记录。选择合适的活动，开始积累你的参与记录。' }),
     button({ label: '浏览开放活动', href: '/events', variant: 'secondary', size: 'sm' })) : null;
