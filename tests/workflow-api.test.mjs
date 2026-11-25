@@ -21,6 +21,16 @@ test('activity statistics requires dedicated presidium authority and derives reg
  assert.deepEqual(allowed.body.result,{regions:['suzhou'],tag:'未分类'});
 });
 
+test('management detail exposes only referenced account display names',async()=>{
+ const c=ctx();
+ c.requireConsoleAccess=()=>({role:'super_admin'});
+ c.realNameForRef=ref=>({'private-owner':'袁金雨','ACC-REVIEWER':'金中宸'})[ref]||'';
+ c.getWorkflow=async()=>({detail:async()=>({events:[{_id:'public',活动ID:'P',活动名称:'公开',状态:'已结束',负责人账号ID:'private-owner',审批人:'ACC-REVIEWER',批准版本:'1',审批时间:'2026-10-16T16:12:54.096Z',报名页配置:JSON.stringify({coOwners:['ACC-COOWNER'],approval:{reviewerIds:['ACC-REVIEWER']}})}],registrations:[]})});
+ const result=await workflowRoutes(req(),null,new URL('http://localhost/api/volunteer/workflow/events/public/detail'),c);
+ assert.equal(result.status,200);
+ assert.deepEqual(result.body.displayNames,{'private-owner':'袁金雨','ACC-REVIEWER':'金中宸'});
+});
+
 test('a historical registration with no current activity keeps the member view usable and closes attendance',async()=>{
  const c=ctx(),original=c.getWorkflow;
  const workflow=createWorkflow({});

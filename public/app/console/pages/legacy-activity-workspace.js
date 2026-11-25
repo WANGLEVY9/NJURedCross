@@ -76,16 +76,34 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
 
  function openInformation(){
   const row=current(),c=config(row),rows=sessions();
-  const drawer=openDrawer({title:'活动信息查看',width:900,body:h('div',{class:'stack-4'},
-   panel({title:'活动概览',body:definitionList([
-    ['活动名称',row['活动名称']],
-    ['地区',row['活动地区']||(c.region==='苏州活动'?'苏州地区':'南京地区')],
-    ['类别',row['组织类别']||c.center||row['活动类别']||'待补充'],
-    ['负责人',row['负责人账号ID']||'未设置'],
-    ['审批',row['审批人']?`版本 ${row['批准版本']} · ${row['审批时间']||''}`:'尚未通过审批'],
-    ['活动说明',c.workspaceDescription||c.content||row['工作内容']||'未填写'],
-   ])}),sessionTable(rows),panel({title:'报名通知',body:h('pre',{class:'activity-notice',text:row['通知草稿']||'尚未生成报名通知。'})}))
+  const names=data.displayNames||{};
+  const nameOf=ref=>names[String(ref||'')]||String(ref||'')||'未设置';
+  const facts=[
+   ['地区',row['活动地区']||(c.region==='苏州活动'?'苏州地区':'南京地区')],
+   ['类别',row['组织类别']||c.center||row['活动类别']||'待补充'],
+   ['负责人',nameOf(row['负责人账号ID'])],
+   ['协作负责人',(c.coOwners||[]).map(nameOf).join('、')||'未设置'],
+   ['审批人',row['审批人']?nameOf(row['审批人']):'尚未通过审批'],
+   ['审批版本',row['审批人']?`版本 ${row['批准版本']||'—'}`:'—'],
+   ['审批时间',formatApprovalTime(row['审批时间'])],
+  ];
+  const description=c.workspaceDescription||c.content||row['工作内容']||'未填写';
+  const noticeText=row['通知草稿']||'尚未生成报名通知。';
+  const section=(label,body)=>h('section',{class:'activity-info-section'},h('h3',{class:'activity-info-section__title',text:label}),body);
+  const drawer=openDrawer({title:'活动信息查看',width:900,body:h('div',{class:'activity-info-view'},
+   h('div',{class:'activity-info-summary'},
+    h('div',{class:'activity-info-summary__head'},h('strong',{text:row['活动名称']||'未命名活动'}),h('span',{class:'activity-info-status',text:row['状态']||'—'})),
+    h('dl',{class:'activity-info-facts'},...facts.map(([term,value])=>h('div',{class:'activity-info-fact'},h('dt',{text:term}),h('dd',{text:value})))),
+    h('div',{class:'activity-info-description'},h('span',{class:'activity-info-label',text:'活动说明'}),h('p',{text:description}))),
+   section('场次安排',h('div',{class:'activity-info-table'},sessionTable(rows))),
+   section('报名通知',h('div',{class:'activity-info-notice'},h('pre',{class:'activity-notice',text:noticeText}))))
    ,footer:[button({label:'关闭',onClick:()=>drawer.close()})]});
+ }
+
+ function formatApprovalTime(value){
+  if(!value)return '—';
+  const date=new Date(value);
+  return Number.isNaN(date.getTime())?String(value):new Intl.DateTimeFormat('zh-CN',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Shanghai'}).format(date);
  }
 
  async function editInformation(){

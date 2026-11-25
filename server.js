@@ -5694,7 +5694,7 @@ async function dispatchApi(req, res, url) {
           const account=await findAccountByLogin(await getIdentityBase(),session.username);
           const booking=url.pathname==='/api/portal/workflow/me'||/^\/api\/portal\/workflow\/events\/[^/]+\/register$/.test(url.pathname);
           return profileAccess&&booking?accountWithProfileQualification(account,await getProfileBase()):account;
-        },getVolunteerPlatformHours,
+        },realNameForRef:(ref)=>accountByBusinessRef(ref)?.realName||'',getVolunteerPlatformHours,
         resolveHoursParticipant:async input=>{
           const accounts=[...(await loadAccountsFromTable(await getIdentityBase())).values()].filter(account=>String(account.studentId||'').trim()===input.studentId);
           if(accounts.length>1||accounts.some(account=>account.realName!==input.name))throw Object.assign(new Error('学号与平台账号身份不一致，请先核对'),{statusCode:409});

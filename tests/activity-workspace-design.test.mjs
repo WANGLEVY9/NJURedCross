@@ -145,3 +145,17 @@ test('position rows become labelled cards across desktop and phone', async () =>
   assert.match(css, /\.activity-position-card__body \{[^}]*grid-template-columns: minmax\(0, 1fr\)/s);
   assert.match(css, /activity-position-cell\[data-label\]::before/);
 });
+
+test('activity information drawer uses a compact scoped stylesheet and real names', async () => {
+ const [view, css, api, html] = await Promise.all([
+  read('public/app/console/pages/legacy-activity-workspace.js'),
+  read('public/styles/activity-information-view.css'),
+  read('lib/events/workflow-api.js'),
+  read('public/index.html'),
+ ]);
+ assert.match(view, /activity-info-summary/);
+ assert.match(view, /displayNames/);
+ assert.match(css, /\.activity-info-facts \{[^}]*grid-template-columns: repeat\(3/s);
+ assert.match(api, /activityDisplayNames/);
+ assert.match(html, /\/styles\/activity-information-view\.css/);
+});

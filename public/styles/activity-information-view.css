@@ -1,0 +1,145 @@
+/* Read-only activity inspector: compact facts, then two content sections. */
+.activity-info-view {
+  display: grid;
+  gap: var(--s5);
+  align-content: start;
+  min-width: 0;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+.activity-info-summary {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.activity-info-summary__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-muted, var(--bg-sunken));
+}
+
+.activity-info-summary__head>strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-title);
+  font-weight: var(--fw-semibold);
+}
+
+.activity-info-status {
+  flex: none;
+  padding: 2px var(--s2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+}
+
+.activity-info-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.activity-info-fact {
+  min-width: 0;
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border-soft, var(--border));
+}
+
+.activity-info-fact:not(:nth-child(3n)) { border-right: 1px solid var(--border-soft, var(--border)); }
+.activity-info-fact dt { margin: 0 0 3px; color: var(--text-muted); font-size: var(--fs-caption); line-height: 1.4; }
+.activity-info-fact dd { margin: 0; min-width: 0; color: var(--text-primary); font-size: var(--fs-secondary); line-height: 1.5; overflow-wrap: anywhere; }
+
+.activity-info-description {
+  padding: var(--s3) var(--s4) var(--s4);
+}
+
+.activity-info-label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-medium);
+}
+
+.activity-info-description>p {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--fs-body);
+  line-height: var(--lh-relaxed, 1.7);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.activity-info-section {
+  min-width: 0;
+}
+
+.activity-info-section__title {
+  margin: 0 0 var(--s2);
+  color: var(--text-secondary);
+  font-size: var(--fs-caption);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--tracking-label, .02em);
+}
+
+.activity-info-table {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: auto;
+}
+
+.activity-info-table .activity-registration-table {
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.activity-info-table table { width: 100%; min-width: 640px; border-collapse: collapse; }
+.activity-info-table th,
+.activity-info-table td { padding: var(--s2) var(--s3); text-align: left; font-size: var(--fs-caption); line-height: 1.55; border-bottom: 1px solid var(--border-soft, var(--border)); vertical-align: top; }
+.activity-info-table th { background: var(--surface-muted, var(--bg-sunken)); color: var(--text-secondary); font-weight: var(--fw-semibold); white-space: nowrap; }
+.activity-info-table tbody tr:last-child td { border-bottom: 0; }
+
+.activity-info-notice {
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  padding: var(--s2);
+}
+
+.activity-info-notice pre.activity-notice {
+  margin: 0;
+  padding: var(--s3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--surface-muted, var(--bg-sunken));
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--fs-secondary);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .activity-info-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .activity-info-fact:not(:nth-child(3n)) { border-right: 0; }
+  .activity-info-fact:nth-child(2n+1) { border-right: 1px solid var(--border-soft, var(--border)); }
+  .activity-info-summary__head { align-items: flex-start; flex-direction: column; }
+  .activity-info-status { align-self: flex-start; }
+}
