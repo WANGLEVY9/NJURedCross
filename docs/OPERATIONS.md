@@ -191,7 +191,8 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl --names
 
 | 方法 + 路径 | 预算 | 原因 |
 | --- | --- | --- |
-| `POST /api/public/media`、`POST /api/public/attachments/<id>`、`POST /api/console/showcase/batch`、`POST /api/portal/workflow/registrations/<id>/attendance`（及后台补签） | 180 秒 | 上传照片的字节由请求体传入，入口请求限额也必须按上传接口放行；否则图片尚未进入业务逻辑就被 413 拒绝。30 秒预算仍适用于普通写接口 |
+| `POST /api/public/media`、`POST /api/public/attachments/<id>` | 30 分钟 | 中转兜底；字节由请求体传入，入口请求限额按上传接口放行，nginx `client_max_body_size 160M` 与 `proxy_read_timeout 1800s` 需同步 |
+| `POST /api/console/showcase/batch`、`POST /api/portal/workflow/registrations/<id>/attendance`（及后台补签）、附件直传票据/复核 | 180 秒 | 请求体较小或只需云端元数据操作；真正的字节走浏览器直传 |
 | 其余 `/api/*` | 30 秒 | 常规读写，超时即视为依赖异常 |
 
 判定线上「上传很久然后失败」时的顺序：
@@ -208,6 +209,8 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl --names
 - 因此 `Content-Security-Policy` 的 `connect-src` 必须包含 Box 源（取 `NJUBOX_SERVER_URL` 的 origin）。漏配的表现是控制台 CSP 报错、页面只显示「上传失败」，容易被误判成云盘故障。
 - 票据 30 分钟内有效、绑定上传人，只能本人确认；过期需重新领票，不要复用旧链接。
 - 直传不可用时（老版本服务端返回 404/501/503）前端自动回落到原中转路径，不需要改配置或回滚。
+
+投稿附件从 2026-11-26 起同样支持大文件直传：图片 ≤100MB、PDF/Word/表格 ≤200MB、视频/压缩包/设计源文件 ≤500MB，可执行内容与 HTML/SVG 仍拒绝。入口限额与中转体量的唯一口径在 `public/app/shared/upload-limits.js`；`POST /api/public/attachments/<id>/upload-ticket` 只签发直链并预建目录，`confirm` 在 `listDir` 核对文件大小与名称后写表，不把字节拉回服务器。nginx 站点配置的 160M/1800s 必须随发布单独安装，`ops/nginx/njuredcross-site.conf` 不在自动发布包内。
 
 ## 回滚和故障
 

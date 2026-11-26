@@ -12,5 +12,6 @@ test('HTTPS site config enables HSTS with includeSubDomains on every response', 
 test('HTTPS site config preserves host validation and proxy hardening', () => {
   assert.match(config, /server_name\s+njuredcross\.cn\s+www\.njuredcross\.cn/);
   assert.match(config, /proxy_set_header\s+X-Real-IP\s+\$remote_addr;/);
-  assert.match(config, /proxy_read_timeout\s+180s;/);
+  assert.match(config, /client_max_body_size\s+160M;/);
+  assert.match(config, /proxy_read_timeout\s+1800s;/);
 });

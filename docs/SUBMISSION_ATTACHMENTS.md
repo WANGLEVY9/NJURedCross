@@ -125,7 +125,9 @@ npm run v3:apply      # 确认短语 APPLY-NJU-RC-V3-SCHEMA
 
 投稿附件（登录 + CSRF，槽位 20/小时）：`POST /api/public/attachments`（槽位，**必带 `center` + `activity`**）→ `POST /api/public/attachments/:id`（multipart 中转上传 → Box）→ `GET …/mine`（门户视图不含存储坐标）→ `DELETE …/:id`（未绑定本人；物理删 Box 文件 + 落点比对一致时顺手清空附件专属目录）。投稿提交（`POST /api/public/submissions/article` | `/design`，表单含必填的「部门 + 活动名」）带 `attachmentIds` 先写投稿行、再回填绑定。
 
-**附件文件类型（`FILE_RULES`，`lib/attachment/api.js` 是唯一权威）**：图片（≤20MB）/ 视频（≤200MB）/ PDF（≤20MB）/ Word 文档（.doc、.docx，≤50MB）/ **表格（.xlsx、.xls、.csv，≤50MB，2026-11-17 起）** / 压缩包（≤50MB）/ 设计源文件（.psd、.ai，≤50MB）。表格的 MIME 统一走 `SPREADSHEET_MIME_PATTERN`（xlsx 标准 MIME、`application/vnd.ms-excel`、WPS 的 `application/wps-office.xlsx?`、`text/csv`、`application/csv`）；浏览器把 `.csv` 报成 `text/plain` 或 `application/octet-stream` 时，按扩展名兜底放行，其他 MIME 不享受这条兜底。文字稿件与文创设计用的是同一张矩阵，没有单独的「表格投稿」入口。
+**附件文件类型（`public/app/shared/upload-limits.js` 是前后端唯一权威）**：图片（≤100MB，含 HEIC/WebP）/ 视频（≤500MB）/ 音频（≤200MB）/ PDF（≤200MB）/ Word、PPT、RTF、纯文本（≤200MB）/ 表格（xlsx/xls/csv，≤200MB）/ 压缩包（≤500MB）/ 设计源文件（PSD/AI/EPS/PS，≤500MB）。`FILE_RULES` 先按 MIME 匹配，浏览器只报 `text/plain` 或 `application/octet-stream` 时按明确的扩展名白名单兜底；`text/html`、SVG、可执行文件和脚本始终拒绝，改名也绕不过。文字稿件与文创设计共用这张矩阵。
+
+**大文件直传（2026-11-26）**：超过 20MB 的附件走「申请槽位 → `POST /api/public/attachments/:id/upload-ticket` 领短期直链 → 浏览器直传 NJU Box → `POST /api/public/attachments/:id/confirm` 复核落表」。20MB 阈值保证当前 nginx 25M 请求体限制不会在签发直链前拦下文件；票据绑定槽位与上传人，confirm 先 `listDir` 核对文件名和大小，再写「已上传」，不下载文件正文。直传失败时槽位保持「待上传」；文件已到云盘但写表失败时提示不要重传。中转兜底单文件不超过 128MB（需 nginx `client_max_body_size 160M`）。
 
 影像模块（登录 + CSRF，`media` 桶 20/小时）：
 
@@ -133,7 +135,7 @@ npm run v3:apply      # 确认短语 APPLY-NJU-RC-V3-SCHEMA
 | --- | --- |
 | `GET /api/public/media/activities[?center=]` | 返回活动项目表去重出的活动名单（可按中心过滤），并同返 `centers`（`MEDIA_CENTERS` 四部门白名单） |
 | `GET /api/public/media[?center=&activity=]` | 我的照片（门户视图，含 `center`/`photographer`）**+ `folders[]` 文件夹聚合**（按「中心 + 活动」二维分组，含 `department`/`folderName`/`count`/`keepCount`/`totalSize`/`latestAt`） |
-| `POST /api/public/media` | multipart `center`（必选项）+ `activity`（**必须命中活动项目表候选，禁手填**）+ `files` 多值；中心非法 400 `media_center_invalid`，活动不属于该中心 400 `media_activity_not_allowed`，账号缺实名 403 `media_photographer_missing`；一次 ≤12 张、单张 ≤20MB、仅图片；表写失败回滚 Box 文件 |
+| `POST /api/public/media` | multipart `center`（必选项）+ `activity`（**必须命中活动项目表候选，禁手填**）+ `files` 多值；中心非法 400 `media_center_invalid`，活动不属于该中心 400 `media_activity_not_allowed`，账号缺实名 403 `media_photographer_missing`；一次 ≤12 张、单张 ≤100MB、仅图片；表写失败回滚 Box 文件 |
 | `GET /api/public/media/:id/link` | 现取下载直链 |
 | `PATCH /api/public/media/:id` | `{keep}`：待定/留用/弃用 |
 | `DELETE /api/public/media/:id` | v3 起**不再直删**：未走审核一律 409 `media_delete_review_required`；申请走 `POST …/:id/delete-request`，控制台 `POST /api/console/media/:id/delete-review` 通过后才真删 |

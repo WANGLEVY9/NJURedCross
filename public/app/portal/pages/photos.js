@@ -20,6 +20,7 @@
 
 import { h, icon, clear } from '../../core/dom.js';
 import { publicApi, mediaUpload, mediaUploadDirect, ApiError } from '../../core/api.js';
+import { fileRuleFor, uploadTimeoutFor } from '../../shared/upload-limits.js';
 import { button, field, notice, badge, iconButton } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
@@ -31,9 +32,9 @@ import { confirmAction, requestText } from '../../ui/overlay.js';
 import { openPhotoPreview } from '../photo-preview.js';
 
 const MAX_BATCH = 12;
-/** 一张一个请求：每张远低于网关 20MB/60s 的限制，失败也能只重试那一张。 */
+/** 一张一个请求：直传大图也不占服务器体量限制，失败只重试那一张。 */
 const UPLOAD_CONCURRENCY = 3;
-const IMAGE_MAX = 20 * 1024 * 1024;
+const IMAGE_MAX = fileRuleFor('image/jpeg').maxSize;
 const DEFAULT_PICK_RULES = { min: 3, max: 5, statuses: { none: '未申请', pending: '已申请待确认', picked: '已精选', rejected: '已驳回' } };
 const DEFAULT_DELETE_RULES = { statuses: { none: '未申请', pending: '待审核', approved: '已通过', rejected: '已驳回' }, requiresReview: true };
 
@@ -78,7 +79,7 @@ export default function photosPage() {
     // 两者分开是因为浏览器只在字节发完时才会跳 100%，不分开就会长时间停在
     // 「上传中 100%」，用户以为卡死。
     uploadPhase: 'upload',
-    config: { storageConfigured: false, maxPhotosPerBatch: MAX_BATCH, centers: [], acceptedHint: '图片（单张 ≤20MB）' },
+    config: { storageConfigured: false, maxPhotosPerBatch: MAX_BATCH, centers: [], acceptedHint: '图片（单张 ≤100MB）' },
   };
 
   const headerSlot = h('div', { class: 'stack-3' });
@@ -113,7 +114,7 @@ export default function photosPage() {
   },
   icon('camera', 'ico ico--lg'),
   h('span', { class: 'dropzone__title', text: '点击选择照片，或把照片拖到这里' }),
-  h('span', { class: 'dropzone__hint', text: `仅图片，单张 ≤20MB，一次最多 ${MAX_BATCH} 张` }));
+  h('span', { class: 'dropzone__hint', text: `仅图片，单张 ≤100MB，一次最多 ${MAX_BATCH} 张` }));
   const uploadBar = h('div', { class: 'filelist__bar', attrs: { hidden: '' } }, h('div', { class: 'filelist__fill' }));
   const uploadHint = h('p', { class: 't-caption t-faint', attrs: { hidden: '' } });
 
@@ -264,7 +265,7 @@ export default function photosPage() {
         return false;
       }
       if (file.size > IMAGE_MAX) {
-        notify.warning('已跳过一个文件', `${file.name}：超过单张 20MB 上限。`);
+        notify.warning('已跳过一个文件', `${file.name}：超过单张 100MB 上限。`);
         return false;
       }
       return true;
@@ -423,6 +424,7 @@ export default function photosPage() {
       uploadUrl: ticket.uploadUrl,
       parentDir: ticket.dir,
       file,
+      timeoutMs: uploadTimeoutFor(file.size),
       onProgress: (value) => onProgress(Math.min(90, Math.round(value * 0.9))),
     });
     if (thumbnail && ticket.thumbUploadUrl) {
@@ -458,7 +460,7 @@ export default function photosPage() {
     if (code === 'media_ticket_expired') return '上传凭据过期，重试即可（会重新发票据）';
     // 超时与断连在浏览器里都是 status 0，靠 code 区分：超时说明「网太慢」，不是「没网」。
     if (code === 'timeout') return '上传超时，网络太慢（可重试这张）';
-    if (status === 413) return '这张太大，被网关拒绝（单张上限 20MB）';
+    if (status === 413) return '这张太大，被网关拒绝（单张上限 100MB）';
     if (status === 504) return '服务器处理超时，可稍后单独重试这张';
     if (status === 503) return '数据表或云盘一时无响应，稍后重试这张';
     if (status === 500) return '服务端处理失败，可重试这张';

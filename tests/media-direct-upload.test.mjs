@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { mediaRoutes, clearUploadTickets, readUploadTicket, UPLOAD_TICKET_TTL_MS } from '../lib/attachment/media.js';
-import { requestBudgetMsFor, DEFAULT_REQUEST_BUDGET_MS, UPLOAD_REQUEST_BUDGET_MS } from '../lib/http/request-budget.js';
+import { requestBudgetMsFor, DEFAULT_REQUEST_BUDGET_MS, UPLOAD_REQUEST_BUDGET_MS,
+  LARGE_UPLOAD_REQUEST_BUDGET_MS } from '../lib/http/request-budget.js';
 import { isMetadataOnlyFailure } from '../public/app/core/upload-retry.js';
 
 /* -------------------------------------------------------------------------- *
@@ -15,12 +16,16 @@ import { isMetadataOnlyFailure } from '../public/app/core/upload-retry.js';
 
 /* ---------------------------- 请求预算 ---------------------------- */
 
-test('上传类接口单独放宽到 180 秒，其余仍是 30 秒', () => {
+test('上传类接口按体量放宽到 180 秒或 30 分钟，其余仍是 30 秒', () => {
   assert.equal(UPLOAD_REQUEST_BUDGET_MS, 180_000);
+  assert.equal(LARGE_UPLOAD_REQUEST_BUDGET_MS, 30 * 60 * 1000);
   assert.equal(DEFAULT_REQUEST_BUDGET_MS, 30_000);
 
-  for (const path of ['/api/public/media', '/api/public/attachments/ATT-1', '/api/console/showcase/batch']) {
+  for (const path of ['/api/console/showcase/batch', '/api/public/attachments/ATT-1/upload-ticket', '/api/public/attachments/ATT-1/confirm']) {
     assert.equal(requestBudgetMsFor('POST', path), UPLOAD_REQUEST_BUDGET_MS, `${path} 应放宽`);
+  }
+  for (const path of ['/api/public/media', '/api/public/attachments/ATT-1']) {
+    assert.equal(requestBudgetMsFor('POST', path), LARGE_UPLOAD_REQUEST_BUDGET_MS, `${path} 应放宽到中转预算`);
   }
   // 读路径与普通写接口保持 30 秒的快速失败语义。
   for (const [method, path] of [
@@ -39,7 +44,7 @@ test('上传类接口单独放宽到 180 秒，其余仍是 30 秒', () => {
 test('直传票据：过期即失效，清空后读不到', () => {
   clearUploadTickets();
   assert.equal(readUploadTicket('TKT-NOPE'), null);
-  // TTL 常量本身也要是「够传完 20MB、又不长期占内存」的量级。
+  // TTL 常量本身也要是「够传完大文件、又不长期占内存」的量级。
   assert.ok(UPLOAD_TICKET_TTL_MS >= 10 * 60 * 1000 && UPLOAD_TICKET_TTL_MS <= 60 * 60 * 1000);
 });
 
@@ -249,7 +254,7 @@ test('直传票据：非图片、超限、活动不属于该中心都当场拒�
   assert.equal(pdf.res.status, 415);
 
   const huge = await callRoute(ctx, 'POST', '/api/public/media/upload-ticket', {
-    center: '博爱中心', activity: '11.8 手语拍摄（鼓楼）', filename: 'a.jpg', size: 21 * 1024 * 1024, contentType: 'image/jpeg',
+    center: '博爱中心', activity: '11.8 手语拍摄（鼓楼）', filename: 'a.jpg', size: 101 * 1024 * 1024, contentType: 'image/jpeg',
   });
   assert.equal(huge.res.status, 413);
 

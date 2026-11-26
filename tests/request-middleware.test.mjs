@@ -5,7 +5,8 @@ import { createRequestMiddleware } from '../lib/http/request-middleware.js';
 import { assertRequestBodySize, createRequestConcurrencyGate,
   DEFAULT_JSON_BODY_LIMIT_BYTES, DEFAULT_UPLOAD_BODY_LIMIT_BYTES } from '../lib/http/request-limits.js';
 import { livenessProbe, readinessProbe, renderMetrics } from '../lib/http/probes.js';
-import { requestBudgetMsFor, UPLOAD_REQUEST_BUDGET_MS } from '../lib/http/request-budget.js';
+import { requestBudgetMsFor, UPLOAD_REQUEST_BUDGET_MS,
+  LARGE_UPLOAD_REQUEST_BUDGET_MS } from '../lib/http/request-budget.js';
 
 function dependencyStubs(overrides = {}) {
   const calls = { api: 0, static: 0, marked: 0, telemetry: 0 };
@@ -92,6 +93,7 @@ test('attendance photo routes keep upload budget and accept raw image bodies', (
     '/api/volunteer/workflow/registrations/abc/attendance-supplement',
   ]) {
     assert.equal(requestBudgetMsFor('POST', path), UPLOAD_REQUEST_BUDGET_MS);
+    assert.equal(requestBudgetMsFor('POST', `/api/public/attachments/${path.split('/').pop()}`), LARGE_UPLOAD_REQUEST_BUDGET_MS);
     const headers = { 'content-length': '4194304', 'content-type': 'image/jpeg' };
     const options = { uploadMaxBytes: DEFAULT_UPLOAD_BODY_LIMIT_BYTES, allowNonMultipartUpload: true };
     assert.doesNotThrow(() => assertRequestBodySize({ headers }, options), path);

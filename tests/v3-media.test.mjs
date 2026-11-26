@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { fileRuleFor } from '../public/app/shared/upload-limits.js';
 import {
   MEDIA_PICK_STATUS,
   MEDIA_PICK_MIN,
@@ -306,9 +307,10 @@ test('上传回执：同一 clientUploadId 在 TTL 内只记一次，过期作�
   assert.equal(readUploadReceipt('alice:abc|1|2', start), null);
 });
 
-test('批量上传常量：并发 3、单张上限 20MB、额度按张计', () => {
+test('批量上传常量：并发 3、单张上限提高后仍按张计额度', () => {
   assert.equal(MEDIA_UPLOAD_CONCURRENCY, 3);
   assert.equal(MAX_PHOTOS_PER_BATCH, 12);
+  assert.ok(fileRuleFor('image/jpeg').maxSize >= 100 * 1024 * 1024, '单张照片上限应允许手机原图');
   assert.ok(MEDIA_LIMIT_PER_HOUR >= 200, '一张一个请求后，小时额度要按张给足');
   assert.ok(MEDIA_IP_LIMIT_PER_HOUR >= MEDIA_LIMIT_PER_HOUR * 5, 'IP 兜底要远高于单人额度');
 });

@@ -51,8 +51,8 @@ test('退避节奏：2s、5s，越界取边界值', () => {
   assert.equal(uploadRetryDelay('1'), 5000);
 });
 
-test('常量落在合理区间：重试不超过 3 次，超时不超过 3 分钟', () => {
+test('常量落在合理区间：重试不超过 3 次，浏览器单次上传不超过 30 分钟', () => {
   assert.ok(UPLOAD_AUTO_RETRIES >= 1 && UPLOAD_AUTO_RETRIES <= 3);
   assert.equal(UPLOAD_RETRY_DELAYS.length, UPLOAD_AUTO_RETRIES);
-  assert.ok(UPLOAD_TIMEOUT_MS >= 60000 && UPLOAD_TIMEOUT_MS <= 180000, '太短会误杀慢速上传，太长又会一直转圈');
+  assert.ok(UPLOAD_TIMEOUT_MS >= 120000 && UPLOAD_TIMEOUT_MS <= 30 * 60 * 1000, '500MB 文件需要更长的浏览器超时');
 });

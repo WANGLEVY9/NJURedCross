@@ -21,7 +21,7 @@ export const UPLOAD_RETRY_DELAYS = [2000, 5000];
  * 单张上传的浏览器层超时。
  * 跨境 1MB 正常 3～15 秒；给到 120 秒足够宽容，又能把「永远转圈」变成明确报错。
  */
-export const UPLOAD_TIMEOUT_MS = 120000;
+export const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
  * 这次失败值不值得自动重试。
@@ -37,7 +37,7 @@ export function isRetryableUploadError(error) {
   // status 0 = 断网 / 连接被重置 / 浏览器超时，都可能是瞬时问题。
   if (status === 0) return true;
   // 限流重试只会更糟；408 这类由服务端排队的也交给用户决定。
-  if (status === 408 || status === 429) return false;
+  if (status === 408 || status === 413 || status === 415 || status === 429) return false;
   // 5xx 是网关或上游一时无响应（502/503/504 最常见）。
   return status >= 500 && status <= 599;
 }

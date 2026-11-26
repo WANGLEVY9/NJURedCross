@@ -182,29 +182,29 @@ test('slot creation keeps rejecting disguised or oversized spreadsheets', async 
   assert.equal(lastJson(disguised.calls).status, 415);
   assert.equal(lastJson(disguised.calls).payload.code, 'attachment_type_unsupported');
 
-  // 表格与 Word 同档：50MB 以上拒收。
+  // 表格与 Word 同档：200MB 以上拒收。
   const oversized = createHarness();
   await attachmentRoutes(
-    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: '大表.xlsx', mimeType: 'application/vnd.ms-excel', size: 51 * 1024 * 1024 } }),
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: '大表.xlsx', mimeType: 'application/vnd.ms-excel', size: 201 * 1024 * 1024 } }),
     {}, apiUrl('/api/public/attachments'), oversized.ctx,
   );
   assert.equal(lastJson(oversized.calls).status, 413);
   assert.equal(lastJson(oversized.calls).payload.code, 'attachment_too_large');
 });
 
-test('前端表格 MIME 镜像与服务端同源正则一致', async () => {
+test('前后端共享同一份上传类型与大小策略', async () => {
   const { readFile } = await import('node:fs/promises');
   const source = await readFile(new URL('../public/app/portal/pages/submit.js', import.meta.url), 'utf8');
-  const match = source.match(/const SPREADSHEET_MIME = \/(.+?)\/;/);
-  assert.ok(match, '未找到前端 SPREADSHEET_MIME 常量');
-  assert.equal(match[1], SPREADSHEET_MIME_PATTERN.source, '前后端表格 MIME 正则不一致');
+  assert.match(source, /shared\/upload-limits\.js/, '投稿页不得再复制一份文件类型矩阵');
+  assert.equal(SPREADSHEET_MIME_PATTERN.test('application/vnd.ms-excel'), true);
+  assert.equal(SPREADSHEET_MIME_PATTERN.test('application/x-msdownload'), false);
 });
 
 test('slot creation rejects oversized files per type', async () => {
   const harness = createHarness();
   // 类型/大小校验先于归位校验：即便没带部门与活动，超大图片仍应报 413。
   await attachmentRoutes(
-    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: 'big.png', mimeType: 'image/png', size: 21 * 1024 * 1024 } }),
+    makeReq({ method: 'POST', url: apiUrl('/api/public/attachments'), json: { filename: 'big.png', mimeType: 'image/png', size: 101 * 1024 * 1024 } }),
     {}, apiUrl('/api/public/attachments'), harness.ctx,
   );
   assert.equal(lastJson(harness.calls).status, 413);

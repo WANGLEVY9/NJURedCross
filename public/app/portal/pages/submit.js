@@ -12,13 +12,15 @@
    ========================================================================== */
 
 import { h, icon, clear, setVars } from '../../core/dom.js';
-import { publicApi, uploadAttachment, ApiError } from '../../core/api.js';
+import { publicApi, uploadAttachment, mediaUploadDirect, ApiError } from '../../core/api.js';
 import { getSessionState } from '../../core/api.js';
 import { shake } from '../../core/motion.js';
 import { button, field, checkbox, notice, receipt, copyableCode, runWithLoading, badge, iconButton, steps, chip, readonlyField } from '../../ui/primitives.js';
 import { notify, reportError } from '../../core/toast.js';
 import * as fmt from '../../core/format.js';
 import { isSignedIn, loginRequiredPanel, redirectIfAuthError } from '../auth-gate.js';
+import { ALLOWED_UPLOAD_HINT, DIRECT_UPLOAD_THRESHOLD_BYTES, fileRuleFor as ruleFor,
+  uploadTimeoutFor } from '../../shared/upload-limits.js';
 
 const KINDS = [
   {
@@ -51,38 +53,9 @@ const DEFAULT_ARCHIVE_FALLBACK = { center: '主席团活动', activity: '宣新�
 
 /* Front-end mirror of the server file matrix: catches mistakes before a
    slot is spent. The server remains the authority. */
-/** 表格 MIME（与服务端 lib/attachment/api.js 的 SPREADSHEET_MIME_PATTERN 同源，测试比对防漂移）。 */
-const SPREADSHEET_MIME = /^(application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet|application\/vnd\.ms-excel|application\/wps-office\.xlsx?|text\/csv|application\/csv)$/;
-
-const FILE_RULES = [
-  { test: /^image\//, maxSize: 20 * 1024 * 1024, label: '图片 · 20MB', icon: 'image' },
-  { test: /^video\//, maxSize: 200 * 1024 * 1024, label: '视频 · 200MB', icon: 'camera' },
-  { test: /^application\/pdf$/, maxSize: 20 * 1024 * 1024, label: 'PDF · 20MB', icon: 'file' },
-  { test: /^application\/msword$/, maxSize: 50 * 1024 * 1024, label: 'Word 文档 · 50MB', icon: 'file' },
-  { test: /^application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document$/, maxSize: 50 * 1024 * 1024, label: 'Word 文档 · 50MB', icon: 'file' },
-  // 2026-11-17：文字稿件与文创设计的附件也接受表格（Excel / CSV），与 Word 同档 50MB。
-  { kind: 'spreadsheet', test: SPREADSHEET_MIME, maxSize: 50 * 1024 * 1024, label: '表格 · 50MB', icon: 'file' },
-  { test: /^application\/(zip|x-7z-compressed|x-rar-compressed)$/, maxSize: 50 * 1024 * 1024, label: '压缩包 · 50MB', icon: 'box' },
-  { test: /^application\/postscript$|^image\/vnd\.adobe\.photoshop$/, maxSize: 50 * 1024 * 1024, label: '设计源文件 · 50MB', icon: 'file' },
-];
-
 const MAX_FILES = 6;
 const DRAFT_KEY = 'nju-rc-submit-draft-v2';
 const DRAFT_DEBOUNCE_MS = 800;
-
-/** 表格扩展名：部分系统把 .csv 报成 text/plain，MIME 认不出时按扩展名兜底。 */
-const SPREADSHEET_NAME = /\.(xlsx|xls|csv)$/i;
-const UNKNOWN_MIME = /^(|text\/plain|application\/octet-stream)$/;
-
-function ruleFor(mimeType, filename = '') {
-  const value = String(mimeType || '').toLowerCase();
-  const hit = FILE_RULES.find((rule) => rule.test.test(value));
-  if (hit) return hit;
-  if (UNKNOWN_MIME.test(value) && SPREADSHEET_NAME.test(String(filename || ''))) {
-    return FILE_RULES.find((rule) => rule.kind === 'spreadsheet') || null;
-  }
-  return null;
-}
 
 function loadDraft() {
   try {
@@ -417,7 +390,7 @@ export default async function submitPage(context) {
   },
   icon('upload', 'ico ico--lg'),
   h('span', { class: 'dropzone__title', text: '点击选择文件，或把文件拖到这里' }),
-  h('span', { class: 'dropzone__hint', text: '图片 ≤20MB · 视频 ≤200MB · PDF ≤20MB · Word/表格 ≤50MB · 压缩包/源文件 ≤50MB，最多 6 个' }));
+  h('span', { class: 'dropzone__hint', text: `${ALLOWED_UPLOAD_HINT}，最多 6 个` }));
   const filelist = h('div', { class: 'filelist' });
   const attachmentSlot = h('div', { class: 'stack-4' }, fileInput, dropzone, filelist);
 
@@ -441,6 +414,47 @@ export default async function submitPage(context) {
 
   function liveCount() {
     return attachments.filter((entry) => entry.status === 'uploading' || entry.status === 'uploaded' || entry.status === 'pending').length;
+  }
+
+  /** 大文件走浏览器直传；端点不可用时退回本站中转（受网关体量限制）。 */
+  async function uploadEntry(entry) {
+    const file = entry.file;
+    if (!file) throw new Error('本地文件已不可用，请重新添加。');
+    const threshold = Number(attachmentConfig.directUploadThreshold) || DIRECT_UPLOAD_THRESHOLD_BYTES;
+    const direct = attachmentConfig.directUpload !== false && file.size > threshold;
+    if (direct) {
+      let ticket;
+      try {
+        const issued = await publicApi.attachmentTicket(entry.attachmentId, {
+          filename: file.name, mimeType: file.type, size: file.size,
+        });
+        ticket = issued?.ticket;
+      } catch (error) {
+        // 只有服务端还没上线直传端点才回落；校验类拒绝照原样抛给用户。
+        if (![404, 501, 503].includes(Number(error?.status) || 0)) throw error;
+      }
+      if (ticket) {
+        await mediaUploadDirect({
+          uploadUrl: ticket.uploadUrl,
+          parentDir: ticket.dir,
+          file,
+          timeoutMs: uploadTimeoutFor(file.size),
+          onProgress: (value) => {
+            entry.progress = Math.round(value * 0.95);
+            renderFilelist();
+          },
+        });
+        const result = await publicApi.attachmentConfirm(entry.attachmentId, ticket.id);
+        return result.attachment;
+      }
+    }
+    return uploadAttachment(entry.attachmentId, file, {
+      timeoutMs: uploadTimeoutFor(file.size),
+      onProgress: (progress) => {
+        entry.progress = progress;
+        renderFilelist();
+      },
+    });
   }
 
   function renderFilelist() {
@@ -518,12 +532,7 @@ export default async function submitPage(context) {
         });
         entry.attachmentId = slot.attachment.id;
         renderFilelist();
-        await uploadAttachment(entry.attachmentId, file, {
-          onProgress: (progress) => {
-            entry.progress = progress;
-            renderFilelist();
-          },
-        });
+        await uploadEntry(entry);
         entry.status = 'uploaded';
         entry.progress = 100;
         renderFilelist();
@@ -547,12 +556,7 @@ export default async function submitPage(context) {
     entry.error = '';
     renderFilelist();
     try {
-      await uploadAttachment(entry.attachmentId, entry.file, {
-        onProgress: (progress) => {
-          entry.progress = progress;
-          renderFilelist();
-        },
-      });
+      await uploadEntry(entry);
       entry.status = 'uploaded';
       entry.progress = 100;
     } catch (error) {

@@ -684,6 +684,8 @@ export const publicApi = {
   submissionArticle: (body) => request('/api/public/submissions/article', { method: 'POST', body }),
   submissionDesign: (body) => request('/api/public/submissions/design', { method: 'POST', body }),
   attachmentSlot: (body) => request('/api/public/attachments', { method: 'POST', body }),
+  attachmentTicket: (id, body) => request(`/api/public/attachments/${encodeURIComponent(id)}/upload-ticket`, { method: 'POST', body }),
+  attachmentConfirm: (id, ticketId) => request(`/api/public/attachments/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: { ticketId } }),
   myAttachments: () => request('/api/public/attachments/mine'),
   attachmentDelete: (attachmentId) => request(`/api/public/attachments/${encodeURIComponent(attachmentId)}`, { method: 'DELETE' }),
   warmthInterest: (body) => request('/api/public/warmth/interest', { method: 'POST', body }),
@@ -758,13 +760,13 @@ function traceUpload(xhr, route, sameOrigin=true) {
     xhr.addEventListener(event,()=>reportTiming({
       route,phase:'upload',method:'POST',clientTrace,
       requestId:xhr.getResponseHeader('X-Request-ID'),status:xhr.status,
-      durationMs:Math.min(120000,performance.now()-start),
+      durationMs:Math.min(30*60*1000,performance.now()-start),
       outcome:xhr.status>=400?'http':outcome,
     }),{once:true});
   }
 }
 
-export function uploadAttachment(attachmentId, file, { onProgress = null, signal = null } = {}) {
+export function uploadAttachment(attachmentId, file, { onProgress = null, signal = null, timeoutMs = UPLOAD_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
     const path = `/api/public/attachments/${encodeURIComponent(attachmentId)}`;
     const xhr = new XMLHttpRequest();
@@ -772,6 +774,7 @@ export function uploadAttachment(attachmentId, file, { onProgress = null, signal
     traceUpload(xhr,path);
     xhr.withCredentials = true;
     xhr.responseType = 'text';
+    xhr.timeout = timeoutMs;
     if (state.csrfToken) xhr.setRequestHeader('X-CSRF-Token', state.csrfToken);
     const form = new FormData();
     form.append('file', file, file.name);
@@ -784,6 +787,7 @@ export function uploadAttachment(attachmentId, file, { onProgress = null, signal
     xhr.upload.addEventListener('progress', onUploadProgress);
     xhr.addEventListener('abort', onAbort);
     xhr.addEventListener('error', () => reject(new ApiError('网络连接中断，请检查网络后重试。', { status: 0, path, code: 'offline' })));
+    xhr.addEventListener('timeout', () => reject(new ApiError('上传超时，请检查网络后重试。', { status: 0, path, code: 'timeout' })));
     xhr.addEventListener('load', () => {
       let payload = null;
       try { payload = JSON.parse(xhr.responseText); } catch { payload = null; }
