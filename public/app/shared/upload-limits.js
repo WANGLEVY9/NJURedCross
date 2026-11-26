@@ -24,7 +24,7 @@ export const SPREADSHEET_MIME_PATTERN = /^(application\/vnd\.openxmlformats-offi
  */
 const BLOCKED_MIME = /^(?:text\/html|application\/(?:javascript|x-javascript|x-msdownload|x-msi|exe|java-archive|x-shockwave-flash)|image\/svg\+xml)/;
 
-const DOCUMENT_MIME = /^(?:application\/(?:msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|vnd\.openxmlformats-officedocument\.presentationml\.presentation|vnd\.ms-powerpoint|vnd\.oasisfilenameisnotdefined|rtf|x-rtf)|text\/(?:plain|markdown|csv))$/;
+const DOCUMENT_MIME = /^(?:application\/(?:msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document|vnd\.openxmlformats-officedocument\.presentationml\.presentation|vnd\.ms-powerpoint|vnd\.oasisfilenameisnotdefined|rtf|x-rtf))$/;
 const ARCHIVE_MIME = /^application\/(?:zip|x-7z-compressed|x-rar-compressed|x-tar|gzip|x-gzip)$/;
 const DESIGN_MIME = /^(?:application\/postscript|image\/vnd\.adobe\.photoshop|application\/vnd\.adobe\.illustrator)$/;
 

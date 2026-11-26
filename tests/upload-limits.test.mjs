@@ -33,6 +33,7 @@ test('未知 MIME 只按明确白名单扩展名兜底，可执行内容仍拒�
   assert.equal(fileRuleFor('application/octet-stream', '海报.PDF')?.kind, 'pdf');
   assert.equal(fileRuleFor('', '报告.txt')?.kind, 'document');
   assert.equal(fileRuleFor('application/octet-stream', '木马.exe'), null);
+  assert.equal(fileRuleFor('text/plain', '木马.exe'), null);
   assert.equal(fileRuleFor('text/html', '看起来是.txt'), null);
   assert.equal(fileRuleFor('image/svg+xml', '图标.svg'), null);
   assert.ok(FILE_RULES.length >= 8);
