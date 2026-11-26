@@ -1,4 +1,5 @@
 import { h, icon } from '../core/dom.js';
+import { lightField } from '../ui/light-field.js';
 import { managedImage, imageReady, mayPrefetch } from './image-source.js';
 
 /**
@@ -153,6 +154,7 @@ export function plazaHero({
       },
     },
   }, art,
+  variant === 'banner' ? null : h('div', { class: `${part('light-field-layer')}`, aria: { hidden: 'true' } }, lightField({ className: `${part('light-field')}`, quiet: true })),
   // 横幅模式不渲染文案区：工作区标题已经由页面自己给出。
   variant === 'banner' ? null : h('div', { class: part('copy') }, ...copyChildren),
   h('button', { type: 'button', class: `${part('arrow')} ${part('arrow')}--prev`, aria: { label: '上一张' }, on: { click: () => show(current - 1, true) } }, icon('chevronLeft', 'ico')),

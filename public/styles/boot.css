@@ -153,9 +153,9 @@ body.page-ready > .root > .console-root {
   width: 58px;
   height: 58px;
   flex: none;
-  object-fit: cover;
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px rgb(16 36 59 / 0.08);
+  object-fit: contain;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .njurc-startup__brand-copy {
@@ -165,25 +165,25 @@ body.page-ready > .root > .console-root {
 .njurc-startup__brand-name {
   margin: 0;
   color: var(--boot-deep);
-  font-family: "Songti SC", "SimSun", "Noto Serif CJK SC", serif;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   font-size: 21px;
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: 0.02em;
+  font-weight: 650;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
   white-space: nowrap;
 }
 
 .njurc-startup__brand-en {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   overflow: hidden;
   color: #756a66;
-  font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", sans-serif;
-  font-size: 10px;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.18em;
-  line-height: 1.4;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
   text-overflow: ellipsis;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 

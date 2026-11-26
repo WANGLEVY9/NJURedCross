@@ -3,6 +3,7 @@ import { getSessionState } from '../../core/api.js';
 import { developingPlaza } from '../development-access.js';
 import { managedImage } from '../image-source.js';
 import { brandLockup } from '../../ui/brand-lockup.js';
+import { lightField } from '../../ui/light-field.js';
 
 // Deliberately tab-local presentation state: no request, approval record or
 // permission grant is created. Actual opening is controlled by the rollout map.
@@ -31,6 +32,7 @@ export default function page(context) {
   const next = context.path + location.search;
   const node = h('section', { class: 'development-gate', aria: { labelledby: 'development-gate-title' } },
     h('div', { class: 'development-gate__copy' },
+      lightField({ className: 'development-gate__light-field' }),
       brandLockup({className:'development-gate__brand'}),
       h('p', { class: 'development-gate__eyebrow', text: 'NJU RED CROSS · 服务准备中' }),
       h('h1', { id: 'development-gate-title', text: plaza.name }),

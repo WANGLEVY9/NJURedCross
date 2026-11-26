@@ -1,4 +1,5 @@
 import { h } from '../core/dom.js';
+import { lightField } from '../ui/light-field.js';
 import { publicApi } from '../core/api.js';
 import { activityPresentation } from './activity-presentation.js';
 import { HOME_CONTENT } from './home-content.js';
@@ -31,7 +32,7 @@ export async function createHome() {
         h('h3', { text: item.title }), item.detail ? h('p', { text: item.detail }) : null), 'home-footprints__story'))) : [h('li', { class: 'home-footprints__empty', text: '新的红会足迹，正在记录。' })]));
   }
   renderStories(HOME_CONTENT.volunteers, HOME_CONTENT.footprints);
-  const node = h('div', { class: 'view home-page home-redesign' }, carousel.node, impact, cranes.node,
+  const node = h('div', { class: 'view home-page home-redesign' }, lightField({ className: 'home-light-field' }), carousel.node, impact, cranes.node,
     h('div', { class: 'home-stories' },
       h('section', { class: 'home-volunteers', aria: { labelledby: 'home-volunteers-title' } }, h('h2', { id: 'home-volunteers-title', text: '志愿者风采' }), volunteers),
       h('section', { class: 'home-footprints', aria: { labelledby: 'home-footprints-title' } }, h('h2', { id: 'home-footprints-title', text: '红会足迹' }), footprints)));

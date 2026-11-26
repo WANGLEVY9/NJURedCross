@@ -19,10 +19,11 @@ test('all top-left brand surfaces use the shared lockup',async()=>{
  assert.doesNotMatch(portal,/NJURedCross/);
 });
 
-test('brand type uses a Latin sans stack and readable tracking',async()=>{
+test('brand type uses a clean bilingual sans system and readable tracking',async()=>{
  const css=await read('../public/styles/brand-lockup.css');
  assert.match(css,/"Helvetica Neue", Helvetica, Arial/);
- assert.match(css,/letter-spacing: 0\.18em/);
- assert.match(css,/--brand-lockup-en: 10px/);
+ assert.match(css,/letter-spacing: 0\.055em/);
+ assert.match(css,/--brand-lockup-en: 11px/);
+ assert.match(css,/"PingFang SC", "Hiragino Sans GB"/);
  assert.doesNotMatch(css,/Times New Roman/);
 });

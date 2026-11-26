@@ -1,0 +1,187 @@
+/* ==========================================================================
+   Light field: a bounded, decorative interpretation of the reference's
+   drifting colour marks. This is a web CSS approximation, not a Google asset.
+   The dots are inert, aria-hidden, and stop under reduced-motion preferences.
+   ========================================================================== */
+
+.light-field {
+  --field-x: 20%;
+  --field-y: 40%;
+  --field-size: min(66vw, 920px);
+  --field-dot: #2557c7;
+  --field-dot-alt: #b4233e;
+  --field-dot-warm: #d97745;
+  --field-dot-violet: #77419b;
+  --field-opacity: 0.9;
+  position: absolute;
+  top: var(--field-y);
+  left: var(--field-x);
+  width: var(--field-size);
+  height: var(--field-size);
+  max-width: 1100px;
+  max-height: 1100px;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+  pointer-events: none;
+  opacity: var(--field-opacity);
+  contain: layout paint style;
+}
+
+.light-field::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--field-dot) 0 1px, transparent 1.4px) 0 0 / 37px 43px;
+  opacity: 0.18;
+  mask-image: radial-gradient(circle, #000 0 18%, transparent 72%);
+}
+
+.light-field__spark {
+  position: absolute;
+  inset: 0;
+  color: var(--field-dot);
+  animation: light-field-drift var(--field-drift, 16s) ease-in-out var(--field-delay, 0s) infinite alternate;
+}
+
+.light-field__spark:nth-child(2) {
+  color: var(--field-dot-violet);
+  --field-drift: 19s;
+  --field-delay: -7s;
+  transform: rotate(38deg) scale(0.88);
+}
+
+.light-field__spark:nth-child(3) {
+  color: var(--field-dot-warm);
+  --field-drift: 21s;
+  --field-delay: -12s;
+  transform: rotate(-22deg) scale(0.76);
+}
+
+.light-field__spark:nth-child(4) {
+  color: var(--field-dot-alt);
+  --field-drift: 24s;
+  --field-delay: -4s;
+  transform: rotate(72deg) scale(0.62);
+}
+
+.light-field__spark::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 4px 2px at 50% 3%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 66% 10%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 80% 22%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 91% 38%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 96% 55%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 91% 72%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 79% 87%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 62% 96%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 43% 96%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 26% 88%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 12% 73%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 5% 55%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 9% 37%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 21% 21%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 35% 10%, currentColor 0 98%, transparent 100%);
+  transform: rotate(-14deg);
+  opacity: 0.9;
+}
+
+.light-field__spark::after {
+  content: "";
+  position: absolute;
+  inset: 16%;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse 3px 2px at 50% 0%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 76% 13%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 93% 36%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 92% 66%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 72% 91%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 41% 96%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 14% 77%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 3% 47%, currentColor 0 98%, transparent 100%),
+    radial-gradient(ellipse 3px 2px at 16% 18%, currentColor 0 98%, transparent 100%);
+  transform: rotate(25deg);
+  opacity: 0.75;
+}
+
+@keyframes light-field-drift {
+  from { translate: -1.5% 1%; rotate: -1deg; }
+  to { translate: 1.5% -1.5%; rotate: 2deg; }
+}
+
+/* A quiet, single hue variant for service plazas and dense surfaces. */
+.light-field--quiet {
+  --field-opacity: 0.5;
+  --field-dot: #8a2438;
+  --field-dot-alt: #a94a4a;
+  --field-dot-warm: #b87154;
+  --field-dot-violet: #7c3f58;
+}
+
+@media (max-width: 760px) {
+  .light-field { --field-size: min(92vw, 620px); --field-opacity: 0.62; }
+}
+
+@media (prefers-reduced-motion: reduce), (prefers-reduced-transparency: reduce) {
+  .light-field { opacity: 0.42; }
+  .light-field__spark { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .light-field { display: none; }
+}
+
+/* Surface hosts: the marks stay behind text and inside the owning section. */
+.home-redesign { position: relative; isolation: isolate; overflow-x: clip; }
+.home-redesign > :not(.light-field) { position: relative; z-index: 1; }
+.home-redesign .home-light-field {
+  --field-x: 86%;
+  --field-y: 6%;
+  --field-size: min(44vw, 620px);
+  --field-opacity: 0.72;
+}
+
+.events-hero__light-field-layer,
+.development-gate,
+.gate__aside {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.events-hero__light-field-layer {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.development-gate,
+.gate__aside { overflow-x: clip; }
+
+.development-gate__copy,
+.gate__aside { isolation: isolate; }
+
+.events-hero__light-field-layer .events-hero__light-field,
+.development-gate__copy .development-gate__light-field,
+.gate__aside .gate__light-field {
+  --field-x: 84%;
+  --field-y: 48%;
+  --field-size: min(62vw, 760px);
+  --field-opacity: 0.48;
+}
+
+.events-hero__light-field-layer .events-hero__light-field { --field-x: 76%; --field-y: 44%; --field-size: min(48vw, 620px); }
+.development-gate__copy { position: relative; isolation: isolate; }
+.development-gate__copy > :not(.light-field) { position: relative; z-index: 1; }
+.gate__aside > :not(.light-field) { position: relative; z-index: 1; }
+
+@media (max-width: 900px) {
+  .home-redesign .home-light-field { --field-x: 88%; --field-y: 3%; --field-size: min(82vw, 520px); --field-opacity: 0.48; }
+  .events-hero__light-field-layer .events-hero__light-field { --field-x: 88%; --field-y: 32%; --field-size: min(96vw, 520px); }
+}

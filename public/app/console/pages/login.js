@@ -13,6 +13,7 @@ import { button, field, notice, runWithLoading } from '../../ui/primitives.js';
 import { notify } from '../../core/toast.js';
 import { administratorLoginIdentifier } from '../../portal/campus-login.js';
 import { brandLockup } from '../../ui/brand-lockup.js';
+import { lightField } from '../../ui/light-field.js';
 
 const FACTS = [
   ['calendar', '活动管理', '创建活动、处理报名与现场签到。'],
@@ -135,6 +136,7 @@ export default async function loginPage(context) {
   );
   const node = h('div', { class: 'gate gate--studio' },
     h('aside', { class: 'gate__aside' },
+      lightField({ className: 'gate__light-field' }),
       brandLockup({className:'gate__brand',compact:true}),
       h('div', { class: 'gate__intro stack-4' }, h('p', { class: 't-label', text: '一起，让善意有序发生' }),
         h('h2', null, h('span', { text: '让每一次协作' }), h('em', { text: '成就更好的回应' })),

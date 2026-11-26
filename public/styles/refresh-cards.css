@@ -1,0 +1,111 @@
+/* ==========================================================================
+   Shared card refresh: one controlled radius, quiet borders, real hover
+   feedback, and a card-top accent that works on light and dark art panels.
+   This borrows the reference's airy hierarchy without copying Google branding.
+   ========================================================================== */
+
+.portal .square-card {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px -24px color-mix(in srgb, var(--text-primary) 32%, transparent);
+  transition: border-color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out), background-color var(--dur-2) var(--ease-out);
+}
+
+.portal .square-card {
+  gap: var(--s4);
+  padding: clamp(22px, 2.2vw, 30px);
+}
+
+.portal .square-card__icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--accent-ring);
+  border-radius: 12px;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.portal .square-card h2,
+.portal .square-card h3 {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-weight: var(--fw-semibold);
+  letter-spacing: -0.018em;
+  line-height: 1.3;
+}
+
+.portal .square-card > p {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--text-secondary);
+  line-height: 1.65;
+}
+
+.portal .square-card__action {
+  margin-top: auto;
+  padding-top: var(--s4);
+  border-top: 1px solid var(--border);
+  color: var(--accent);
+  font-weight: var(--fw-semibold);
+}
+
+.portal a.square-card:is(:hover, :focus-visible) {
+  border-color: var(--accent-ring);
+  background: var(--surface-raised);
+  box-shadow: 0 18px 42px -30px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.portal .square-card > .btn--primary:last-child {
+  width: 100%;
+  min-height: 44px;
+  border-radius: var(--r-full);
+  background: var(--text-primary);
+  color: var(--text-on-inverse);
+}
+
+.portal .square-card--disabled {
+  opacity: 0.72;
+  background: var(--bg-sunken);
+  box-shadow: none;
+}
+
+/* The reference's dark feature tiles are represented as one optional accent
+   variant. Content, not decorative badges, still carries the hierarchy. */
+.portal .square-card--accent {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+
+.portal .square-card--accent .square-card__action {
+  border-top-color: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* Section tabs borrow the reference's single pill control without adding a
+   second card layer. Existing segmented controls remain the source of state. */
+.console .segmented[aria-label="活动管理环节"],
+.console .segmented[aria-label="系统设置视图"],
+.console .segmented[aria-label="管理员中心视图"] {
+  border: 1px solid var(--border);
+  border-radius: var(--r-full);
+  background: var(--surface);
+  padding: 4px;
+}
+
+.console .segmented[aria-label="活动管理环节"] .segmented__thumb,
+.console .segmented[aria-label="系统设置视图"] .segmented__thumb,
+.console .segmented[aria-label="管理员中心视图"] .segmented__thumb {
+  top: 4px;
+  bottom: 4px;
+  border-radius: var(--r-full);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .portal .square-card { transition: none; }
+}
+
+@media (forced-colors: active) {
+  .portal .square-card { border: 1px solid CanvasText; background: Canvas; box-shadow: none; }
+}

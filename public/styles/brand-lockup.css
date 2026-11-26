@@ -1,11 +1,11 @@
 /* Shared official brand lockup. The emblem stays intact; only type is unified. */
 .brand-lockup {
   --brand-lockup-emblem: 44px;
-  --brand-lockup-cn: 18px;
-  --brand-lockup-en: 10px;
+  --brand-lockup-cn: 17px;
+  --brand-lockup-en: 11px;
   display: inline-flex;
   align-items: center;
-  gap: var(--s3);
+  gap: 10px;
   min-width: 0;
   color: var(--text-primary);
   text-decoration: none;
@@ -16,26 +16,25 @@
   width: var(--brand-lockup-emblem);
   height: var(--brand-lockup-emblem);
   flex: none;
-  border-radius: 50%;
   object-fit: contain;
-  background: #fff;
 }
 
 .brand-lockup__text {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
-  line-height: 1.2;
+  line-height: 1.12;
 }
 
 .brand-lockup__cn {
   min-width: 0;
   overflow: hidden;
   color: var(--brand-crimson-deep, #a3132a);
-  font-family: "NJU Heading", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
   font-size: var(--brand-lockup-cn);
-  font-weight: var(--fw-semibold, 600);
-  letter-spacing: 0.04em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -43,30 +42,30 @@
 .brand-lockup__en {
   min-width: 0;
   overflow: hidden;
-  color: #21386b;
-  font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: var(--text-secondary);
+  font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", sans-serif; /* impeccable-disable-line overused-font */
   font-size: var(--brand-lockup-en);
   font-weight: 600;
-  letter-spacing: 0.18em;
-  line-height: 1.35;
+  letter-spacing: 0.055em;
+  line-height: 1.2;
   text-overflow: ellipsis;
-  text-transform: uppercase;
+  text-transform: none;
   white-space: nowrap;
 }
 
 .brand-lockup--compact {
   --brand-lockup-emblem: 36px;
   --brand-lockup-cn: 15px;
-  --brand-lockup-en: 9px;
-  gap: var(--s2);
+  --brand-lockup-en: 10px;
+  gap: 8px;
 }
 
 /* Console uses the same mark at a denser scale, never a separate wordmark. */
 .console .brand-lockup {
   --brand-lockup-emblem: 40px;
   --brand-lockup-cn: 14px;
-  --brand-lockup-en: 9px;
-  gap: var(--s2);
+  --brand-lockup-en: 10px;
+  gap: 8px;
 }
 
 .console .brand-lockup__cn { color: var(--text-primary); }
@@ -75,10 +74,10 @@
 .development-gate__brand.brand-lockup {
   --brand-lockup-emblem: 40px;
   --brand-lockup-cn: 17px;
-  --brand-lockup-en: 10px;
+  --brand-lockup-en: 11px;
 }
 
 @media (max-width: 640px) {
-  .brand-lockup { --brand-lockup-emblem: 36px; --brand-lockup-cn: 15px; --brand-lockup-en: 9px; }
-  .console .brand-lockup { --brand-lockup-emblem: 36px; --brand-lockup-cn: 14px; --brand-lockup-en: 9px; }
+  .brand-lockup { --brand-lockup-emblem: 36px; --brand-lockup-cn: 15px; --brand-lockup-en: 10px; }
+  .console .brand-lockup { --brand-lockup-emblem: 36px; --brand-lockup-cn: 14px; --brand-lockup-en: 10px; }
 }
