@@ -12,11 +12,13 @@ test('all stages search includes ended activities while history remains ended-on
  await page.route('**/api/volunteer/workflow/workspace-drafts',route=>route.fulfill({json:{ok:true,drafts:[],capabilities:{canSubmit:true}}}));
  await page.route('**/api/volunteer/workflow/workspace-drafts/capabilities',route=>route.fulfill({json:{ok:true,capabilities:{enabled:true,canCreate:true,canSubmit:true,rosterAvailable:true}}}));
  await page.goto('/console/events');
+ await page.getByRole('radiogroup',{name:'活动阶段筛选'}).getByRole('radio',{name:'全部',exact:true}).click();
  await page.getByLabel('搜索活动',{exact:true}).fill('校园防艾闯关赛');
  await expect(page.locator('.activity-v2-card')).toHaveCount(2);
  await expect(page.locator('.activity-v2-card').filter({hasText:'11.22 校园防艾闯关赛物资搬运'})).toBeVisible();
  await expect(page.locator('.activity-v2-card').filter({hasText:'已结束'})).toBeVisible();
  await page.goto('/console/events?history=1');
+ await expect(page.getByRole('radiogroup',{name:'活动阶段筛选'}).getByRole('radio',{name:'已结束',exact:true})).toHaveAttribute('aria-checked','true');
  await page.getByLabel('搜索活动',{exact:true}).fill('校园防艾闯关赛');
  await expect(page.locator('.activity-v2-card')).toHaveCount(1);
  await expect(page.locator('.activity-v2-card').filter({hasText:'11.22 校园防艾闯关赛物资搬运'})).toHaveCount(0);

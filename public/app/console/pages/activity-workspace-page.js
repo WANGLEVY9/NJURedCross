@@ -165,7 +165,7 @@ export default async function activityWorkspacePage(context){
     const cards=rows.map(row=>{
       const sessionCount=row.sessionCount??1;
       const status=h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}),activityRegionTag(row));
-      const facts=h('span',{class:'activity-v2-card__facts'},status,sessionCount>1?h('span',{class:'activity-v2-card__count',text:`${sessionCount} 个场次`}):null);
+      const facts=h('span',{class:'activity-v2-card__facts'},status,sessionCount>1?h('small',{class:'activity-v2-card__count',text:`${sessionCount} 个场次`}):null);
       const footer=h('span',{class:'activity-v2-card__footer'},facts,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm')));
       return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},role:'listitem',on:{click:()=>openActivity(row)}},h('strong',{title:row.name,text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),footer);
     });
