@@ -91,11 +91,29 @@ export default async function activityWorkspacePage(context){
   const currentActor=getSessionState().user?.accountId||getSessionState().user?.username;
   let searchDebounce=0;
   const search=field({label:'搜索活动',type:'search',placeholder:'搜索活动名称',onInput:()=>{clearTimeout(searchDebounce);searchDebounce=setTimeout(renderList,150);}});
-  let stageValue='';
+  const activeStageFilters=[
+    {value:'active',label:'未结束',compactLabel:'未结束'},
+    {value:'ongoing',label:'进行中',compactLabel:'进行中'},
+    ...WORKSPACE_STAGES.filter(value=>!['已结束','进行中'].includes(value)).map(value=>({value,label:value,compactLabel:value})),
+    {value:'已结束',label:'已结束',compactLabel:'已结束'},
+    {value:'all',label:'全部',compactLabel:'全部'},
+  ];
+  const defaultStage=context.query.get('history')==='1'?'已结束':'active';
+  let stageValue=defaultStage;
   const stage=segmented({role:'radiogroup',ariaLabel:'活动阶段筛选',
-    items:[{value:'',label:'全部'},...WORKSPACE_STAGES.map(value=>({value,label:value}))],value:stageValue,
+    items:activeStageFilters,value:stageValue,
     onChange:value=>{setStage(value);renderList();}});
-  const setStage=value=>{stageValue=value||'';stage.setValue(stageValue);};
+  const setStage=value=>{
+    const requested=String(value||'');
+    stageValue=requested===''?'all':activeStageFilters.some(item=>item.value===requested)?requested:defaultStage;
+    stage.setValue(stageValue);
+  };
+  const matchesStage=(row,value)=>{
+    if(!value||value==='all')return true;
+    if(value==='active')return row.stage!=='已结束';
+    if(value==='ongoing')return row.stage==='进行中';
+    return row.stage===value;
+  };
   const region=field({label:'地区',options:[{value:'',label:'全部'},{value:'nanjing',label:'南京地区'},{value:'suzhou',label:'苏州地区'}],onInput:()=>{syncCategories();renderList();}});
   const category=field({label:'类别',options:[{value:'',label:'全部类别'},...workspaceCategories('')],onInput:renderList});
   const leave=async()=>{
@@ -142,12 +160,14 @@ export default async function activityWorkspacePage(context){
   }
   function renderList(){
     const history=context.query.get('history')==='1';
-    const rows=records().filter(r=>(!history||r.stage==='已结束')&&(!search.control.value||r.name?.includes(search.control.value))&&(!stageValue||r.stage===stageValue)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
+    const rows=records().filter(r=>(!history||r.stage==='已结束')&&(!search.control.value||r.name?.includes(search.control.value))&&matchesStage(r,stageValue)&&(!region.control.value||r.region===region.control.value)&&(!category.control.value||r.category===category.control.value));
     count.textContent=`${rows.length} 项`;
     const cards=rows.map(row=>{
       const sessionCount=row.sessionCount??1;
       const status=h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:row.stage==='报名中'&&occupancy.get(row.id)?'报名中 · 报名已满':row.statusLabel||row.stage||'未分类'}),activityRegionTag(row));
-      return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},role:'listitem',on:{click:()=>openActivity(row)}},h('strong',{title:row.name,text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),h('span',{class:'row-between'},status,sessionCount>1?h('small',{class:'t-caption',text:`${sessionCount} 个场次`}):null,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm'))));
+      const facts=h('span',{class:'activity-v2-card__facts'},status,sessionCount>1?h('span',{class:'activity-v2-card__count',text:`${sessionCount} 个场次`}):null);
+      const footer=h('span',{class:'activity-v2-card__footer'},facts,h('span',{class:'activity-v2-card__entry','aria-hidden':'true'},'进入活动',icon('chevronRight','ico ico--sm')));
+      return h('button',{type:'button',class:'activity-v2-card',data:{record:row.id,region:row.region||'',category:row.category||'',sessions:String(sessionCount)},aria:{pressed:String(row.id===selected)},role:'listitem',on:{click:()=>openActivity(row)}},h('strong',{title:row.name,text:row.name}),h('span',{class:'activity-v2-card__meta',text:[row.region==='suzhou'?'苏州地区':'南京地区',row.category,row.date].filter(Boolean).join(' · ')}),footer);
     });
     const blood=rows.filter(row=>config(row.event||{}).source?.kind==='generated_blood');count.textContent=`${rows.length-blood.length+(blood.length?1:0)} 项`;
     const schedules=new Map();for(const row of rows.filter(r=>scheduledSession(r.event))){const key=config(row.event).special.rootId;schedules.set(key,[...(schedules.get(key)||[]),row]);}
@@ -155,7 +175,7 @@ export default async function activityWorkspacePage(context){
     for(const group of schedules.values()){const active=group.find(row=>row.id===selected)||group[0];list.append(h('button',{type:'button',class:'activity-v2-card',role:'listitem',data:{category:'排班专项',region:'nanjing'},'aria-pressed':String(group.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{title:active.name,text:active.name}),h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:context.query.get('history')==='1'?'已结束':active.statusLabel}),activityRegionTag(active)),h('small',{class:'t-caption',text:`${group.length} 周排班 · 进入后选择周次`})))}
     count.textContent=`${rows.length-blood.length+(blood.length?1:0)-[...schedules.values()].reduce((n,group)=>n+group.length-1,0)} 项`;
     if(blood.length){const active=blood.find(row=>row.id===selected)||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',role:'listitem',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
-    if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:recycling?'移入回收站的活动会出现在这里。':'调整筛选或新建活动。'}));
+    if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:recycling?'移入回收站的活动会出现在这里。':stageValue==='active'?'当前没有未结束活动，可切换到“全部”或“已结束”查看。':'调整筛选或新建活动。'}));
   }
   function renderDetail(){
     const sequence=++detailSequence;editor?.dispose();editor=null;pane.replaceChildren();const row=records().find(r=>r.id===selected);
@@ -576,7 +596,7 @@ export default async function activityWorkspacePage(context){
     if(!disposed)statisticsLink.hidden=capabilities?.activityStatistics!==true;
   }).catch(()=>{});
   const node=h('div',{class:'view wspad activity-v2 activity-workspace-redesign'},pageHead({title:'活动管理',actions:[button({label:recycling?'返回历史活动':'回收站',href:buildPath(context.path,{history:recycling?'1':'trash'}),variant:'secondary'}),...(recycling?[]:[tools,roleSettings,statisticsLink,createButton].filter(Boolean)),button({label:'刷新',onClick:async()=>{if(await leave())await load({fresh:true});}})]}),message,workspace);
-  if(mobile.matches&&directoryState){search.control.value=directoryState.search;setStage(directoryState.stage);region.control.value=directoryState.region;syncCategories();category.control.value=directoryState.category;}
+  if(mobile.matches&&directoryState){search.control.value=directoryState.search;setStage(directoryState.stage||defaultStage);region.control.value=directoryState.region;syncCategories();category.control.value=directoryState.category;}
   syncLayout();mobile.addEventListener('change',resizeLayout);
   list.append(...Array.from({length:3},()=>h('div',{class:'activity-v2-card activity-v2-card--skeleton','aria-hidden':'true'},h('strong',{class:'sk sk--line sk-w-70'}),h('span',{class:'sk sk--line sk-w-40'}))));
   void load();return {title:'活动管理',crumb:'活动管理',node,dispose:()=>{rememberDirectory();disposed=true;loadSequence++;clearTimeout(searchDebounce);directoryWidth.dispose();editor?.dispose();release();mobile.removeEventListener('change',resizeLayout);window.removeEventListener('beforeunload',beforeUnload);}};

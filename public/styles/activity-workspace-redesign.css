@@ -166,6 +166,25 @@ body.is-resizing-activity-directory {
   scrollbar-width: thin;
 }
 
+.activity-status-scroll {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+  overscroll-behavior-x: contain;
+}
+
+.activity-status-scroll .segmented {
+  width: max-content;
+  min-width: 100%;
+}
+
+.activity-status-scroll .segmented button {
+  min-height: 38px;
+  padding-inline: var(--s2);
+  white-space: nowrap;
+}
+
 /* Directory rows use the plaza's category palette, with the category named in
    text and workflow state kept as a separate readable chip. */
 .activity-v2-card {
@@ -266,6 +285,30 @@ body.is-resizing-activity-directory {
   font-weight: var(--fw-semibold);
   color: var(--accent);
   white-space: nowrap;
+}
+
+.activity-v2-card__facts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.activity-v2-card__count {
+  color: var(--workspace-muted);
+  font-size: var(--fs-caption);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.activity-v2-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  min-width: 0;
+  width: 100%;
 }
 
 /* Detail header: title leads, stage reads as a status rail, controls stay

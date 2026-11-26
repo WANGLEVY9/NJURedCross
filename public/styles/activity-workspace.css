@@ -262,6 +262,8 @@
  .activity-v2[data-mobile-view=detail] .activity-v2-directory{display:none}
  .activity-v2[data-mobile-view=detail] .activity-v2-detail{display:flex;flex:1;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain}
  .activity-v2-filters{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+ .activity-status-scroll{margin:0 -2px 4px}
+ .activity-status-scroll .segmented button{min-height:44px;font-size:12px}
  .activity-v2-filters .select-menu__trigger{min-height:44px;font-size:12px;padding-inline:8px}
  .activity-v2-directory>.field input{min-height:44px}
  .activity-v2-list{gap:10px;padding:0 0 14px}
