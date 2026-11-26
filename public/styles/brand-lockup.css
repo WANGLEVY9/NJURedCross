@@ -16,6 +16,7 @@
   width: var(--brand-lockup-emblem);
   height: var(--brand-lockup-emblem);
   flex: none;
+  border-radius: 50%;
   object-fit: contain;
 }
 
