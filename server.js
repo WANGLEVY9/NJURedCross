@@ -122,6 +122,7 @@ import {createApprovalRouting} from './lib/events/approval-routing.js';
 import {createApprovalRoutingStore} from './lib/events/approval-routing-store.js';
 import * as attachmentApi from './lib/attachment/api.js';
 import * as mediaApi from './lib/attachment/media.js';
+import {materialAccess} from './lib/attachment/material-access.js';
 import * as showcaseApi from './lib/attachment/showcase.js';
 import * as reviewFlow from './lib/attachment/review.js';
 import * as digestFlow from './lib/attachment/digest.js';
@@ -5493,12 +5494,24 @@ const mediaCtx = {
   enforceLimit: enforcePublicLimit,
   ownsBusinessRef,
   businessAccountRef,
+  resolveMaterialAccess,
   // 摄影师名与实名强绑定：只从身份库取 realName，前端传值一律忽略。
   resolveRealName: (session) => accountsByUsername.get(session?.username)?.realName || '',
   tables: { media: MEDIA_TABLE, project: eventProjectTable },
   workflowActivities: finishedSubmissionActivityCatalog,
   config: attachmentCtx.config,
 };
+
+async function resolveMaterialAccess(session,{required=false}={}){
+  const known=accountsByUsername.get(session.username);
+  if(!required&&(!isAccountActive(known)||!hasPermission(known,'outreach')))return materialAccess(known);
+  const account=await loadSessionAccount(session.username);
+  if(!isAccountActive(account)||!hasPermission(account,'outreach'))return materialAccess(account);
+  let roster;
+  try{roster=await observer.dependency('storage','material-center-authority',getWorkspaceRoster);}
+  catch(error){if(error.statusCode!==503)throw error;}
+  return materialAccess(account,roster);
+}
 
 /** 任务与技能 ctx（v3 S5）：三端共用同一套表，鉴权在路由层按域裁决。 */
 const taskCtx = {
@@ -5783,7 +5796,9 @@ if (isConsoleMediaApi) {
   if (!mediaSession) return;
   const isMediaWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
   if (isMediaWrite && !requireCsrf(req, res, mediaSession)) return;
-  return await mediaApi.consoleMediaRoutes(req, res, url, { ...mediaCtx, session: mediaSession });
+  const access=await resolveMaterialAccess(mediaSession,{required:true});
+  if(!access.outreach)return json(res,403,{ok:false,code:'permission_denied',requiredScope:'outreach'});
+  return await mediaApi.consoleMediaRoutes(req, res, url, { ...mediaCtx, session: mediaSession,materialAccess:access });
 }
 // Console tasks/skills (v3 S5): 任务发布 + 技能审核队列（控制台权限 + 写操作 CSRF）。
 const isConsoleTaskApi = url.pathname === '/api/console/tasks'
@@ -5803,6 +5818,9 @@ const isConsoleShowcaseApi = url.pathname === '/api/console/showcase'
 if (isConsoleShowcaseApi) {
   const showcaseSession = requireConsoleAccess(req, res, 'outreach');
   if (!showcaseSession) return;
+  // Existing showcase records are catalogue entries without an owner or a center.
+  const access=await resolveMaterialAccess(showcaseSession,{required:true});
+  if(!access.scopes.includes('all'))return json(res,403,{ok:false,code:'material_scope_forbidden',message:'宣传展示目录需要全部素材权限。'});
   const isShowcaseWrite = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method);
   if (isShowcaseWrite && !requireCsrf(req, res, showcaseSession)) return;
   return await showcaseApi.consoleShowcaseRoutes(req, res, url, { ...showcaseCtx, session: showcaseSession });
@@ -6445,7 +6463,9 @@ if (url.pathname.startsWith('/api/public/')) {
     }
     const submissionAttachmentsMatch = url.pathname.match(/^\/api\/outreach\/public-submissions\/([^/]+)\/attachments$/);
     if (req.method === 'GET' && submissionAttachmentsMatch) {
-      return await attachmentApi.outreachSubmissionAttachments(req, res, attachmentCtx, decodeURIComponent(submissionAttachmentsMatch[1]));
+      const access=await resolveMaterialAccess(session,{required:true});
+      if(!access.outreach)return json(res,403,{ok:false,code:'permission_denied',requiredScope:'outreach'});
+      return await attachmentApi.outreachSubmissionAttachments(req,res,{...attachmentCtx,materialAccess:access},decodeURIComponent(submissionAttachmentsMatch[1]));
     }
 
     if (req.method === 'GET' && url.pathname === '/api/outreach/public-submissions') {

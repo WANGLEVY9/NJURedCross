@@ -699,15 +699,18 @@ export const publicApi = {
   // v3.3 直传（2026-11-12）：票据 → 浏览器直传 Box → 复核落表。
   mediaUploadTicket: (body) => request('/api/public/media/upload-ticket', { method: 'POST', body }),
   mediaConfirm: (ticketId) => request('/api/public/media/confirm', { method: 'POST', body: { ticketId } }),
-  myPhotos: ({ center = '', activity = '', showPicked = false } = {}) => {
+  myPhotos: ({ center = '', activity = '', showPicked = false, scope='mine',type='',order='newest' } = {}) => {
     const params = new URLSearchParams();
     if (center) params.set('center', center);
     if (activity) params.set('activity', activity);
     if (showPicked) params.set('showPicked', '1');
+    if(scope!=='mine')params.set('scope',scope);
+    if(type)params.set('type',type);
+    if(order!=='newest')params.set('order',order);
     const qs = params.toString();
     return request(`/api/public/media${qs ? `?${qs}` : ''}`);
   },
-  mediaLink: (photoId) => request(`/api/public/media/${encodeURIComponent(photoId)}/link`),
+  mediaLink: (photoId,scope='mine') => request(`/api/public/media/${encodeURIComponent(photoId)}/link${scope==='mine'?'':`?scope=${encodeURIComponent(scope)}`}`),
   mediaKeep: (photoId, keep) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'PATCH', body: { keep } }),
   mediaDelete: (photoId) => request(`/api/public/media/${encodeURIComponent(photoId)}`, { method: 'DELETE' }),
   mediaBatchRename: (ids) => request('/api/public/media/batch-rename', { method: 'POST', body: { ids } }),
@@ -717,7 +720,7 @@ export const publicApi = {
   mediaDeleteRequest: (photoId, reason) => request(`/api/public/media/${encodeURIComponent(photoId)}/delete-request`, { method: 'POST', body: { reason } }),
   // 批量下载：服务端打 zip，返回 { blob, disposition }。
   // 不能走 <a href> 提交（CSP form-action 'self' 且要带 CSRF），故用 fetch + blob 下载。
-  mediaDownloadZip: (ids) => requestBlob('/api/public/media/download-zip', { method: 'POST', body: { ids } }),
+  mediaDownloadZip: (ids,scope='mine') => requestBlob(`/api/public/media/download-zip${scope==='mine'?'':`?scope=${encodeURIComponent(scope)}`}`, { method: 'POST', body: { ids } }),
   // v3 S5 任务申领（心愿清单）
   tasks: () => request('/api/public/tasks'),
   myClaims: () => request('/api/public/tasks/mine'),

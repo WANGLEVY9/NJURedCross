@@ -552,7 +552,7 @@ test('缩略图索引：一屏并发请求只读一次表', async () => {
   clearThumbCache();
 });
 
-test('缩略图解析：控制台审核用 allowAny 可看别人的照片，但仍受删除状态限制', async () => {
+test('缩略图解析：控制台审核按素材授权读取，已删除照片不可见', async () => {
   clearThumbCache();
   const rows = [
     { 照片ID: 'PHO-A', 文件路径: '/中心/活动/活动-照片/a.png', 上传人: 'U1', 文件名: 'a.png' },
@@ -567,9 +567,9 @@ test('缩略图解析：控制台审核用 allowAny 可看别人的照片，但�
   const download = async () => Buffer.from('thumb');
   // 审核人不是上传人：门户接口拒绝，控制台接口放行。
   assert.equal((await resolveThumb(ctx, { ref: 'REVIEWER' }, 'PHO-A', { download })).status, 403);
-  assert.equal((await resolveThumb(ctx, { ref: 'REVIEWER' }, 'PHO-A', { download, allowAny: true })).status, 200);
-  // 已删除的照片不因为 allowAny 就放出来。
-  assert.equal((await resolveThumb(ctx, { ref: 'REVIEWER' }, 'PHO-B', { download, allowAny: true })).status, 404);
+  const authorized={...ctx,materialAccess:{scopes:['all'],allows:()=>true}};
+  assert.equal((await resolveThumb(authorized, { ref: 'REVIEWER' }, 'PHO-A', { download })).status, 200);
+  assert.equal((await resolveThumb(authorized, { ref: 'REVIEWER' }, 'PHO-B', { download })).status, 404);
   clearThumbCache();
 });
 

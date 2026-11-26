@@ -4,7 +4,7 @@ import { reportTiming } from '../core/telemetry.js';
 import { button, iconButton } from '../ui/primitives.js';
 import { mountOverlay } from '../ui/overlay.js';
 
-export function openPhotoPreview({ photo, thumbnail = '', onDownload }) {
+export function openPhotoPreview({ photo, thumbnail = '', onDownload,scope='mine' }) {
   let closed = false, loading = false, objectUrl;
   const abort = new AbortController();
   const preview = h('img', { class: 'photo-lightbox__img', alt: photo.filename, decoding: 'async' });
@@ -36,7 +36,7 @@ export function openPhotoPreview({ photo, thumbnail = '', onDownload }) {
     const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(12_000)]);
     let outcome = 'success';
     try {
-      const { blob } = await requestBlob(`/api/public/media/${encodeURIComponent(photo.id)}/preview`, { method: 'GET', signal });
+      const { blob } = await requestBlob(`/api/public/media/${encodeURIComponent(photo.id)}/preview${scope==='mine'?'':`?scope=${encodeURIComponent(scope)}`}`, { method: 'GET', signal });
       if (closed) return;
       objectUrl = URL.createObjectURL(blob);
       preview.src = objectUrl;

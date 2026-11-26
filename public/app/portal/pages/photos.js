@@ -59,12 +59,13 @@ function filenameFromDisposition(disposition, fallback) {
 }
 
 export default function photosPage() {
-  let disposed = false, photoPreview;
+  let disposed = false, photoPreview, listSequence=0;
   const user = getSessionState()?.user || {};
   const state = {
     centers: [],
     activities: [],
     photos: [],
+    scope:'mine',scopes:['mine'],type:'',types:[],listCenter:'',order:'newest',
     folders: [],
     openFolderKey: '',   // 当前展开的文件夹（空=文件夹总览）
     selected: new Set(), // 当前勾选的照片 id（精选申请 / 批量下载共用）
@@ -180,11 +181,13 @@ export default function photosPage() {
   }
 
   async function loadPhotos() {
+    const sequence=++listSequence;
     try {
-      const payload = await publicApi.myPhotos({ showPicked: state.showPicked });
-      if (disposed) return false;
+      const payload=await publicApi.myPhotos({showPicked:state.showPicked,scope:state.scope,type:state.type,center:state.listCenter,order:state.order});
+      if(disposed||sequence!==listSequence)return false;
       state.photos = payload.photos || [];
       state.folders = payload.folders || [];
+      state.scopes=payload.scopes||['mine'];state.types=payload.types||[];
       if (payload.pickRules) state.pickRules = { ...DEFAULT_PICK_RULES, ...payload.pickRules };
       if (payload.deleteRules) state.deleteRules = { ...DEFAULT_DELETE_RULES, ...payload.deleteRules };
       if (payload.config) state.config = { ...state.config, ...payload.config };
@@ -197,7 +200,13 @@ export default function photosPage() {
       renderControls();
       return true;
     } catch (error) {
+      if(disposed||sequence!==listSequence)return false;
       if (redirectIfAuthError(error)) return;
+      if(error?.code==='material_scope_forbidden'&&state.scope!=='mine'){
+        state.scope='mine';state.listCenter='';state.type='';state.selected.clear();state.openFolderKey='';
+        photoPreview?.close();
+        return loadPhotos();
+      }
       reportError(error, '照片列表加载失败');
       if (!disposed) gridSlot.replaceChildren(notice('照片列表加载失败，请重试。', { tone: 'error' }), button({ label: '重试', iconName: 'refresh', onClick: refresh }));
       return false;
@@ -477,7 +486,7 @@ export default function photosPage() {
     photoPreview?.close();
     const thumbnail = trigger.querySelector('img');
     photoPreview = openPhotoPreview({
-      photo,
+      photo,scope:state.scope,
       thumbnail: thumbnail?.complete && thumbnail.naturalWidth ? thumbnail.currentSrc : '',
       onDownload: () => downloadPhoto(photo),
     });
@@ -543,7 +552,7 @@ export default function photosPage() {
     }
     try {
       notify.info(`正在打包 ${chosen.length} 张…`, '文件较大时请稍等，浏览器会自动开始下载。');
-      const result = await publicApi.mediaDownloadZip(chosen.map((photo) => photo.id));
+      const result = await publicApi.mediaDownloadZip(chosen.map((photo) => photo.id),state.scope);
       const name = filenameFromDisposition(result.disposition, `影像素材_${chosen.length}张.zip`);
       saveBlob(result.blob, name);
       notify.success('打包完成', `已下载 ${chosen.length} 张照片。`);
@@ -644,13 +653,14 @@ export default function photosPage() {
     const count = state.selected.size;
     const { min, max } = state.pickRules;
     const pickReady = count >= min && count <= max;
+    const ownSelection=state.photos.filter(photo=>state.selected.has(photo.id)).every(photo=>photo.owned!==false);
     const pickHint = count === 0
       ? `勾选 ${min}-${max} 张后提交精选申请`
       : (pickReady ? `已选 ${count} 张 · 可提交精选` : `已选 ${count} 张 · 精选需 ${min}-${max} 张`);
     return h('div', { class: 'row-3 row-wrap' },
       h('span', { class: 'chip chip--static' }, h('span', { text: `已选 ${count} 张` })),
-      button({ label: `提交精选申请（${min}-${max} 张）`, variant: pickReady ? 'primary' : 'secondary', iconName: 'star', onClick: requestPick }),
       button({ label: '批量下载（zip）', variant: 'secondary', iconName: 'download', onClick: downloadSelected }),
+      ownSelection?button({ label: `提交精选申请（${min}-${max} 张）`, variant: pickReady ? 'primary' : 'secondary', iconName: 'star', onClick: requestPick }):null,
       count ? button({ label: '清空选择', variant: 'ghost', iconName: 'close', onClick: () => {
         state.selected.clear();
         gridSlot.querySelectorAll('.photocard--selected').forEach(card => {
@@ -665,7 +675,7 @@ export default function photosPage() {
         variant: 'ghost', iconName: state.showPicked ? 'eyeOff' : 'eye',
         onClick: () => { state.showPicked = !state.showPicked; refresh(); },
       }),
-      h('span', { class: 't-caption t-faint', text: pickHint }));
+      ownSelection?h('span', { class: 't-caption t-faint', text: pickHint }):null);
   }
 
   /** 文件夹总览（要求4）：每个中心/活动一个文件夹卡片，点开查看该次活动的照片。 */
@@ -697,7 +707,7 @@ export default function photosPage() {
       h('span', { class: 'chip chip--static' }, h('span', { text: `${folder.count} 张` })),
       folder.keepCount ? h('span', { class: 'chip chip--static' }, h('span', { text: `留用 ${folder.keepCount}` })) : null,
       h('span', { class: 'spacer' }),
-      button({ label: '批量自动更名', variant: 'secondary', iconName: 'edit', onClick: () => batchRename(folder) }));
+      folder.photos.every(photo=>photo.owned!==false)?button({ label: '批量自动更名', variant: 'secondary', iconName: 'edit', onClick: () => batchRename(folder) }):null);
 
     const cards = folder.photos.map((photo) => photoCard(photo));
     batchSlot.replaceChildren(renderBatchBar());
@@ -729,7 +739,7 @@ export default function photosPage() {
       h('img', {
         class: 'photocard__img',
         attrs: {
-          src: `/api/public/media/${encodeURIComponent(photo.id)}/thumb`,
+          src: `/api/public/media/${encodeURIComponent(photo.id)}/thumb${state.scope==='mine'?'':`?scope=${encodeURIComponent(state.scope)}`}`,
           alt: '',
           loading: 'lazy',
           decoding: 'async',
@@ -745,9 +755,9 @@ export default function photosPage() {
         pickBadge(photo),
         deleteBadge(photo),
         h('span', { class: 'row-2' },
-          iconButton({ iconName: photo.keepStatus === '留用' ? 'close' : 'star', label: photo.keepStatus === '留用' ? '标记弃用' : '标记留用', onClick: () => toggleKeep(photo) }),
           iconButton({ iconName: 'download', label: '下载', onClick: () => downloadPhoto(photo) }),
-          deleteLocked
+          photo.owned!==false?iconButton({ iconName: photo.keepStatus === '留用' ? 'close' : 'star', label: photo.keepStatus === '留用' ? '标记弃用' : '标记留用', onClick: () => toggleKeep(photo) }):null,
+          photo.owned===false?null:deleteLocked
             ? iconButton({ iconName: 'clock', label: photo.deleteStatus === '待审核' ? '删除申请审核中' : '已删除', onClick: () => applyDelete(photo) })
             : iconButton({ iconName: 'trash', label: '申请删除', onClick: () => applyDelete(photo) }))),
       isPicked ? h('span', { class: 'photocard__corner', text: '精选库副本' }) : null);
@@ -756,8 +766,22 @@ export default function photosPage() {
   function renderGrid() {
     if (disposed) return;
     clear(gridSlot);
+    const scopeLabels={mine:'本人',center:'本中心',all:'全部'};
+    const filter=(key,label,options)=>field({name:`media-list-${key}`,label,value:state[key],options,onInput:event=>{
+      state[key]=event.target.value;
+      if(key==='scope'||key==='listCenter')state.type='';
+      if(key==='scope')state.listCenter='';
+      state.photos=[];state.folders=[];state.selected.clear();state.openFolderKey='';
+      photoPreview?.close();
+      void refresh();
+    }});
+    gridSlot.append(h('div',{class:'row-3 row-wrap'},
+      state.scopes.length>1?filter('scope','可见范围',state.scopes.map(value=>({value,label:scopeLabels[value]}))):null,
+      filter('listCenter','中心',[{value:'',label:'全部中心'},...state.centers]),
+      filter('type','图片类型',[{value:'',label:'全部类型'},...state.types.map(value=>({value,label:value.replace(/^image\//,'').toUpperCase()}))]),
+      filter('order','排序',[{value:'newest',label:'最近上传'},{value:'oldest',label:'最早上传'},{value:'center',label:'按中心'}])));
     if (!state.photos.length) {
-      const hint = state.showPicked
+      const hint = state.scope!=='mine'||state.type||state.listCenter?'当前筛选下没有照片。':state.showPicked
         ? '还没有上传过照片。先选归档中心、再选活动名称，把现场照片拖进上传区即可——照片会按「<部门>/<活动名>/<活动名>-照片/」在云盘分文件夹归档。'
         : '还没有上传过照片（或照片都已被精选确认）——若想看精选后的照片，点右上角「显示已精选」。上传：先选归档中心、再选活动名称，把现场照片拖进上传区即可。';
       gridSlot.append(notice(hint, { tone: 'info', iconName: 'camera' }));
@@ -781,7 +805,7 @@ export default function photosPage() {
 
   async function downloadPhoto(photo) {
     try {
-      const payload = await publicApi.mediaLink(photo.id);
+      const payload = await publicApi.mediaLink(photo.id,state.scope);
       window.open(payload.link, '_blank', 'noopener');
     } catch (error) {
       if (redirectIfAuthError(error)) return;
