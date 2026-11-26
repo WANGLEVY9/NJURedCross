@@ -1,6 +1,7 @@
 import {h} from '../core/dom.js';
 import {request,getSessionState} from '../core/api.js';
 import {button,definitionList,notice,skeletonBlock} from '../ui/primitives.js';
+import {openFeedbackDrawer} from './feedback-drawer.js';
 
 export function personalActivityCard(records,{ended=false}={}){
  const next=row=>['已确认','已签到'].includes(row.status)?'请按活动安排参加，时长审核进度会在此更新。':row.status==='候补'?'请等待递补通知，留意报名邮箱。':row.status==='未入选'?'本次未通过，可查看原因或选择其他活动。':row.status==='已请假'||row.status==='已取消'?'本次参与已取消。':'报名结果处理中，请留意后续通知。';
@@ -12,7 +13,7 @@ export function personalActivityCard(records,{ended=false}={}){
    ['时长进度',row.hours?.label||row.entryStatus||'待负责人确认'],['下一步',next(row)],
   ]),row.reason?notice(row.reason,{tone:'neutral'}):null)),
   ...(!records.length?[h('p',{text:'暂无本活动的报名记录。'})]:[]),
-  ...(ended&&records.length?[button({label:'活动反馈暂未开放',disabled:true}),h('p',{class:'t-caption',text:'反馈开放后，可在此填写或修改。'})]:[])));
+  ...(ended&&records.length?[button({label:'提交活动反馈',variant:'secondary',onClick:()=>openFeedbackDrawer({category:'活动'})}),h('p',{class:'t-caption',text:'可选择本次活动，向负责人反馈现场体验。'})]:[])));
 }
 /** Uses the existing account-scoped endpoint; never match a participant by name. */
 export function withPersonalActivity(page,event){

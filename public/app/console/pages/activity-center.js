@@ -781,7 +781,7 @@ export default async function activityCenter(context,shell){
         const month=hours[0]?.['正式工作日期']?.slice(0,7)||'';
         const url=`${root}/events/${encodeURIComponent(e._id)}/hours-export${month?`?month=${month}`:''}`;
         const link=h('a',{class:'btn btn--primary',text:'下载 Excel',href:url,data:{native:true}});
-        const drawer=openDrawer({title:'导出时长表',description:'Excel 由服务端按当前已批准记录生成。',body:h('div',{class:'stack-4'},definitionList([['活动',e['活动名称']],['记录数',`${hours.filter(row=>['已批准','已入账'].includes(row['状态'])).length} 条`]]),link,notice('Excel 下载链接的站内通知本轮暂未实现，请下载后自行交接。',{tone:'warning'})),footer:[button({label:'完成',variant:'primary',onClick:()=>drawer.close()})]});
+        const drawer=openDrawer({title:'导出时长表',description:'Excel 由服务端按当前已批准记录生成。',body:h('div',{class:'stack-4'},definitionList([['活动',e['活动名称']],['记录数',`${hours.filter(row=>['已批准','已入账'].includes(row['状态'])).length} 条`]]),link),footer:[button({label:'完成',variant:'primary',onClick:()=>drawer.close()})]});
         return;
       }
     }catch(error){reportError(error,'操作未完成');}

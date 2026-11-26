@@ -10,7 +10,7 @@ for await(const line of createInterface({input:process.stdin,crlfDelay:Infinity}
   if(!Number.isFinite(r.durationMs)||r.durationMs<0||accepted>=100000)continue;
   accepted++;
   const service=['seatable','smtp','njubox','oss','external','content','queue','background','password'].includes(r.service)?r.service:'';
-  const phase=['navigation','session','module','render','resource','binary','upload'].includes(r.phase)?r.phase:'';
+  const phase=['navigation','session','module','render','paint','resource','binary','upload','image'].includes(r.phase)?r.phase:'';
   const operation = r.type === 'dependency' && typeof r.operation === 'string' && /^[a-z][a-z-]{0,40}$/.test(r.operation)
     ? r.operation
     : '';

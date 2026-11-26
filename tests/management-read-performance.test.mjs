@@ -125,6 +125,23 @@ test('notification overview reuses the tab cache, refreshes explicitly and clear
  assert.equal((await api.request('/api/notifications/overview')).version,4);
 });
 
+test('unclassified writes still invalidate every management projection',async t=>{
+ const originalFetch=globalThis.fetch;t.after(()=>{globalThis.fetch=originalFetch;});
+ let requestCount=0;
+ globalThis.fetch=async path=>{
+  if(path==='/api/auth/session')return Response.json({authenticated:true,csrfToken:'synthetic',user:{username:'synthetic-all',consoleAccess:true,permissions:['events','settings']}});
+  requestCount+=1;
+  return Response.json({ok:true,version:requestCount});
+ };
+ const api=await import('../public/app/core/api.js');
+ await api.refreshSession();
+ assert.equal((await api.request('/api/volunteer/workflow/catalog')).version,1);
+ assert.equal((await api.request('/api/materials/overview')).version,2);
+ await api.request('/api/console/mail-settings',{method:'POST',body:{}});
+ assert.equal((await api.request('/api/volunteer/workflow/catalog')).version,4);
+ assert.equal((await api.request('/api/materials/overview')).version,5);
+});
+
 
 test('slow cold response headers use the total budget without duplicating database work',async t=>{
  const originalFetch=globalThis.fetch,originalTimeout=globalThis.setTimeout;

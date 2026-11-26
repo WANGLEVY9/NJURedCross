@@ -47,7 +47,6 @@ export default async function adminPage(context) {
   const tabs=segmented({items:views,value:active,ariaLabel:'管理员中心视图',onChange:value=>{active=value;tabs.setValue(value);patchQuery({view:value},{navigate:false});draw();}});
 
   function accountCard() {
-    const permissions = CONSOLE_SECTIONS.filter(section => section.scope && hasPermission(section.scope));
     return h('section', { class: 'admin-card admin-card--profile' },
       h('div', { class: 'admin-card__head' },
         h('div', null,
@@ -66,7 +65,7 @@ export default async function adminPage(context) {
           button({ label: '修改登录密码', href: '/change-password', variant: 'secondary', iconName: 'lock' }))));
   }
 
-  function sessionCard({ goTab }) {
+  function sessionCard() {
     const permissions = CONSOLE_SECTIONS.filter(section => section.scope && hasPermission(section.scope));
     return h('section', { class: 'admin-card admin-card--aside' },
       h('div', { class: 'admin-card__head' },
@@ -139,7 +138,7 @@ export default async function adminPage(context) {
       const goTab = (value) => { active = value; tabs.setValue(value); patchQuery({ view: value }, { navigate: false }); draw(); };
       body.append(h('div', { class: 'admin-center' },
         h('div', { class: 'admin-center__main' }, accountCard(), ...groups),
-        h('div', { class: 'admin-center__side' }, sessionCard({ goTab }), shortcutCard({ goTab }))));
+        h('div', { class: 'admin-center__side' }, sessionCard(), shortcutCard({ goTab }))));
     } else {
       const result=await settingsPage({embedded:true,initialTab:active});
       if(current===generation)body.append(result.node);

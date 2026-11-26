@@ -10,13 +10,13 @@ const MAX_LENGTH = 200;
 
 let activeDrawer = null;
 
-export function openFeedbackDrawer() {
+export function openFeedbackDrawer({ category: initialCategory = '' } = {}) {
   if (activeDrawer) {
     activeDrawer.surface.querySelector('[data-feedback-category]')?.focus();
     return activeDrawer;
   }
 
-  let category = '';
+  let category = CATEGORIES.includes(initialCategory) ? initialCategory : '';
   let activityCenter = '';
   let activityId = '';
   let activities = [];
@@ -48,8 +48,11 @@ export function openFeedbackDrawer() {
       if (value === '活动') void ensureActivities();
     },
   });
-  categoryTabs.dataset.selected = '';
+  categoryTabs.dataset.selected = category;
+  categoryTabs.setValue(category);
+  activitySlot.hidden = category !== '活动';
   categoryTabs.querySelector('[role="radio"]')?.setAttribute('data-autofocus', 'true');
+  if (category === '活动') void ensureActivities();
 
   const content = field({
     label: '反馈意见',

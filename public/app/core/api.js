@@ -151,7 +151,9 @@ const writeTags=path=>{
  if(clean.startsWith('/api/events/')||clean.startsWith('/api/volunteer/workflow/')||clean.startsWith('/api/public/events/')||clean.startsWith('/api/portal/workflow/'))return ['events'];
  if(clean.startsWith('/api/outreach/')||clean.startsWith('/api/public/submissions')||clean.startsWith('/api/public/attachments/')||clean.startsWith('/api/public/media')||clean.startsWith('/api/public/tasks/')||clean.startsWith('/api/console/showcase')||clean.startsWith('/api/console/media'))return ['outreach'];
  if(clean.startsWith('/api/community/')||clean.startsWith('/api/morning/')||clean.startsWith('/api/public/warmth'))return ['community'];
- return [];
+ // Untagged writes still clear every in-tab projection. A full clear is safer
+ // than keeping a notification or management snapshot after an unknown write.
+ return ['events','materials','outreach','community'];
 };
 function invalidateManagementReads(){managementReads.clear();activityCatalogReads.clear();for(const key of inflightGets.keys())if(isManagementProjection(key)||isNotificationProjection(key)||isOutreachOverview(key))inflightGets.delete(key);}
 function invalidateWriteReads(tags){

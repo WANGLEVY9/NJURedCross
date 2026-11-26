@@ -191,7 +191,7 @@ ssh -S /private/tmp/njuredcross-config.sock root@47.82.5.176 "journalctl --names
 
 | 方法 + 路径 | 预算 | 原因 |
 | --- | --- | --- |
-| `POST /api/public/media`、`POST /api/public/attachments/<id>`、`POST /api/console/showcase/batch` | 180 秒 | 照片字节要从本机中转，30 秒会在「写表」那一步把请求掐断 |
+| `POST /api/public/media`、`POST /api/public/attachments/<id>`、`POST /api/console/showcase/batch`、`POST /api/portal/workflow/registrations/<id>/attendance`（及后台补签） | 180 秒 | 上传照片的字节由请求体传入，入口请求限额也必须按上传接口放行；否则图片尚未进入业务逻辑就被 413 拒绝。30 秒预算仍适用于普通写接口 |
 | 其余 `/api/*` | 30 秒 | 常规读写，超时即视为依赖异常 |
 
 判定线上「上传很久然后失败」时的顺序：

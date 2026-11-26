@@ -28,7 +28,7 @@ export default async function loginPage(context) {
   const usernameField = field({ label: '管理员账号', name: 'username', required: true, iconName: 'user', autocomplete: 'username', placeholder: '学号、完整邮箱或原管理账号' });
   const domainField = field({ label: '校园邮箱后缀', name: 'emailDomain', value: 'smail.nju.edu.cn', options: [{ value: 'smail.nju.edu.cn', label: '@smail.nju.edu.cn（学生邮箱）' }, { value: 'nju.edu.cn', label: '@nju.edu.cn' }], hint: '填写学号时自动补全邮箱；完整邮箱及原管理账号不受此选项影响。' });
   const passwordField = field({ label: '密码', name: 'password', type: 'password', required: true, iconName: 'lock', autocomplete: 'current-password' });
-  const errorSlot = h('div', { hidden: true });
+  const errorSlot = h('div', { hidden: true, role: 'alert' });
 
   const submitButton = button({ label: '登录运营端', variant: 'primary', size: 'lg', block: true, iconName: 'arrowRight', iconMotion: 'nudge', onClick: () => submit() });
 
@@ -37,7 +37,15 @@ export default async function loginPage(context) {
     usernameField.setError(null);
     passwordField.setError(null);
     errorSlot.hidden = true;
-    const username = administratorLoginIdentifier(usernameField.control.value, domainField.control.value);
+    let username;
+    try {
+      username = administratorLoginIdentifier(usernameField.control.value, domainField.control.value);
+    } catch (error) {
+      usernameField.setError(error.message);
+      shake(usernameField);
+      usernameField.control.focus();
+      return;
+    }
     const password = passwordField.control.value;
 
     if (!username) {
@@ -105,10 +113,6 @@ export default async function loginPage(context) {
     passwordField,
     errorSlot,
     submitButton,
-    h(
-      'div',
-      { class: 'row-3 row-wrap' },
-    ),
     h('span', { class: 't-caption t-muted' }, h('span', { text: '活动平台成员账号请走' }), h('a', { class: 't-caption', href: '/login', text: '活动平台登录' }), h('span', { text: '。' })),
     h('hr', { class: 'divider' }),
     h(

@@ -29,3 +29,18 @@ test('student identity completion does not grant console access',async({page})=>
  await expect(page.getByText('该账号属于活动平台',{exact:true})).toBeVisible();
  await expect(page).not.toHaveURL(/\/console\/overview/);
 });
+
+test('invalid campus identifier stays on the form and shows an inline error',async({page})=>{
+ await page.goto('/console/login');
+ await page.getByLabel('管理员账号').fill('231250082');
+ await page.getByRole('combobox',{name:'校园邮箱后缀',exact:true}).click();
+ await page.getByRole('option',{name:'@nju.edu.cn',exact:true}).click();
+ // A crafted option bypasses the select UI; the submit path must still reject it.
+ await page.locator('select[name="emailDomain"]').evaluate(node=>{node.append(new Option('evil.example','evil.example'));node.value='evil.example';});
+ await page.getByLabel('密码',{exact:false}).fill('synthetic-password');
+ const login=page.waitForRequest(r=>r.url().endsWith('/api/auth/login')&&r.method()==='POST',{timeout:1000}).catch(()=>null);
+ await page.getByRole('button',{name:'登录运营端',exact:true}).click();
+ expect(await login).toBeNull();
+ await expect(page.getByText('请选择校园邮箱后缀。',{exact:true})).toBeVisible();
+ await expect(page).toHaveURL(/\/console\/login/);
+});

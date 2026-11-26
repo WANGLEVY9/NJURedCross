@@ -281,7 +281,7 @@ async function renderer({ context, handler, token }) {
   currentDispose?.();
   currentDispose = typeof result?.dispose === 'function' ? result.dispose : null;
 
-  await timeBrowserPhase(context.path,'render',()=>shell.showPage(result, context));
+  await timeBrowserPhase(context.path,'paint',()=>shell.showPage(result, context));
   if (!token()) return;
   shell.endNavigation(context, result);
   window.njurcBoot?.complete();

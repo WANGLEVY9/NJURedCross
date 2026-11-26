@@ -65,13 +65,15 @@ export function activityMultiSelect({label,placeholder='请选择',options=[],se
   trigger.addEventListener('click',()=>opened?close():open());
   search.addEventListener('input',filter);
   search.addEventListener('input',position);
-  window.addEventListener('resize',()=>{if(opened)position();});
-  document.addEventListener('scroll',()=>{if(opened)position();},true);
+  const reposition=()=>{if(opened)position();};
+  window.addEventListener('resize',reposition);
+  document.addEventListener('scroll',reposition,true);
   search.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();close(true);}if(event.key==='Tab'&&!event.shiftKey&&!list.querySelector('input'))close();});
   trigger.addEventListener('keydown',event=>{if(['Enter',' ','ArrowDown'].includes(event.key)){event.preventDefault();open();}});
   root.setOptions=(next,nextValues=values)=>{choices=next;values=nextValues.filter(id=>choices.some(row=>row.id===id)||nextValues.includes(id));filter();sync();};
   root.setDisabled=next=>{disabled=next;search.disabled=next;for(const input of list.querySelectorAll('input'))input.disabled=next;sync();};
   root.getValues=()=>[...values];
+  root.dispose=()=>{window.removeEventListener('resize',reposition);document.removeEventListener('scroll',reposition,true);close();};
   filter();sync();
   return root;
 }

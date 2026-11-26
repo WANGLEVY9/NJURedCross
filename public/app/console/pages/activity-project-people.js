@@ -43,5 +43,5 @@ export function activityProjectPeople({ownerId,getContent,load,onChange,editable
       sync();onChange({automatic:!reset});message.textContent=result.unavailableDefaults.length?`默认审批人中 ${result.unavailableDefaults.join('、')} 尚未配置有效审批角色，请核对人员配置；当前已选审批人任意一位通过即生效。`:'默认选中对应中心主席、金中宸和袁金雨的有效账号；任意一位通过即生效。';
     }catch(error){if(!disposed&&current===sequence)message.textContent=error.message||'人员名单加载失败，请稍后重试。';}
   }
-  return {node,refresh,sync,previewNames:()=>({projectOwnerName:name(ownerId),collaboratorNames:workspaceResponsibleIds(getContent()).filter(id=>id!==ownerId).map(name),reviewerNames:(getContent().reviewerIds||[]).map(name)}),dispose:()=>{disposed=true;sequence++;}};
+  return {node,refresh,sync,previewNames:()=>({projectOwnerName:name(ownerId),collaboratorNames:workspaceResponsibleIds(getContent()).filter(id=>id!==ownerId).map(name),reviewerNames:(getContent().reviewerIds||[]).map(name)}),dispose:()=>{disposed=true;sequence++;collaborators.dispose?.();reviewers.dispose?.();}};
 }

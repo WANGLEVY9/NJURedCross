@@ -5,6 +5,7 @@ import { createRequestMiddleware } from '../lib/http/request-middleware.js';
 import { assertRequestBodySize, createRequestConcurrencyGate,
   DEFAULT_JSON_BODY_LIMIT_BYTES, DEFAULT_UPLOAD_BODY_LIMIT_BYTES } from '../lib/http/request-limits.js';
 import { livenessProbe, readinessProbe, renderMetrics } from '../lib/http/probes.js';
+import { requestBudgetMsFor, UPLOAD_REQUEST_BUDGET_MS } from '../lib/http/request-budget.js';
 
 function dependencyStubs(overrides = {}) {
   const calls = { api: 0, static: 0, marked: 0, telemetry: 0 };
@@ -82,6 +83,20 @@ test('body limits allow upload routes and reject oversized JSON before dispatch'
     error => error.statusCode === 413 && error.code === 'request_body_too_large');
   assert.doesNotThrow(() => assertRequestBodySize({ headers: { 'content-length': String(DEFAULT_UPLOAD_BODY_LIMIT_BYTES) } },
     { allowNonMultipartUpload: true }));
+});
+
+test('attendance photo routes keep upload budget and accept raw image bodies', () => {
+  for (const path of [
+    '/api/portal/workflow/registrations/abc/attendance',
+    '/api/volunteer/workflow/registrations/abc/attendance',
+    '/api/volunteer/workflow/registrations/abc/attendance-supplement',
+  ]) {
+    assert.equal(requestBudgetMsFor('POST', path), UPLOAD_REQUEST_BUDGET_MS);
+    const headers = { 'content-length': '4194304', 'content-type': 'image/jpeg' };
+    const options = { uploadMaxBytes: DEFAULT_UPLOAD_BODY_LIMIT_BYTES, allowNonMultipartUpload: true };
+    assert.doesNotThrow(() => assertRequestBodySize({ headers }, options), path);
+  }
+  assert.equal(requestBudgetMsFor('POST', '/api/portal/workflow/registrations/abc/leave'), 30_000);
 });
 
 test('concurrency gate bounds active work and rejects an overflowing queue', async () => {

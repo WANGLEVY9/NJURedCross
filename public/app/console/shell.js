@@ -84,10 +84,10 @@ export function createShell() {
       if (!visibleItems.length) continue;
       if (section.group) navScroll.append(h('p', { class: 'nav__group t-label', text: section.group }));
       for (const item of visibleItems) {
-        const count = h('span', { class: 'nav__item-count' });
+        const count = h('span', { class: 'nav__item-count', attrs: { 'aria-hidden': 'true' } });
         const link = h(
           'a',
-          { class: 'nav__item', href: item.path },
+        { class: 'nav__item', href: item.path, aria: { label: item.label } },
           icon(item.iconName, 'ico ico--sm'),
           h('span', { class: 'nav__item-label', text: item.label }),
           count,

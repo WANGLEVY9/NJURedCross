@@ -57,6 +57,12 @@ test('photo preview image timings retain fixed phase and remove private identifi
  assert.equal(telemetryRoute('/api/public/media/SECRET/preview?filename=SECRET'),'/api/public/media/:id/preview');
  assert.ok(!JSON.stringify(logs).includes('SECRET'));
 });
+test('page paint is a distinct browser phase from page rendering', () => {
+ const logs=[];const o=createObserver({sink:r=>logs.push(r)});
+ assert.equal(o.client({phase:'render',route:'/console/events',durationMs:1200,outcome:'success'}),true);
+ assert.equal(o.client({phase:'paint',route:'/console/events',durationMs:1200,outcome:'success'}),true);
+ assert.deepEqual(logs.map(record=>record.phase),['render','paint']);
+});
 test('browser reporter uses sanitized payload, suppresses recursion and caps rate',()=>{
  const sent=[];const send=(path,opts)=>{sent.push({path,body:JSON.parse(opts.body)});return Promise.resolve();};let time=60000;
  const opts={send,now:()=>time,random:()=>1};
