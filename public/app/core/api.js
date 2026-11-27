@@ -296,12 +296,13 @@ export async function requestBlob(path, options = {}) {
     outcome=options.signal?.aborted?(options.signal.reason?.name==='TimeoutError'?'timeout':'aborted'):status>=400?'http':status?'incomplete':error?.name==='AbortError'?'aborted':'network';
     throw error;
   }finally{
-    reportTiming({route:path,phase:'binary',method:options.method||'POST',status,requestId,clientTrace,durationMs:performance.now()-start,outcome:status>=400?'http':outcome});
+    reportTiming({route:path,phase:'binary',method:options.method||(options.body===undefined?'GET':'POST'),status,requestId,clientTrace,durationMs:performance.now()-start,outcome:status>=400?'http':outcome});
   }
 }
 
-async function executeBlob(path, { method = 'POST', body, headers = {}, retryCsrf = true, signal } = {}, clientTrace, onResponse) {
-  const init = { method, headers: { ...headers, ...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{}) }, credentials: 'same-origin', signal };
+async function executeBlob(path, { method, body, headers = {}, retryCsrf = true, signal } = {}, clientTrace, onResponse) {
+ const verb = method || (body === undefined ? 'GET' : 'POST');
+ const init = { method: verb, headers: { ...headers, ...(clientTrace?{'X-Client-Trace-ID':clientTrace}:{}) }, credentials: 'same-origin', signal };
   if (body !== undefined) {
     init.headers['Content-Type'] = 'application/json';
     init.body = JSON.stringify(body);

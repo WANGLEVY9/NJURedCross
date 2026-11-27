@@ -70,3 +70,19 @@ test('latest-main mail details and notification preview survive the roster integ
  await page.getByRole('searchbox',{name:'搜索报名'}).fill('1002');await page.getByRole('button',{name:'再次通知',exact:true}).click();
  const preview=page.getByRole('dialog',{name:'再次通知 · 收件核验',exact:true});await expect(preview).toContainText('合成通知预览');await expect(preview.getByRole('button',{name:'确认再次通知',exact:true})).toBeEnabled();expect(previews).toBe(1);expect(sends).toBe(0);await page.keyboard.press('Escape');await expect(preview).toHaveCount(0);expect(sends).toBe(0);
 });
+
+test('registration export button issues a read-only GET request',async({page})=>{
+ let method='';
+ await page.route('**/api/volunteer/workflow/events/tools-event/registration-export',route=>{
+  method=route.request().method();
+  return route.fulfill({status:200,contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',body:'synthetic workbook'});
+ });
+ await page.goto('/');
+ await page.evaluate(async()=>{
+  const {h}=await import('/app/core/dom.js');
+  const {registrationDownloadButton}=await import('/app/console/pages/registration-download.js');
+  (document.getElementById('main')||document.body).replaceChildren(h('div',{},registrationDownloadButton({_id:'tools-event',活动名称:'合成报名名单'})));
+ });
+ await page.getByRole('button',{name:'下载报名信息表',exact:true}).click();
+ await expect.poll(()=>method).toBe('GET');
+});

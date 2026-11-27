@@ -151,7 +151,7 @@ const supplement=button({label:'手动添加人员',onClick:async()=>{
   const confirm=button({label:'确认回退',onClick:async()=>{if(saving||!reason.control.reportValidity()||!reason.control.value.trim())return;saving=true;confirm.disabled=true;try{await reopen(reason.control.value.trim());saving=false;await dialog.close();await fresh();}catch(error){reportError(error,'回退未完成，请刷新核对');}finally{saving=false;confirm.disabled=false;}}});
   dialog=openModal({title:'回退到报名中',body:reason,footer:[button({label:'取消',onClick:()=>dialog.close()}),confirm]});dialog.setCloseGuard(()=>!saving);
  }});
- if(event.approvalAccess?.canManageRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(backToRegistration);
+ if(event.approvalAccess?.canReopenRegistration===true)actionsNode?.querySelector('.activity-v2-more__menu')?.append(backToRegistration);
 // 初审提交后若发现漏了班次（例如某场次状态没跟上项目），需要受控退回口；
 // 直接改库既绕过审计、也容易丢失来源摘要。
 const reopenReviewButton=button({label:'重新打开初审',onClick:()=>{
