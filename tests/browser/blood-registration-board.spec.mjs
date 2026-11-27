@@ -3,7 +3,7 @@ test('blood board uses project snapshot, switches views and scopes selection wit
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  const events=(await(await page.request.get('/api/volunteer/workflow/catalog')).json()).events;
  const event=events.find(e=>JSON.parse(e['报名页配置']||'{}').source?.kind==='generated_blood');expect(event).toBeTruthy();
- await page.goto(`/console/events?event=${event._id}&scheduleTask=registration`);
+ await page.goto(`/console/events?event=${event._id}&scheduleTask=registration&rosterView=board`);
  const board=page.getByRole('region',{name:'献血车排班看板'});await expect(board).toBeVisible();
  await expect(board.getByRole('button',{name:'批量报名成功并通知',exact:true})).toBeHidden();await board.getByRole('button',{name:'批量审批报名',exact:true}).click();await expect(board.getByRole('button',{name:'批量报名成功并通知',exact:true})).toBeDisabled();await board.getByRole('button',{name:'退出批量操作',exact:true}).click();
  await expect(board.locator('.blood-schedule-card').first()).toBeVisible();
@@ -75,7 +75,7 @@ test('board confirms in small batches and stops after an uncertain write',async(
   const uncertain=batches.length===2;
   return route.fulfill({json:{ok:true,results:ids.map((id,index)=>({id,ok:!uncertain,uncertain:uncertain&&index===0}))}});
  });
- await page.goto(`/console/events?event=${event._id}&scheduleTask=registration`);
+ await page.goto(`/console/events?event=${event._id}&scheduleTask=registration&rosterView=board`);
  const board=page.getByRole('region',{name:'献血车排班看板'});
  await board.getByRole('button',{name:'批量审批报名',exact:true}).click();
  await board.getByRole('checkbox',{name:`全选 ${event['报名日期']}`,exact:true}).check();

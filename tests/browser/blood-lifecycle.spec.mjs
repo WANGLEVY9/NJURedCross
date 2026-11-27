@@ -4,7 +4,7 @@ test('blood management keeps a single phone viewport and every day through Sunda
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  const {events}=await(await page.request.get('/api/volunteer/workflow/catalog')).json();const event=events.find(e=>JSON.parse(e['报名页配置']||'{}').source?.kind==='generated_blood');
  for(const task of ['registration','checkins','hours']){
-  await page.goto(`/console/events?event=${event._id}&scheduleTask=${task}`);
+  await page.goto(`/console/events?event=${event._id}&scheduleTask=${task}&rosterView=board`);
   const pane=page.getByRole('region',{name:'活动操作工作区'});
   if(task==='hours')await pane.getByRole('button',{name:'切换为排班看板',exact:true}).click();
   const scroll=pane.locator('.blood-registration-board__grid').first();await expect(scroll).toBeVisible();await scroll.scrollIntoViewIfNeeded();

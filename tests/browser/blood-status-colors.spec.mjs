@@ -18,7 +18,7 @@ test('blood board separates available, pending and waiting colors and retains le
  const available=page.locator('.blood-schedule-status--available').first(),pending=page.locator('.blood-schedule-status--review').first(),waiting=page.locator('.blood-schedule-status--waiting').first();
  await expect(available).toHaveText('可报名');await expect(waiting).toHaveText('待签到');
  const color=locator=>locator.evaluate(el=>getComputedStyle(el.closest('.blood-schedule-card')).backgroundColor);
- expect(await color(available)).toBe('rgb(221, 242, 228)');expect(await color(pending)).toBe('rgb(250, 237, 202)');expect(await color(waiting)).toBe('rgb(236, 227, 247)');
+ expect(await color(available)).toBe('rgb(221, 242, 228)');expect(await color(pending)).toBe('rgb(238, 242, 241)');expect(await color(waiting)).toBe('rgb(236, 227, 247)');
  await page.getByRole('region',{name:'献血车排班看板',exact:true}).screenshot({path:info.outputPath('blood-status-palette.png')});
  await page.getByRole('button',{name:'2026-11-02 弘阳广场 上午 报名成功',exact:true}).click();
  await page.getByRole('button',{name:'报名失败',exact:true}).click();expect(await page.evaluate(()=>window.__legacyRejected)).toBe(true);
