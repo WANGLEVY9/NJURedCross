@@ -7,9 +7,9 @@ test('blood directory exposes a direct history check-in entry and archived weeks
  await expect(page.locator('#boot-screen')).toHaveCount(0);
  await expect.poll(async()=>page.locator('.activity-blood-directory').count()).toBeGreaterThan(0);
  const card=page.locator('.activity-blood-directory');
- await expect(card.getByRole('button',{name:/历史周签到记录/})).toBeVisible();
+ await expect(card.getByRole('button',{name:'历史签到',exact:true})).toBeVisible();
  await page.screenshot({path:info.outputPath('blood-history-shortcuts.png'),animations:'disabled',fullPage:true});
- await card.getByRole('button',{name:/历史周签到记录/}).click();
+ await card.getByRole('button',{name:'历史签到',exact:true}).click();
  await expect(page).toHaveURL(/history=1/);
  await expect(page).toHaveURL(/scheduleTask=checkins/);
  const pane=page.getByRole('region',{name:'活动操作工作区'});

@@ -188,8 +188,8 @@ export default async function activityWorkspacePage(context){
      list.append(h('div',{class:'activity-v2-card activity-blood-directory',role:'listitem',data:{category:'献血车专项',region:'nanjing'},'aria-current':String(blood.some(row=>row.id===selected))},
       h('button',{type:'button',class:'activity-blood-directory__main',on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})),
       h('div',{class:'activity-blood-directory__shortcuts'},
-       h('button',{type:'button',class:'activity-blood-directory__shortcut',on:{click:()=>openWeek(historyTarget,'checkins')}},h('strong',{text:'历史周签到记录'}),h('span',{text:'查看签到照片、核验状态与旧表关联'})),
-       h('button',{type:'button',class:'activity-blood-directory__shortcut',on:{click:()=>openWeek(historyTarget,'hours')}},h('strong',{text:'历史时长与导出'}),h('span',{text:'查看已归档周的最终表和导出记录'})))));
+       h('button',{type:'button',class:'activity-blood-directory__shortcut',on:{click:()=>openWeek(historyTarget,'checkins')}},h('strong',{text:'历史签到'})),
+       h('button',{type:'button',class:'activity-blood-directory__shortcut',on:{click:()=>openWeek(historyTarget,'hours')}},h('strong',{text:'历史时长'})))));
     }
     if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:recycling?'移入回收站的活动会出现在这里。':stageValue==='active'?'当前没有未结束活动，可切换到“全部”或“已结束”查看。':'调整筛选或新建活动。'}));
   }

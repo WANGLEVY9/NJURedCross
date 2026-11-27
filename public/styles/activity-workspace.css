@@ -474,12 +474,13 @@ button.blood-week-calendar__row:not(:disabled):hover,button.blood-week-calendar_
 button.blood-week-calendar__row.is-archived{background:#f3eef8;color:#5e4377;border-color:#e4dbef}
 button.blood-week-calendar__row.is-archived:not(:disabled):hover,button.blood-week-calendar__row.is-archived.is-selected{background:#eaddf4;border-color:#72558b;color:#53396b}
 .activity-v2-card.activity-blood-directory{flex-shrink:0;outline:none}
+.activity-v2-card.activity-blood-directory{padding:12px;gap:8px}
+.activity-v2-card.activity-blood-directory::before{top:calc(var(--s3) + .5em)}
 .activity-blood-directory__main{display:flex;width:100%;flex-direction:column;align-items:flex-start;gap:6px;padding:0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
 .activity-blood-directory__main:focus-visible,.activity-blood-directory__shortcut:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .activity-blood-directory__shortcuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
-.activity-blood-directory__shortcut{display:flex;min-width:0;flex-direction:column;align-items:flex-start;gap:3px;padding:9px 10px;border:1px solid var(--border);border-radius:9px;background:color-mix(in srgb,var(--accent) 4%,var(--surface));color:var(--text-primary);text-align:left;cursor:pointer}
-.activity-blood-directory__shortcut strong{font-size:13px;line-height:1.4}
-.activity-blood-directory__shortcut span{font-size:11px;line-height:1.5;color:var(--text-secondary)}
+.activity-blood-directory__shortcut{display:flex;min-width:0;align-items:center;justify-content:center;gap:4px;padding:7px 8px;border:1px solid var(--border);border-radius:9px;background:color-mix(in srgb,var(--accent) 4%,var(--surface));color:var(--text-primary);text-align:center;cursor:pointer}
+.activity-blood-directory__shortcut strong{font-size:12px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .activity-blood-directory__shortcut:hover{border-color:var(--accent);background:var(--accent-soft)}
 .blood-registration-board__grid{overflow-y:hidden}
 
