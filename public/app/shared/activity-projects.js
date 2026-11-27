@@ -125,6 +125,29 @@ export function legacyBloodMonthKey(event) {
   } catch { /* Unconfigured rows remain independent. */ }
   return '';
 }
+/**
+ * 排班与献血车按周成组：返回「包含指定日期」的那一行。
+ *
+ * 只在该周确实存在时返回；找不到就返回 null，由调用方回退到原有顺序。
+ * 这样历史数据（全是过去周次）不会被改成最后一周，也不会打乱既有排序基线。
+ */
+export function weekRowContainingDate(rows, today) {
+  const day = String(today || '').slice(0, 10);
+  const week = /^\d{4}-\d{2}-\d{2}$/.test(day) ? bloodWeekStart(day) : '';
+  if (!week) return null;
+  // 按自然周比较，而不是「首末班次区间」：组宣部只在周一至周五排班，
+  // 周末进入时区间判断会落空，仍会退回最早一周。
+  for (const row of rows || []) {
+    const members = row?.sessions?.length ? row.sessions : [row?.event || row];
+    const dates = members
+      .map(item => String(item?.['报名日期'] || '').slice(0, 10))
+      .filter(value => /^\d{4}-\d{2}-\d{2}$/.test(value))
+      .sort();
+    if (!dates.length) continue;
+    if (bloodWeekStart(dates[0]) === week) return row;
+  }
+  return null;
+}
 export function activityProjects(events) {
   const groups = new Map();
   for (const event of events.filter(row => !row.sourceSuperseded)) {

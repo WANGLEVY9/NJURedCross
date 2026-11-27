@@ -22,13 +22,15 @@ import {notify,reportError} from '../../core/toast.js';
 import {workspaceCategories,WORKSPACE_STAGES,workspaceStage} from '../../shared/activity-workspace.js';
 import {activityDraftWorkspace} from './activity-draft-workspace.js';
 import {activityStage,stageLabel} from '../../shared/activity-stage.js';
-import {activityProjects} from '../../shared/activity-projects.js';
+import {activityProjects, weekRowContainingDate} from '../../shared/activity-projects.js';
 import {editAdminActivityInformation} from './activity-admin-information.js';
 import {eventResponsibleIds} from '../../shared/activity-responsibility.js';
 import {activityRegionTitle,activityRegionTag} from '../../shared/activity-region-tag.js';
 const root='/api/volunteer/workflow/workspace-drafts';
 const loadProjectPeopleOptions=async params=>(await request(`${root}/project-people-options?${new URLSearchParams(params)}`,{fresh:true})).options;
 const config=row=>{try{return JSON.parse(row['报名页配置']||'{}');}catch{return {};}};
+// 排班与献血车按自然周成组：默认停在本周，不再从最早一周打开。
+const shanghaiToday=()=>new Date(Date.now()+8*3600000).toISOString().slice(0,10);
 // Keep only directory UI preferences across in-app list/detail navigation.
 const directoryStates=new Map();
 
@@ -172,9 +174,9 @@ export default async function activityWorkspacePage(context){
     const blood=rows.filter(row=>config(row.event||{}).source?.kind==='generated_blood');count.textContent=`${rows.length-blood.length+(blood.length?1:0)} 项`;
     const schedules=new Map();for(const row of rows.filter(r=>scheduledSession(r.event))){const key=config(row.event).special.rootId;schedules.set(key,[...(schedules.get(key)||[]),row]);}
     list.replaceChildren(...cards.filter((_card,index)=>!blood.includes(rows[index])&&!scheduledSession(rows[index].event)));
-    for(const group of schedules.values()){const active=group.find(row=>row.id===selected)||group[0];list.append(h('button',{type:'button',class:'activity-v2-card',role:'listitem',data:{category:'排班专项',region:'nanjing'},'aria-pressed':String(group.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{title:active.name,text:active.name}),h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:context.query.get('history')==='1'?'已结束':active.statusLabel}),activityRegionTag(active)),h('small',{class:'t-caption',text:`${group.length} 周排班 · 进入后选择周次`})))}
+    for(const group of schedules.values()){const active=group.find(row=>row.id===selected)||weekRowContainingDate(group,shanghaiToday())||group[0];list.append(h('button',{type:'button',class:'activity-v2-card',role:'listitem',data:{category:'排班专项',region:'nanjing'},'aria-pressed':String(group.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{title:active.name,text:active.name}),h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:context.query.get('history')==='1'?'已结束':active.statusLabel}),activityRegionTag(active)),h('small',{class:'t-caption',text:`${group.length} 周排班 · 进入后选择周次`})))}
     count.textContent=`${rows.length-blood.length+(blood.length?1:0)-[...schedules.values()].reduce((n,group)=>n+group.length-1,0)} 项`;
-    if(blood.length){const active=blood.find(row=>row.id===selected)||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',role:'listitem',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
+    if(blood.length){const active=blood.find(row=>row.id===selected)||weekRowContainingDate(blood,shanghaiToday())||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',role:'listitem',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
     if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:recycling?'移入回收站的活动会出现在这里。':stageValue==='active'?'当前没有未结束活动，可切换到“全部”或“已结束”查看。':'调整筛选或新建活动。'}));
   }
   function renderDetail(){
@@ -529,6 +531,16 @@ export default async function activityWorkspacePage(context){
     const history=context.query.get('history')==='1';
     const available=all.filter(row=>!history||row.stage==='已结束');
     if(!selected&&!mobile.matches)selected=available[0]?.id||'';
+    // 桌面端未指定活动时同样停在本周：排班与献血车按周成组，首项往往是最早一周。
+    if(!context.query.get('event')&&!context.query.get('draft')){
+      const auto=available.find(row=>row.id===selected),autoConfig=auto?config(auto.event||{}):{};
+      const scheduleRoot=autoConfig.special?.rootId,bloodSource=autoConfig.source?.kind==='generated_blood';
+      if(auto&&(scheduleRoot||bloodSource)){
+        const group=available.filter(row=>{const c=config(row.event||{});return scheduleRoot?c.special?.rootId===scheduleRoot:c.source?.kind==='generated_blood';});
+        const currentWeek=weekRowContainingDate(group,shanghaiToday());
+        if(currentWeek)selected=currentWeek.id;
+      }
+    }
     const linkedDraft=drafts.find(d=>d.id===selected),linkedEvent=events.find(e=>e['活动ID']===linkedDraft?.activityId);
     if(linkedEvent)selected=linkedEvent._id;
     // Hiding ended directory cards must not discard an open detail or a direct link.

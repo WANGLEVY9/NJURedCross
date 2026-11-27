@@ -6,7 +6,11 @@ export function bloodWeekPicker({options,current,onChange}){
  const monday=value=>{const d=new Date(value+'T00:00:00Z');d.setUTCDate(d.getUTCDate()-(d.getUTCDay()+6)%7);return d.toISOString().slice(0,10);};
  const weeks=options.map(o=>({...o,start:monday([...o.dates].sort()[0]||o.date)}));
  const end=start=>{const d=new Date(start+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+6);return d.toISOString().slice(0,10);};
- const selected=weeks.find(o=>o.id===current)||weeks[0];if(!selected)return h('div');
+ // current 有时是场次 id（深链或从列表进入）：匹配不到周次时优先本周，不退回最早一周。
+ const today=new Date(Date.now()+8*3600000).toISOString().slice(0,10);
+ const selected=weeks.find(o=>o.id===current)
+  ||weeks.find(o=>o.start<=today&&today<=end(o.start))
+  ||weeks[0];if(!selected)return h('div');
  const trigger=button({label:'▦ '+selected.start.slice(5)+' ～ '+end(selected.start).slice(5)+' ▾',onClick:()=>{
   let month=selected.start.slice(0,7),modal;
   const calendar=h('div',{class:'blood-week-calendar'}),heading=h('strong'),body=h('div');
