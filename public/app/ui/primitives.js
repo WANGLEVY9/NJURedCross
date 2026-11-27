@@ -464,9 +464,9 @@ export function segmented({ items, value, onChange, ariaLabel = '视图切换', 
       aria: isRadioGroup ? { checked: String(item.value === value), ...(equal?{label:item.label}:{}) } : { selected: String(item.value === value) },
       attrs: { tabindex: String(item.value === value ? 0 : -1) },
       on: { click: () => {if(equal)setValue(item.value);onChange?.(item.value);} },
-    }, item.compactLabel
-      ?[h('span',{class:'filter-segments__full-label',text:item.label}),h('span',{class:'filter-segments__compact-label',text:item.compactLabel,aria:{hidden:'true'}})]
-      :item.label),
+    }, equal && item.compactLabel
+      ? [h('span',{class:'filter-segments__full-label',text:item.label}),h('span',{class:'filter-segments__compact-label',text:item.compactLabel,aria:{hidden:'true'}})]
+      : item.label),
   );
   const node = h('div', {
     class: equal ? 'filter-segments' : 'segmented',

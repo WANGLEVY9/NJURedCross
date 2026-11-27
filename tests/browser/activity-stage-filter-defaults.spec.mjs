@@ -9,6 +9,9 @@ test('activity directory defaults to unfinished activities and keeps ended activ
  await expect(page.locator('#boot-screen')).toHaveCount(0);
  const stages=page.getByRole('radiogroup',{name:'活动阶段筛选'});
  await expect(stages.getByRole('radio',{name:'未结束',exact:true})).toHaveAttribute('aria-checked','true');
+ const labels=await stages.locator('button').allTextContents();
+ expect(labels).toEqual(['未结束','进行中','草稿','待审批','报名中','时长审核','已结束','全部']);
+ for(const label of labels)expect(label).toBe(label.trim());
  await expect(stages.getByRole('radio',{name:'进行中',exact:true})).toBeVisible();
  await expect(stages.getByRole('radio',{name:'已结束',exact:true})).toBeVisible();
  await expect(stages.getByRole('radio',{name:'全部',exact:true})).toBeVisible();
