@@ -1,6 +1,7 @@
+import {openComponentPage} from './component-page.mjs';
 import {test,expect} from '@playwright/test';
 test('initial review defaults to pass, retains decisions after hour edits and supports all-pass',async({page})=>{
- await page.goto('/login');
+ await openComponentPage(page);
  await page.evaluate(async()=>{
   const {runningReviewEditor}=await import('/app/console/pages/activity-running-editor.js');
   runningReviewEditor({rows:[{name:'合成甲',studentId:'9991',item:{id:'one',serviceHours:2,trainingHours:0,travelHours:0,decision:''}},{name:'合成乙',studentId:'9992',item:{id:'two',serviceHours:3,trainingHours:0,travelHours:0,decision:'fail',reason:'合成原因'}}],token:'synthetic',single:true,save:async body=>{window.savedReview=body;},onSaved:async()=>{}});

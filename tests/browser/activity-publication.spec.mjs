@@ -1,3 +1,4 @@
+import {openComponentPage} from './component-page.mjs';
 import {test,expect} from './legacy-activity-fixture.mjs';
 
 const windowRange={start:'2030-01-12T09:00:00+08:00',end:'2030-01-12T12:00:00+08:00'};
@@ -28,7 +29,7 @@ test('parent overview normalizes legacy display without rewriting saved notice',
  expect(data.events.find(row=>row._id===event._id)['通知草稿']).toBe(savedNotice);
 });
 async function mount(page,{status='可发布',config={bookingMode:'unified',window:windowRange},editable=false}={}){
- await page.goto('/login');
+ await openComponentPage(page);
  await page.evaluate(async ({status,config,editable})=>{
   const {publicationPanel}=await import('/app/console/pages/activity-management.js');
   const stylesheet=document.createElement('link');stylesheet.rel='stylesheet';stylesheet.href='/styles/activity-publication.css';document.head.append(stylesheet);
@@ -86,7 +87,7 @@ test('unsaved notice blocks publication and notice save carries no schedule',asy
  await expect.poll(()=>page.evaluate(()=>window.publicationWrites)).toEqual([{path:'/events/synthetic-publication/notice',body:{text:'合成修改后的通知'},method:'PATCH'}]);
 });
 test('position work and capacity increase remain editable and save together',async({page})=>{
- await page.goto('/login');
+ await openComponentPage(page);
  await page.route('**/api/volunteer/workflow/events/synthetic-position/configure-positions',r=>r.fulfill({json:{ok:true,result:{previousCapacity:2,capacity:4,capacityAdjusted:true,previousRegistrationLimit:2,registrationLimit:4,registrationLimitAdjusted:true,draft:true}}}));
  await page.evaluate(async ({windowRange,position})=>{
   const {configureProjectPositions}=await import('/app/console/pages/activity-positions.js');

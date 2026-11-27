@@ -1,3 +1,4 @@
+import {openComponentPage} from './component-page.mjs';
 import {test,expect} from './legacy-activity-fixture.mjs';
 async function openActivityTasks(page) {
  const menu=page.locator('.activity-task-menu');
@@ -101,7 +102,7 @@ test('position editor retains conflict inputs, guards drafts and distinguishes a
  expect(attempts).toBe(2);
 });
 for(const refreshed of [false,true])test(`position editor ${refreshed?'continues after refresh':'warns without continuation when refresh returns false'}`,async({page})=>{
- await page.goto('/login');
+ await openComponentPage(page);
  await page.evaluate(async refreshed=>{
   const {configureProjectPositions}=await import('/app/console/pages/activity-positions.js');
   window.positionCallbacks=[];

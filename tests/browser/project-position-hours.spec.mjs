@@ -1,7 +1,8 @@
+import {openComponentPage} from './component-page.mjs';
 import {test,expect} from '@playwright/test';
 
 test('optional position hours omit blanks, copy and restore overrides, and preserve wizard callbacks',async({page})=>{
- await page.goto('/login');
+ await openComponentPage(page);
  const payloads=[];
  await page.route('**/events/synthetic-position-hours/configure-positions',async route=>{
   payloads.push(route.request().postDataJSON());

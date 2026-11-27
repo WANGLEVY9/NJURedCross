@@ -1,7 +1,8 @@
+import {openComponentPage} from './component-page.mjs';
 import {test,expect} from '@playwright/test';
 
 test('rapid animated notifications evict active items without blocking the browser',async({page})=>{
- await page.goto('/login');
+ await openComponentPage(page);
  await page.evaluate(async()=>{
   document.documentElement.dataset.motion='full';
   const {toast}=await import('/app/core/toast.js');
@@ -15,7 +16,7 @@ test('rapid animated notifications evict active items without blocking the brows
 });
 
 test('deduplicating a full toast stack does not evict additional active notifications',async({page})=>{
- await page.goto('/login');
+ await openComponentPage(page);
  await page.evaluate(async()=>{
   const {toast}=await import('/app/core/toast.js');
   for(let index=0;index<4;index++)toast({title:`合成堆栈${index}`,duration:null});

@@ -1,7 +1,8 @@
+import {openComponentPage} from './component-page.mjs';
 import {test,expect} from '@playwright/test';
 
 test('person selection supports search, keyboard addition, removal and compact layout', async ({page}) => {
-  await page.goto('/login');
+  await openComponentPage(page);
   await page.evaluate(async () => {
     const {peoplePicker}=await import('/app/ui/people-picker.js');
     const target=document.createElement('section');target.className='console';target.id='people-test';
@@ -27,7 +28,7 @@ test('person selection supports search, keyboard addition, removal and compact l
 });
 
 test('fixed owner stays first, survives directory refresh and cannot be removed',async({page})=>{
- await page.goto('/login');
+ await openComponentPage(page);
  await page.evaluate(async()=>{
   const {peoplePicker}=await import('/app/ui/people-picker.js');
   const root=document.createElement('section');root.id='fixed-people-test';root.className='console';

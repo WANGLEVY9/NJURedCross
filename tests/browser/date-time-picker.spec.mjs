@@ -1,11 +1,8 @@
+import {openComponentPage} from './component-page.mjs';
 import { test, expect } from '@playwright/test';
 
 async function mount(page, options = {}) {
-  // This is a component fixture: the login reminder must not register its own
-  // Escape handler after the fixture has replaced the application DOM.
-  await page.addInitScript(() => localStorage.setItem('njurc:registration-reminder:v1', 'dismissed'));
-  await page.goto('/login');
-  await expect(page.locator('body')).toHaveClass(/\bpage-ready\b/);
+  await openComponentPage(page);
   await page.evaluate(async options => {
     const { field } = await import('/app/ui/primitives.js');
     const { enhanceDateTimeField } = await import('/app/ui/date-time-picker.js');
@@ -169,10 +166,6 @@ test('disabled and readonly inputs cannot open or apply; dynamic disabling close
 });
 
 test('focus leaving cancels without stealing focus; disposal restores input and releases Escape', async ({ page }) => {
-  await page.route('**/app/portal/shell.js', async route => {
-    await new Promise(resolve => setTimeout(resolve, 300));
-    await route.continue();
-  });
   await mount(page, { step: 60 });
   await trigger(page).click();
   await page.getByRole('button', { name: '外部操作' }).click();
