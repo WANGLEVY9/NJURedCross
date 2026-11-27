@@ -1058,3 +1058,41 @@ body.is-resizing-activity-directory {
     transform: none;
   }
 }
+
+/* Keep the existing directory layout while reserving space for its marker. */
+.activity-v2 .activity-v2-card.activity-blood-directory {
+  padding: 12px 12px 12px 28px;
+}
+.activity-v2 .activity-blood-directory::before {
+  left: 12px;
+  top: 20px;
+}
+.activity-v2 .activity-blood-directory__main,
+.activity-v2 .activity-blood-directory__shortcuts {
+  min-width: 0;
+  max-width: 100%;
+}
+.activity-v2 .activity-blood-directory__shortcut strong {
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* Scroll the roster and its controls together, rather than shrinking the table. */
+.activity-v2 .activity-registration-workspace {
+  min-height: 0;
+  overflow: hidden;
+}
+.activity-v2 .activity-registration-content {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+.activity-v2 .activity-registration-content > * {
+  flex-shrink: 0;
+}
+.activity-v2 .activity-registration-content > .activity-registration-table:not(.activity-final-hours-table) {
+  flex: 0 0 auto;
+  min-height: 320px;
+  max-height: none;
+  overflow-y: hidden;
+}

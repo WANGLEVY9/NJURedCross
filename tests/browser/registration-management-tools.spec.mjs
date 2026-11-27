@@ -71,6 +71,7 @@ test('latest-main mail details and notification preview survive the roster integ
  const preview=page.getByRole('dialog',{name:'再次通知 · 收件核验',exact:true});await expect(preview).toContainText('合成通知预览');await expect(preview.getByRole('button',{name:'确认再次通知',exact:true})).toBeEnabled();expect(previews).toBe(1);expect(sends).toBe(0);await page.keyboard.press('Escape');await expect(preview).toHaveCount(0);expect(sends).toBe(0);
 });
 
+
 test('registration export button issues a read-only GET request',async({page})=>{
  let method='';
  await page.route('**/api/volunteer/workflow/events/tools-event/registration-export',route=>{
@@ -85,4 +86,16 @@ test('registration export button issues a read-only GET request',async({page})=>
  });
  await page.getByRole('button',{name:'下载报名信息表',exact:true}).click();
  await expect.poll(()=>method).toBe('GET');
+});
+
+test('roster scrolls with its controls instead of collapsing into a short inner viewport',async({page})=>{
+ await mount(page);
+ await page.locator('.activity-v2').evaluate(el=>{el.style.height='500px';});
+ const table=page.locator('.activity-registration-table');
+ await expect(table).toBeVisible();
+ const sizes=await table.evaluate(el=>({min:parseFloat(getComputedStyle(el).minHeight),shrink:getComputedStyle(el).flexShrink,parentOverflow:getComputedStyle(el.parentElement).overflowY}));
+ expect(sizes.min).toBeGreaterThanOrEqual(320);
+ expect(sizes.shrink).toBe('0');
+ expect(sizes.parentOverflow).toBe('auto');
+
 });
