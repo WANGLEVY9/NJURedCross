@@ -24,6 +24,9 @@ const root = document.getElementById('root');
    -------------------------------------------------------------------------- */
 const shells = { portal: null, console: null };
 const shellModules = { portal: null, console: null };
+// The HTML already carries this surface's stylesheet bundle, even before the
+// asynchronous first shell finishes loading. Never infer it from activeSurface.
+const documentSurface = document.documentElement.dataset.surface || (location.pathname.startsWith('/console') || location.pathname.startsWith('/admin') ? 'console' : 'portal');
 let activeSurface = null;
 
 function loadShellModule(surface) {
@@ -44,7 +47,7 @@ async function ensureShell(surface, target = null) {
   // 旧包（栅格、装饰三角、body 背景）会污染新页面，表现为整页无样式与漂移。
   // 跨端一律整页跳转，让浏览器重新建立样式与 shell 上下文。
   // 必须跳到路由的目标地址：此时 history 可能尚未指向新路径。
-  if (activeSurface && activeSurface !== surface) {
+  if (documentSurface !== surface) {
     location.assign(target || `${location.pathname}${location.search}${location.hash}`);
     return new Promise(() => {});
   }

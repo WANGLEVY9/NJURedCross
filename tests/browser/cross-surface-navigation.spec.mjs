@@ -45,3 +45,35 @@ test('entering the console from the portal also reloads, keeping the console bun
   const styles = await page.evaluate(() => [...document.querySelectorAll('link[rel=stylesheet]')].map(link => new URL(link.href).pathname.split('/').pop()));
   expect(styles).not.toContain('app.css');
 });
+
+test('entering the console while the initial portal shell is still loading reloads the document', async ({ page }) => {
+  await page.request.post('/api/auth/login', { data: { username: 'synthetic-super' } });
+  let releaseShell, shellRequested;
+  const held = new Promise(resolve => { releaseShell = resolve; });
+  const requested = new Promise(resolve => { shellRequested = resolve; });
+  await page.route('**/app/portal/shell.js', async route => {
+    shellRequested();
+    await held;
+    await route.continue().catch(() => {});
+  });
+  try {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await requested;
+    await page.evaluate(async () => {
+      window.previousSurfaceDocument = true;
+      const { navigate } = await import('/app/core/router.js');
+      void navigate('/console/overview');
+    });
+    await page.waitForURL(url => url.pathname === '/console/overview');
+    await expect(page.locator('.operations-overview')).toBeVisible();
+    const state = await page.evaluate(() => ({
+      previousDocument: window.previousSurfaceDocument === true,
+      surface: document.documentElement.dataset.surface,
+      styles: [...document.querySelectorAll('link[rel=stylesheet]')].map(link => new URL(link.href).pathname.split('/').pop()),
+    }));
+    expect(state.previousDocument).toBe(false);
+    expect(state.surface).toBe('console');
+    expect(state.styles).toContain('app-console.css');
+    expect(state.styles).not.toContain('app.css');
+  } finally { releaseShell(); }
+});
