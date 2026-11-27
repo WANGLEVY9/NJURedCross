@@ -224,6 +224,24 @@ test('incomplete draft has no booking default and saves without fabricated requi
  await page.getByRole('button',{name:'活动信息查看',exact:true}).click();const information=page.getByRole('dialog',{name:'活动信息',exact:true});await expect(information).toContainText('待选择');await expect(information).toContainText('未填写');await expect(information).not.toContainText('整体活动统一报名');await information.getByRole('button',{name:'返回',exact:true}).click();
  await page.getByRole('button',{name:'预览并提交',exact:true}).click();await expect(page.getByRole('dialog').getByRole('button',{name:'提交审核',exact:true})).toBeDisabled();
 });
+
+test('schedule conflict is shown inline with an actionable explanation and preserves input',async({page})=>{
+ await page.goto('/console/events');
+ await page.evaluate(async()=>{
+  const {activityDraftWorkspace}=await import('/app/console/pages/activity-draft-workspace.js');
+  const {normalizeWorkspaceDraft}=await import('/app/shared/activity-workspace.js');
+  const content=normalizeWorkspaceDraft({qqGroup:'123456789',name:'合成活动',region:'nanjing',category:'生命中心',bookingMode:'unified',date:'2030-01-01',endDate:'2030-01-03',start:'09:15',end:'11:45',deadline:'2029-12-31T18:00',location:'合成地点',capacity:'20',serviceHours:'3',trainingHours:'0',travelHours:'0',work:'合成服务',notice:'合成通知'});
+  const editor=activityDraftWorkspace({initial:{id:'draft-test',version:1,content},editable:true,save:async()=>{throw Object.assign(new Error('已有报名存在岗位时段重叠，请保留原岗位时段；如仅需修改截止时间，请直接保存'),{statusCode:409,code:'workspace_schedule_conflict'});},preview:async()=>({content,errors:[]})});
+  document.getElementById('root').replaceChildren(editor.node);
+ });
+ await page.getByLabel('活动名称',{exact:true}).fill('冲突后仍保留的输入');
+ await page.getByRole('button',{name:'保存草稿',exact:true}).click();
+ const alert=page.locator('.activity-draft-feedback [role=alert]');
+ await expect(alert).toContainText('保存未生效：岗位时段与已有报名重叠');
+ await expect(alert).toContainText('请保留原岗位时段');
+ await expect(page.getByLabel('活动名称',{exact:true})).toHaveValue('冲突后仍保留的输入');
+ await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeEnabled();
+});
 test('read-only actor cannot edit, save, preview-confirm or submit the draft',async({page})=>{
  await mount(page,{editable:false});await expect(page.getByRole('button',{name:'保存草稿',exact:true})).toBeDisabled();await expect(page.getByRole('button',{name:'提交审核',exact:true})).toHaveCount(0);
  expect(await page.locator('.activity-draft-workspace__form').evaluate(n=>n.inert)).toBe(false);await expect(page.getByLabel('活动名称',{exact:true})).toBeDisabled();

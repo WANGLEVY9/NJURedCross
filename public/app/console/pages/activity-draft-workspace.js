@@ -17,7 +17,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   let content=normalizeWorkspaceDraft(initial.content),version=initial.version,id=initial.id;
   let saved=JSON.stringify(content),pristine=saved,manuallyChanged=false,busy=false,uncertain=false,disposed=false,previewSubmit=null;
   let autoNotice=isWorkspaceNoticeAuto(content);
-  const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),fields=h('fieldset',{class:'activity-draft-workspace__fields'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'});
+  const controls=new Map(),root=h('div',{class:'activity-draft-workspace'}),form=h('div',{class:'activity-draft-workspace__form'}),fields=h('fieldset',{class:'activity-draft-workspace__fields'}),details=h('div'),status=h('span',{class:'t-caption',role:'status'}),feedback=h('div',{class:'activity-draft-feedback'});
   const dirty=()=>JSON.stringify(content)!==saved;
   let noticeFrame=0,observedWidth=-1;
   function scheduleNoticeSize(){
@@ -28,6 +28,18 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   }
   const noticeObserver=new ResizeObserver(entries=>{const width=entries[0].contentRect.width;if(width!==observedWidth){observedWidth=width;scheduleNoticeSize();}});noticeObserver.observe(root);
   const releaseScroll=bindActivityWorkspaceScroll(form,{enabled:()=>root.closest('.activity-v2')!==null});
+
+  function showFeedback(message){
+   feedback.replaceChildren();
+   if(!message)return;
+   const conflict=typeof message==='string'&&/冲突|重叠/.test(message);
+   const heading=conflict?'保存未生效：岗位时段与已有报名重叠':'保存未生效，填写内容已保留';
+   const detail=conflict?'请保留原岗位时段；如只修改报名截止时间，直接重新保存即可。请按提示修正后重试。':'请按提示修正后重试。';
+   const panelNode=notice(detail,{tone:'error',title:`${heading} · ${message}`});
+   panelNode.setAttribute('role','alert');panelNode.tabIndex=-1;
+   feedback.append(panelNode);
+   panelNode.focus();
+  }
 
   function update(key,{automatic=false}={}){if(!automatic)manuallyChanged=true;if(key==='notice')autoNotice=false;else if(autoNotice&&(content.bookingMode||content.notice)){content.notice=workspaceNotice(content);const noticeControl=controls.get('notice');if(noticeControl)noticeControl.value=content.notice;}if(automatic&&!manuallyChanged)pristine=JSON.stringify(content);scheduleNoticeSize();status.textContent=dirty()?'有未保存的修改':'已保存';if(previewSubmit)previewSubmit.disabled=true;}
   function input(key,label,type='text',extra={}){
@@ -118,7 +130,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   async function run(action,{readOnly=false}={}){
     if(!editable&&!readOnly||busy||uncertain||disposed)return;
     busy=true;fields.disabled=true;for(const b of [viewButton,editButton,saveButton,previewButton])b.disabled=true;
-    try{await action();}catch(error){if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
+    try{await action();showFeedback('');}catch(error){if(error?.code==='workspace_schedule_conflict'||error?.code==='registration_schedule_conflict'||/重叠|冲突/.test(error?.message||''))showFeedback(error.message);else showFeedback('');if(!readOnly&&!error.status&&error.statusCode===undefined){uncertain=true;notify.warning('操作结果待核对','请重新加载活动确认结果，不要重复提交。');}else reportError(error,readOnly?'信息加载失败，请重试':'操作未完成，输入已保留');}
     finally{busy=false;if(!disposed){fields.disabled=!editable;viewButton.disabled=uncertain;editButton.disabled=saveButton.disabled=previewButton.disabled=!editable||uncertain;if(previewSubmit)previewSubmit.disabled=uncertain||dirty()||previewSubmit.dataset.unavailable==='true';}}
   }
   const saveButton=button({label:saveLabel,onClick:()=>run(async()=>{const result=await save({id,expectedVersion:version,content:normalizeWorkspaceDraft(content)});if(disposed)return;id=result.id;version=result.version;content=normalizeWorkspaceDraft(result.content);if(result.access?.canEdit===false)editable=false;saved=JSON.stringify(content);pristine=saved;manuallyChanged=false;for(const [key,control] of controls)control.value=content[key]||(key==='flexibleCapacity'?'0':'');projectPeople?.sync();if(content.special)renderDetails();scheduleNoticeSize();status.textContent='已保存';})});
@@ -136,7 +148,7 @@ export function activityDraftWorkspace({initial,creationScopes=null,ownerNode,ac
   const viewButton=button({label:'活动信息查看',onClick:()=>run(()=>showPreview(false),{readOnly:true})});
   const editButton=button({label:'活动信息修改',disabled:!editable,onClick:()=>{if(editable&&!busy&&!uncertain)controls.get('name')?.focus();}});
   const previewButton=button({label:'预览并提交',variant:'primary',onClick:()=>run(()=>showPreview(true),{readOnly:true})});
-  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),form);
+  root.append(h('div',{class:'activity-draft-toolbar'},viewButton,editButton,h('span',{class:'activity-draft-toolbar__divider','aria-hidden':'true'}),saveButton,...(showSubmissionActions?[previewButton]:[]),status,actionsNode),feedback,form);
   renderDetails();for(const b of [saveButton,previewButton])b.disabled=!editable;
   if(projectPeople)void projectPeople.refresh();else void refreshResponsible();
   return {node:root,saveButton,previewButton:showSubmissionActions?previewButton:null,hasUnsaved:()=>JSON.stringify(content)!==pristine,isSaving:()=>busy,dispose:()=>{disposed=true;projectPeople?.dispose();releaseScroll();cancelAnimationFrame(noticeFrame);noticeObserver.disconnect();},getId:()=>id};

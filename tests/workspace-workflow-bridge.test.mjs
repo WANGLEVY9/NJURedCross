@@ -515,6 +515,48 @@ test('registration-stage information edit is chair-only and preserves bookings, 
  const next=await f.bridge.content(event._id);f.tables[WF.ledger].push({_id:'synthetic-hours',活动ID:child['活动ID']});await assert.rejects(f.bridge.save(event._id,{expectedVersion:next.version,token:next.token,content:{...next.content,description:'不应生效'}},'sz-chair'),/时长记录、提交审核或最终时长/);
 });
 
+test('chair can change only the deadline when a pre-existing booking has an unrelated schedule overlap',async t=>{
+ const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const event=f.tables[WF.events][0];
+ await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});
+ const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===event['活动ID']);
+ const [first,second]=children;
+ for(const [i,child] of children.entries())f.tables[WF.registrations].push({_id:'booking-'+i,报名ID:'code-'+i,活动ID:child['活动ID'],账号ID:'person-'+i,学号:'99999010'+i,报名状态:'已确认',活动名称:child['活动名称'],报名日期:child['报名日期'],报名时段:child['报名时段'],岗位:child['岗位']});
+ const before=await f.bridge.content(event._id,'sz-chair');
+ const deadline='2029-12-30T18:00';
+ // The visible editor can also carry an overlap: two people booked the same
+ // job. Changing only the deadline must not re-adjudicate that old condition.
+ const content={...before.content,deadline};
+ const overlap=JSON.parse(event['报名页配置']);overlap.positionPlan={...overlap.positionPlan,positions:overlap.positionPlan.positions.map(position=>({...position,start:'2030-01-01T09:00:00+08:00',end:'2030-01-01T12:00:00+08:00'}))};
+ event['报名页配置']=JSON.stringify(overlap);event['批准摘要']=workflowApprovalHash(event);
+ for(const [i,child] of children.entries()){
+  const config=JSON.parse(child['报名页配置']);config.ordinary={...config.ordinary,start:'2030-01-01T09:00:00+08:00',end:'2030-01-01T12:00:00+08:00'};
+  child['报名页配置']=JSON.stringify(config);child['批准摘要']=workflowApprovalHash(child);
+  f.tables[WF.registrations][i]['活动名称']=child['活动名称'];
+  f.tables[WF.registrations][i]['报名时段']=child['报名时段'];
+ }
+ const refreshed=await f.bridge.content(event._id,'sz-chair'),updated={...refreshed.content,deadline};
+ const result=await f.bridge.save(event._id,{expectedVersion:refreshed.version,token:refreshed.token,content:updated},'sz-chair');
+ assert.equal(result.version,before.version+1);
+ assert.equal(JSON.parse(event['报名页配置']).positionPlan.deadline,'2029-12-30T18:00:00+08:00');
+ assert.deepEqual(f.tables[WF.registrations].map(row=>row._id),['booking-0','booking-1']);
+ const next=await f.bridge.content(event._id,'sz-chair');
+ assert.equal(next.content.deadline,deadline);
+});
+
+test('chair cannot move a booked job into another booked time slot',async t=>{
+ const f=await fixture(t);await f.submissions.submit(f.row.id,f.body,'creator');const event=f.tables[WF.events][0];
+ await f.workflow.approve(event._id,'sz-chair','platform_admin',workflowApprovalHash(event));await f.workflow.publish(event._id,{actor:'sz-chair'});
+ const children=f.tables[WF.events].filter(row=>JSON.parse(row['报名页配置']).parentActivityId===event['活动ID']);
+ const [first,second]=children;
+ for(const [i,child] of children.entries())f.tables[WF.registrations].push({_id:'booking-'+i,报名ID:'code-'+i,活动ID:child['活动ID'],账号ID:'person-'+i,学号:'99999010'+i,报名状态:'已确认',活动名称:child['活动名称'],报名日期:child['报名日期'],报名时段:child['报名时段'],岗位:child['岗位']});
+ const source=await f.bridge.content(event._id,'sz-chair'),content={...source.content};
+ content.positions=content.positions.map((position,i)=>i?position:{...position,date:'2030-01-01',start:'14:10',end:'16:40'});
+ await assert.rejects(f.bridge.save(event._id,{expectedVersion:source.version,token:source.token,content},'sz-chair'),{code:'workspace_schedule_conflict'});
+ const schedule=JSON.parse(event['报名页配置']).positionPlan.positions;
+ assert.equal(schedule[0].start,'2030-01-01T09:15:00+08:00');
+ assert.equal(JSON.parse(second['报名页配置']).ordinary.start,'2030-01-03T14:10:00+08:00');
+});
+
 
 test('published generated notice follows information changes and editor deadline remains a local minute value',async t=>{
  const f=await fixture(t),generated={...content,notice:workspaceNotice(content)};await f.drafts.save(f.row.id,{expectedVersion:1,content:generated},'creator');const preview=await f.drafts.preview(f.row.id,{expectedVersion:2},'creator');await f.drafts.confirmPreview(f.row.id,{expectedVersion:2,digest:preview.digest},'creator');await f.submissions.submit(f.row.id,{expectedVersion:2,digest:preview.digest},'creator');

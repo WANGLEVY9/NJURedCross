@@ -698,6 +698,13 @@ details.service-tools:not([open])>:not(summary){display:none}
 
 .activity-draft-workspace__fields{border:0;margin:0;padding:0;min-width:0;display:flex;flex:0 0 auto;flex-direction:column;gap:18px}
 
+/* Save errors stay with the form so a failed deadline edit explains itself. */
+.activity-draft-feedback{flex:0 0 auto;padding:0 20px}
+.activity-draft-feedback:empty{display:none}
+.activity-draft-feedback>.notice{animation:none}
+.activity-draft-feedback .notice b{font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+.activity-draft-feedback .notice p{font-size:12px;line-height:1.6;overflow-wrap:anywhere}
+
 
 /* Keep modal editing actions visible while the activity form scrolls. */
 .modal.activity-approval-editor-modal{height:min(900px,calc(100dvh - 32px));max-height:calc(100dvh - 32px);grid-template-rows:auto minmax(0,1fr) auto}
