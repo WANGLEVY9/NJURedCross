@@ -34,8 +34,7 @@ test('unified workspace activity with a full-day window blocks an overlapping se
  await w.register(first._id,account);
  // A workspace-created unified event has no ordinary/blood config. Its
  // registration still has to compare the real c.window against booked events.
- const config=JSON.parse(second['报名页配置']);
- config.ordinary={groupId:'PROJECT-'+second['活动ID'],start:config.window.start,end:config.window.end,campus:'鼓楼',hoursPending:false};
- second['报名页配置']=JSON.stringify(config);second['批准摘要']=workflowApprovalHash(second);
+ // Published workspace events keep their canonical c.window; the bug was that
+ // registration conflict detection ignored it.
  await assert.rejects(w.register(second._id,account),{code:'registration_schedule_conflict'});
 });
