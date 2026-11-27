@@ -40,7 +40,7 @@ const MAP = [
   [/^(public\/app\/portal\/blood|public\/app\/portal\/booking|public\/app\/portal\/pages\/blood)/, /^(blood|booking|calendar)/],
   [/^(lib\/identity\/|public\/app\/portal\/pages\/(login|register|change-password))/, /^(login|session|console-access|auth)/],
   [/^(public\/app\/portal\/pages\/outreach|public\/app\/console\/pages\/outreach|lib\/outreach\/)/, /^(outreach|showcase)/],
-  [/^(public\/app\/portal\/pages\/events|public\/app\/shared\/events)/, /^(events|activity)/],
+  [/^(public\/app\/portal\/pages\/events|public\/app\/portal\/activity-row|public\/app\/shared\/events)/, /^(events|activity)/],
 ];
 
 const specs = new Set();

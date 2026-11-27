@@ -10,6 +10,7 @@ import { patchQuery } from '../../core/router.js';
 import { pageHead, button, segmented, definitionList, badge } from '../../ui/primitives.js';
 import { CONSOLE_SECTIONS } from '../navigation.js';
 import settingsPage from './settings.js';
+import {DUTY_CAPACITY} from '../../shared/special-activity.js';
 
 /* 一行动作：图标 + 标题 + 说明 + 箭头。href 走原生链接，其余走按钮。 */
 function actionRow({ iconName, title, description, action = null, href = null }) {
@@ -126,7 +127,7 @@ export default async function adminPage(context) {
         if(current!==generation)return;
         const items=[];
         if(capabilities?.enableRegistry)items.push(actionRow({iconName:'file',title:'启用长期登记项目',description:'省血液献血车、成分献血的登记与核验。',action:async()=>{const {openRegistryEnable}=await import('./special-registry-enable.js');openRegistryEnable();}}));
-        if(capabilities?.enableRegistry)items.push(actionRow({iconName:'calendar',title:'省红会组宣部值班',description:'工作日上下午两班，每班2人。',action:async()=>{const {openRecurringDuty}=await import('./special-registry-enable.js');await openRecurringDuty();}}));
+        if(capabilities?.enableRegistry)items.push(actionRow({iconName:'calendar',title:'省红会组宣部值班',description:`工作日上下午两班，每班${DUTY_CAPACITY}人。`,action:async()=>{const {openRecurringDuty}=await import('./special-registry-enable.js');await openRecurringDuty();}}));
         if(capabilities?.bloodSchedule)items.push(actionRow({iconName:'heart',title:'献血车排班',description:'查看排班，维护周次与发布。',action:async()=>{const {openScheduleSource}=await import('./activity-schedule-source.js');await openScheduleSource();}}));
         if(items.length){activityTools.hidden=false;activityTools.replaceChildren(actionGroup({title:'活动专项管理',description:'长期登记与常态排班，统一维护。',items,special:true}));}
       }).catch(()=>{/* Permission or connectivity failures leave privileged tools hidden. */});

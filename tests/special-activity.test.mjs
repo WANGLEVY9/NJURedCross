@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {normalizeSpecialActivity,normalizeSpecialDraft,specialScheduleSessions,normalizeCompletionRegistration,specialActivity} from '../public/app/shared/special-activity.js';
+import {normalizeSpecialActivity,normalizeSpecialDraft,specialScheduleSessions,normalizeCompletionRegistration,specialActivity,DUTY_CAPACITY,dutyPerSessionCapacity} from '../public/app/shared/special-activity.js';
 const period=(start='08:00',end='12:00')=>({start,end,capacity:'3',serviceHours:'4',trainingHours:'0',travelHours:'1'});
 const input=()=>({v:1,type:'hospital-examination',dates:['2027-01-04','2026-12-31'],places:[{location:'鼓楼校医院',periods:[period('13:00','17:00'),period()]},{location:'仙林校医院',periods:[period()]}],cutoffMinutes:30});
 const range={date:'2026-12-01',endDate:'2027-01-31'};
@@ -26,6 +26,17 @@ test('province registration has only a daily quota and component completion has 
  assert.throws(()=>normalizeSpecialActivity({v:1,type:'province-service',dailyCapacity:4,places:[]}));
  assert.throws(()=>normalizeSpecialActivity({v:1,type:'component-donation',dailyCapacity:4}));
  assert.equal(specialActivity({'活动名称':'校医院体检'}),null);
+});
+test('duty card reports the newest session capacity instead of the frozen week or the group sum',()=>{
+ // 名额升级后组里仍留着旧周次（容量 1），sessions 升序、最新一班在末尾。
+ assert.equal(dutyPerSessionCapacity({recurringDuty:true,capacity:'62',sessions:[{capacity:1},{capacity:'1'},{capacity:2}]}),2);
+ // 单班行没有 sessions，用自己的容量。
+ assert.equal(dutyPerSessionCapacity({recurringDuty:true,capacity:'2'}),2);
+ // 容量读不成数字时不能把整组求和（62）当成每班人数。
+ assert.equal(dutyPerSessionCapacity({recurringDuty:true,capacity:'62',sessions:[{capacity:''},{capacity:null}]}),DUTY_CAPACITY);
+ assert.equal(dutyPerSessionCapacity({recurringDuty:true,sessions:[]}),DUTY_CAPACITY);
+ assert.equal(dutyPerSessionCapacity({}),DUTY_CAPACITY);
+ assert.equal(dutyPerSessionCapacity({sessions:[{capacity:3},{capacity:'3'}]}),3);
 });
 test('completion requires a past China date, one-decimal duration, integer quantity and certificate',()=>{
  const c={requestId:'12345678-1234-4234-8234-123456789012',date:'2026-11-10',duration:'1.5',quantity:2,photoId:'12345678-1234-4234-8234-123456789012'},now=Date.parse('2026-11-09T16:05:00Z');
