@@ -68,27 +68,20 @@ export async function openPalette({ initialQuery = '' } = {}) {
     return instance;
   }
 
-  const collected = [];
-  for (const provider of providers) {
-    try {
-      const result = await provider();
-      if (Array.isArray(result)) collected.push(...result.filter(Boolean));
-    } catch {
-      /* a failing provider must not break the palette */
-    }
-  }
-
   const recent = prefs.get(RECENT_KEY, []);
+  const inputId = `palette-input-${Math.random().toString(36).slice(2, 8)}`;
   const input = h('input', {
+    id: inputId,
     type: 'text',
     value: initialQuery,
-    placeholder: '搜索页面、执行操作、跳转对象…',
+    placeholder: '搜索页面、操作或业务记录',
     autocomplete: 'off',
     spellcheck: 'false',
-    attrs: { 'aria-label': '命令面板搜索', role: 'combobox', 'aria-expanded': 'true', 'aria-controls': 'command-results', 'aria-autocomplete': 'list' },
+    attrs: { 'aria-label': '命令面板搜索', 'aria-describedby': `${inputId}-status`, role: 'combobox', 'aria-expanded': 'true', 'aria-controls': 'command-results', 'aria-autocomplete': 'list' },
   });
 
   const searchStatus = h('p', {
+    id: `${inputId}-status`,
     class: 'palette__group t-caption',
     attrs: { role: 'status', 'aria-live': 'polite' },
     hidden: true,
@@ -102,7 +95,11 @@ export async function openPalette({ initialQuery = '' } = {}) {
   const palette = h(
     'div',
     { class: 'palette', attrs: { role: 'dialog', 'aria-modal': 'true', 'aria-label': '命令面板' } },
-    h('div', { class: 'palette__search' }, icon('search', 'ico'), input, iconButton({ iconName: 'close', label: '关闭命令面板', onClick: () => close() })),
+    h('div', { class: 'palette__search' },
+      h('span', { class: 'palette__search-icon', 'aria-hidden': 'true' }, icon('search', 'ico ico--sm')),
+      h('label', { class: 'palette__search-label', attrs: { for: inputId }, text: '搜索' }),
+      input,
+      iconButton({ iconName: 'close', label: '关闭命令面板', onClick: () => close() })),
     searchStatus,
     list,
     h(
@@ -115,6 +112,8 @@ export async function openPalette({ initialQuery = '' } = {}) {
     ),
   );
 
+  let collected = [];
+  let providersReady = false;
   let items = [];
   let active = 0;
   let remoteItems = [];
@@ -144,6 +143,14 @@ export async function openPalette({ initialQuery = '' } = {}) {
 
   const render = () => {
     const query = input.value.trim();
+    if (!providersReady) {
+      items = [];
+      list.setAttribute('aria-busy', 'true');
+      clear(list);
+      list.append(h('p', { class: 'palette__loading', text: '正在整理可用页面与操作…' }));
+      return;
+    }
+    list.removeAttribute('aria-busy');
     const ranked = collected
       .map((item) => ({ item, weight: score(item, query) }))
       .concat(remoteItems.map((item, index) => ({
@@ -321,6 +328,19 @@ export async function openPalette({ initialQuery = '' } = {}) {
 
   instance = { close, input };
   scheduleSearch();
+
+  // Providers can be slow or remote. Mount the palette first so the trigger
+  // never feels frozen, then fill in local commands as they resolve.
+  void Promise.allSettled(providers.map((provider) => Promise.resolve().then(() => provider())))
+    .then((results) => {
+      if (closed) return;
+      collected = results.flatMap((result) => result.status === 'fulfilled' && Array.isArray(result.value)
+        ? result.value.filter(Boolean) : []);
+      providersReady = true;
+      render();
+      scheduleSearch();
+    });
+
   return instance;
 }
 

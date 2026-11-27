@@ -10,7 +10,7 @@ import { brandLockup } from '../ui/brand-lockup.js';
 
 import { h, icon, clear, trapFocus } from '../core/dom.js';
 import { swapView } from '../core/motion.js';
-import { navigate, refreshCurrent } from '../core/router.js';
+import { navigate, refreshCurrent, prefetchRoute } from '../core/router.js';
 import { createScrollState } from './scroll-state.js';
 import {
   registerCommands,
@@ -97,7 +97,7 @@ export function createShell() {
         const module = NAV_MODULES[item.path];
         if (prefetch || module) {
           const warm = () => {
-            module?.().catch(() => {});
+            if (module) prefetchRoute(item.path, module);
             if (prefetch) (Array.isArray(prefetch) ? prefetch : [prefetch]).forEach((path) => prefetchRead(path));
           };
           let timer;
@@ -116,6 +116,7 @@ export function createShell() {
             timer = undefined;
           };
           link.addEventListener('pointerenter', start);
+          link.addEventListener('pointerdown', start);
           link.addEventListener('focus', start);
           link.addEventListener('pointerleave', stop);
           link.addEventListener('blur', stop);
@@ -133,6 +134,18 @@ export function createShell() {
     markActive(activePath);
   }
   renderNavigation();
+
+  // Warm the most likely next destinations during idle time so their page
+  // chunks are local by the time a button or nav item is clicked. Data reads
+  // stay on hover/focus to avoid background pressure on every console visit.
+  const warmNavigationModules = () => {
+    for (const path of ['/console/events', '/console/overview', '/console/admin']) {
+      const module = NAV_MODULES[path];
+      if (module) prefetchRoute(path, module);
+    }
+  };
+  if ('requestIdleCallback' in window) requestIdleCallback(warmNavigationModules, { timeout: 4000 });
+  else setTimeout(warmNavigationModules, 2500);
 
   const healthStatus = h('div', { class: 'nav__health' }, statusIndicator('连接中', { tone: 'warning', live: true }));
 

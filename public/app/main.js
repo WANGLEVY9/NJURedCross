@@ -6,7 +6,7 @@ import { observePageResources, reportTiming, timeBrowserPhase } from './core/tel
      · Operations console     (/console/**, session protected)
    ========================================================================== */
 
-import { defineRoutes, mountRouter, setNotFound, redirect } from './core/router.js';
+import { defineRoutes, mountRouter, setNotFound, redirect, consumePrefetchedRoute } from './core/router.js';
 import { refreshSession, getSessionState, hasConsoleAccess, hasPermission, onSessionChange, request, publicApi } from './core/api.js';
 import { bindKey } from './core/keys.js';
 import { openPalette, clearCommands } from './ui/palette.js';
@@ -242,7 +242,10 @@ async function renderer({ context, handler, token }) {
   try {
     const loadPage = developing && !hasConsoleAccess() && getSessionState().user?.localPreview !== true
       ? () => import('./portal/pages/development-gate.js') : handler.load;
-    const pageModule = timeBrowserPhase(context.path,'module',loadPage).then(module => ({ module }), error => ({ error }));
+    const warmed = consumePrefetchedRoute(context.path);
+    const pageModule = warmed
+      ? Promise.resolve({ module: warmed })
+      : timeBrowserPhase(context.path,'module',loadPage).then(module => ({ module }), error => ({ error }));
     shell = await ensureShell(handler.surface, `${context.path}${context.query.toString() ? `?${context.query}` : ''}`);
     if (!token()) return;
     shell.beginNavigation(context);

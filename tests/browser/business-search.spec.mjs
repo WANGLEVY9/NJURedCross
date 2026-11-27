@@ -86,6 +86,7 @@ test('short queries keep page commands without loading business records', async 
   await expect(page.getByRole('option', {
     name: '打开活动管理',
   })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: '命令面板搜索' })).toHaveAttribute('placeholder', '搜索页面、操作或业务记录');
 
   await searchInput(page).fill('合');
   await expect(page.getByRole('status'))

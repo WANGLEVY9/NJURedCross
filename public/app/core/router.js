@@ -180,6 +180,26 @@ export async function refreshCurrent() {
   return resolve(location.pathname + location.search, { replace: true });
 }
 
+/** Warm a console destination's module and first data view before the click. */
+const prefetchedModules = new Map();
+export function prefetchRoute(path, load) {
+  if (!path || typeof load !== 'function' || prefetchedModules.has(path)) return;
+  const pending = Promise.resolve().then(load).then((module) => {
+    prefetchedModules.set(path, module);
+    return module;
+  }).catch(() => {
+    prefetchedModules.delete(path);
+    return null;
+  });
+  prefetchedModules.set(path, pending);
+}
+
+export function consumePrefetchedRoute(path) {
+  const cached = prefetchedModules.get(path);
+  if (!cached) return null;
+  return cached instanceof Promise ? null : cached;
+}
+
 export function buildPath(path, query = {}) {
   const url = new URL(path, location.origin);
   for (const [key, value] of Object.entries(query)) {
