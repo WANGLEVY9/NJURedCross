@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {activityProjects,projectEvents,activityProjectKey,activityGroupId} from '../public/app/shared/activity-projects.js';
+import {activityProjects,projectEvents,activityProjectKey,activityGroupId,weekRowContainingDate} from '../public/app/shared/activity-projects.js';
 import {activityInformationView} from '../lib/events/activity-information-view.js';
 const event=(id,config={},date='2026-10-29')=>({_id:id,活动ID:id,活动名称:'同名活动',状态:'报名中',报名日期:date,报名页配置:JSON.stringify(config)});
 test('explicit ordinary group collapses 16 sessions without losing their identities',()=>{
@@ -50,4 +50,27 @@ test('closed future source shifts keep the week manageable when its first shift 
  let project=activityProjects([past,future])[0];assert.equal(project._id,'future');assert.equal(project['状态'],'进行中');assert.equal(project.sessions.length,2);
  future['状态']='报名中';project=activityProjects([past,future])[0];assert.equal(project['状态'],'报名中');
  future['状态']='停点';project=activityProjects([past,future])[0];assert.equal(project['状态'],'停点');
+});
+
+test('weekly directory resolves the row containing today, and never rewrites past-only groups',()=>{
+ const duty=(id,groupId,monday)=>{
+  const days=Array.from({length:5},(_,i)=>{const d=new Date(monday+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+i);return d.toISOString().slice(0,10);});
+  return activityProjects(days.map((date,index)=>event(id+'-'+index,{ordinary:{groupId}},date)))[0];
+ };
+ const group=[duty('w1','DUTY-2026-11-16','2026-11-16'),duty('w2','DUTY-2026-11-23','2026-11-23'),duty('w3','DUTY-2026-11-30','2026-11-30')];
+ assert.equal(weekRowContainingDate(group,'2026-11-27').sessions[0]['报名日期'].slice(0,10),'2026-11-23');
+ assert.equal(weekRowContainingDate(group,'2026-11-16').sessions[0]['报名日期'].slice(0,10),'2026-11-16');
+ assert.equal(weekRowContainingDate(group,'2026-11-29').sessions[0]['报名日期'].slice(0,10),'2026-11-23');
+ // 本周不存在时返回 null：调用方维持原有顺序，不把默认项改成最后一周。
+ assert.equal(weekRowContainingDate(group,'2026-12-20'),null);
+ assert.equal(weekRowContainingDate([],'2026-11-27'),null);
+ assert.equal(weekRowContainingDate(group,'not-a-date'),null);
+});
+
+test('week row detection prefers the sessions span over the project date',()=>{
+ const project={_id:'week',报名日期:'2026-11-16',sessions:[{报名日期:'2026-11-16'},{报名日期:'2026-11-20'}]};
+ assert.equal(weekRowContainingDate([project],'2026-11-20'),project);
+ // 周末同样属于同一自然周：组宣部只在工作日排班，不能因此判不到本周。
+ assert.equal(weekRowContainingDate([project],'2026-11-21'),project);
+ assert.equal(weekRowContainingDate([project],'2026-11-23'),null);
 });
