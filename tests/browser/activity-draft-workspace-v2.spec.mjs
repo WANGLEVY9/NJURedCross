@@ -495,8 +495,10 @@ test('large historical projects keep filters and rosters without repeating a ful
  await page.goto(`/console/events?event=${blood._id}`);
  const pane=page.getByRole('region',{name:'活动操作工作区'});
  await pane.getByRole('button',{name:'报名处理',exact:true}).click();
- await expect(pane.getByRole('button',{name:'切换为列表',exact:true})).toBeVisible();
- await pane.getByRole('button',{name:'切换为列表',exact:true}).click();
+ // Blood check-ins now default to the compact list. Older board-first entry
+ // paths still expose the switch, so this assertion covers both views.
+ const toList=pane.getByRole('button',{name:'切换为列表',exact:true});
+ if(await toList.count()){await expect(toList).toBeVisible();await toList.click();}
  await expect(pane.locator('.activity-legacy-roster')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__filters')).toBeVisible();
  await expect(pane.locator('.activity-legacy-roster__legend')).toHaveCount(0);
