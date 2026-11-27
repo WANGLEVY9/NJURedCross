@@ -10,6 +10,23 @@ export const SPECIAL_ACTIVITY_TYPES=Object.freeze([
 ]);
 export const DUTY_NAME='省红会组宣部值班';
 export const DUTY_CAPACITY=2;
+/**
+ * 广场值班卡「每班 N 人」里的 N。
+ *
+ * 广场上的值班卡是**整组聚合**的一张卡：`sessions` 按开始时间升序，既包含名额升级前
+ * 冻结的旧周次（容量 1，已截止但组仍已发布，所以还在列表里），也包含当前和未来周次
+ * （容量 2）。这张卡要回答的是「现在报名能占几个名额」，因此取**最后一班**（最新生成、
+ * 升序末尾）的容量，而不是整组求和后的 `capacity`。没有 sessions 的单班行用自己的容量；
+ * 两者都读不到时才退回默认的 DUTY_CAPACITY。
+ */
+export function dutyPerSessionCapacity(event){
+ const sessions=Array.isArray(event?.sessions)?event.sessions:[];
+ if(sessions.length){
+  for(let i=sessions.length-1;i>=0;i--){const n=Number(sessions[i]?.capacity);if(Number.isInteger(n)&&n>0)return n;}
+  return DUTY_CAPACITY;
+ }
+ const own=Number(event?.capacity);return Number.isInteger(own)&&own>0?own:DUTY_CAPACITY;
+}
 /** Reserved switch-managed project, never an ordinary manually-created draft. */
 export const isManagedDutyContent=content=>content?.category==='排班专项'&&content?.name?.trim()===DUTY_NAME;
 export const registryOpenStatus=status=>['报名中','进行中'].includes(status);
