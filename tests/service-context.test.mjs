@@ -37,7 +37,10 @@ test('legacy evidence requires matching identity, exact session and a reciprocal
   }
   assert.equal(attendanceContext(registration, event, [], [legacy], [{ ...checkin, 活动名称: ['other'] }]).legacy.length, 0);
   const ambiguous = attendanceContext(registration, event, [], [legacy, { ...legacy, _id: 'duplicate' }], [checkin]);
-  assert.equal(ambiguous.legacy.length, 0); assert.match(ambiguous.warnings[0], /多条/);
+  assert.equal(ambiguous.legacy.length, 0); assert.match(ambiguous.warnings[0], /2 条相同场次报名/);
+  const missing = attendanceContext(registration, event, [], [], []);
+  assert.equal(missing.legacy.length, 0);
+  assert.match(missing.warnings.join(' '), /模拟同学.*999990001.*模拟活动.*2026-10-06.*14–17.*服务岗/);
 });
 
 test('website verification details cannot borrow another registration or account record', () => {

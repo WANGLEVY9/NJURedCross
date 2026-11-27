@@ -439,7 +439,7 @@
 .blood-schedule-status{border:1px solid transparent;line-height:1.35;letter-spacing:.01em}
 .blood-schedule-status--open{background:#fceef1;color:#a32d48;border-color:#f1d7df}
 .blood-schedule-status--success{background:#edf6f0;color:#2b6d48;border-color:#d7e9dc}
-.blood-schedule-status--review{background:#fff5e3;color:#886025;border-color:#f0e1c2}
+.blood-schedule-status--review{background:#e9f0ee;color:#376559;border-color:#d8e6e1}
 .blood-schedule-status--running{background:#edf3fb;color:#3d6590;border-color:#d6e2f0}
 .blood-schedule-status--leave{background:#f3eef8;color:#72558b;border-color:#e4dbef}
 .blood-schedule-status--failed{background:#fbeeed;color:#a34a45;border-color:#efd7d5}
@@ -469,7 +469,18 @@
 button.blood-week-calendar__row{cursor:pointer;border-color:var(--border)}
 button.blood-week-calendar__row:disabled{color:var(--text-muted);opacity:.4;cursor:default}
 button.blood-week-calendar__row:not(:disabled):hover,button.blood-week-calendar__row.is-selected{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.blood-week-calendar__legend{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)}
+.blood-week-calendar__legend-dot{width:9px;height:9px;border-radius:50%;background:#72558b;border:1px solid #ded1ed}
+button.blood-week-calendar__row.is-archived{background:#f3eef8;color:#5e4377;border-color:#e4dbef}
+button.blood-week-calendar__row.is-archived:not(:disabled):hover,button.blood-week-calendar__row.is-archived.is-selected{background:#eaddf4;border-color:#72558b;color:#53396b}
 .activity-v2-card.activity-blood-directory{flex-shrink:0;outline:none}
+.activity-blood-directory__main{display:flex;width:100%;flex-direction:column;align-items:flex-start;gap:6px;padding:0;border:0;background:transparent;color:inherit;text-align:left;cursor:pointer}
+.activity-blood-directory__main:focus-visible,.activity-blood-directory__shortcut:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.activity-blood-directory__shortcuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin-top:12px}
+.activity-blood-directory__shortcut{display:flex;min-width:0;flex-direction:column;align-items:flex-start;gap:3px;padding:9px 10px;border:1px solid var(--border);border-radius:9px;background:color-mix(in srgb,var(--accent) 4%,var(--surface));color:var(--text-primary);text-align:left;cursor:pointer}
+.activity-blood-directory__shortcut strong{font-size:13px;line-height:1.4}
+.activity-blood-directory__shortcut span{font-size:11px;line-height:1.5;color:var(--text-secondary)}
+.activity-blood-directory__shortcut:hover{border-color:var(--accent);background:var(--accent-soft)}
 .blood-registration-board__grid{overflow-y:hidden}
 
 details.service-tools>summary{grid-column:1/-1;cursor:pointer;font-weight:600;padding:4px 0}
@@ -560,7 +571,7 @@ details.service-tools:not([open])>:not(summary){display:none}
 .blood-card-grid>.blood-card-grid__heading{background:color-mix(in srgb,var(--accent) 22%,var(--surface));border:1px solid color-mix(in srgb,var(--accent) 20%,var(--border));color:var(--text-primary);box-shadow:inset 0 3px 0 color-mix(in srgb,var(--accent) 28%,var(--surface))}
 .blood-card-grid>.blood-card-grid__heading small{color:var(--text-secondary)}
 .blood-schedule-card:has(.blood-schedule-status--open){background:#f8dce5;border-color:#ecd3da;}
-.blood-schedule-card:has(.blood-schedule-status--review){background:#faedca;border-color:#eadcba;}
+.blood-schedule-card:has(.blood-schedule-status--review){background:#eef2f1;border-color:#dfe8e5;}
 .blood-schedule-card:has(.blood-schedule-status--success){background:#dceee2;border-color:#cfe3d6;}
 .blood-schedule-card:has(.blood-schedule-status--running){background:#dce9f8;border-color:#ccdded;}
 .blood-schedule-card:has(.blood-schedule-status--leave){background:#eaddf4;border-color:#dfd3eb;}
@@ -627,6 +638,7 @@ details.service-tools:not([open])>:not(summary){display:none}
 .blood-schedule-card__people{position:relative;margin-top:0}
 .blood-schedule-card__people>div{position:relative;min-height:20px;display:flex;align-items:center;gap:6px;padding-right:4px}
 .blood-checkin-pending{display:inline-block;flex:none;background:#e8eaed;color:#626975;border-radius:4px;padding:1px 4px;font-size:10px;line-height:1.4;white-space:nowrap}
+.blood-checkin-photo{display:inline-block;flex:none;background:#ede4f4;color:#624877;border-radius:4px;padding:1px 4px;font-size:10px;line-height:1.4;white-space:nowrap}
 .blood-checkin-stamp{width:42px;height:42px;object-fit:contain;transform:rotate(18deg);opacity:1;flex:none;pointer-events:none}
 .blood-schedule-card__people:has(.blood-checkin-stamp){padding-right:0}
 .blood-schedule-card__people .blood-checkin-stamp{position:absolute;right:0;bottom:-6px}

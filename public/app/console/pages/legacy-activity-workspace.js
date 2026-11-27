@@ -33,7 +33,9 @@ const compare=(a,b)=>String(a||'').localeCompare(String(b||''),'zh-CN',{numeric:
  * legacy project phase beside the selected project instead of opening the old page. */
 export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptions=[],onWeekChange=()=>{},onChanged=()=>{}}){
  let disposed=false,busy=false,nestedEditor=null,service=null,directory=null,directoryError=false,directoryPending=null;
- let bloodView=new URL(window.location.href).searchParams.get('rosterView')==='list'?'list':'board';
+ // Product feedback: the compact list is easier to scan during check-in review.
+ // Board remains available through the explicit switch and rosterView=board links.
+ let bloodView=new URL(window.location.href).searchParams.get('rosterView')==='board'?'board':'list';
  let hoursView=scheduledSession(event)?'board':'list';
  const rosterStates=new Map(),serviceStates=new Map();
  const session=getSessionState();

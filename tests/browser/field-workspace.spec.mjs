@@ -19,7 +19,7 @@ test('field inspector combines evidence and hours, saves once and refreshes only
  await expect(page.locator('.service-table tbody tr')).toHaveCount(20);expect(evidence).toBe(0);
  const row=page.locator(':is([data-registration-id="r0"], .service-mobile-records [data-row-key="r0"]):visible');await row.getByRole('button',{name:'核验并录入',exact:true}).click();
  const drawer=page.getByRole('dialog',{name:'志愿者0 · 签到详情'});
- await expect(drawer.getByText('未找到可唯一关联的旧表签到记录；这不代表同学一定未到场。')).toBeVisible();expect(evidence).toBe(1);
+ await expect(drawer.getByText('未找到可唯一关联的旧表签到记录；这不代表同学一定未到场。请按姓名、学号、活动、日期、时段和岗位在原表核对。')).toBeVisible();expect(evidence).toBe(1);
  await expect(drawer.getByRole('button',{name:'确认签到并录入时长'})).toBeDisabled();
  await drawer.getByRole('spinbutton',{name:'服务时长 必填',exact:true}).fill('2.5');
  await drawer.locator('label.check').filter({hasText:'已核对签到依据与实际到场情况'}).click();
@@ -118,7 +118,7 @@ test('mobile attendance shows compact summaries and opens full evidence and work
  await page.screenshot({path:info.outputPath('attendance-mobile.png'),fullPage:true,animations:'disabled'});
  await page.getByRole('button',{name:'核验并录入',exact:true}).click();
  const detail=page.getByRole('dialog');await expect(detail).toContainText('合成院系');
- await expect(detail.getByText('未找到可唯一关联的旧表签到记录；这不代表同学一定未到场。')).toBeVisible();
+ await expect(detail.getByText('未找到可唯一关联的旧表签到记录；这不代表同学一定未到场。请按姓名、学号、活动、日期、时段和岗位在原表核对。')).toBeVisible();
  await expect(detail.getByRole('textbox',{name:'志愿者具体工作内容 必填',exact:true})).toHaveValue('现场引导');
 });
 

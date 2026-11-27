@@ -176,7 +176,21 @@ export default async function activityWorkspacePage(context){
     list.replaceChildren(...cards.filter((_card,index)=>!blood.includes(rows[index])&&!scheduledSession(rows[index].event)));
     for(const group of schedules.values()){const active=group.find(row=>row.id===selected)||weekRowContainingDate(group,shanghaiToday())||group[0];list.append(h('button',{type:'button',class:'activity-v2-card',role:'listitem',data:{category:'排班专项',region:'nanjing'},'aria-pressed':String(group.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{title:active.name,text:active.name}),h('span',{class:'activity-v2-status'},h('span',{class:'activity-v2-badge',text:context.query.get('history')==='1'?'已结束':active.statusLabel}),activityRegionTag(active)),h('small',{class:'t-caption',text:`${group.length} 周排班 · 进入后选择周次`})))}
     count.textContent=`${rows.length-blood.length+(blood.length?1:0)-[...schedules.values()].reduce((n,group)=>n+group.length-1,0)} 项`;
-    if(blood.length){const active=blood.find(row=>row.id===selected)||weekRowContainingDate(blood,shanghaiToday())||blood[0];list.append(h('button',{type:'button',class:'activity-v2-card activity-blood-directory',role:'listitem',data:{category:'献血车专项',region:'nanjing'},'aria-pressed':String(blood.some(row=>row.id===selected)),on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})))}
+    if(blood.length){
+     const active=blood.find(row=>row.id===selected)||weekRowContainingDate(blood,shanghaiToday())||blood[0];
+     const allBlood=records().filter(row=>config(row.event||{}).source?.kind==='generated_blood');
+     const archived=allBlood.filter(row=>config(row.event||{}).bloodWeekArchive||row.stage==='已结束');
+     const historyTarget=archived.find(row=>row.id===selected)||archived[0]||active;
+     const openWeek=(row,task)=>{
+      const query={...Object.fromEntries(context.query),draft:null,event:row.id,history:'1',scheduleTask:task,rosterView:'list'};
+      return navigate(buildPath(context.path,query),{state:{activityDirectory:true}});
+     };
+     list.append(h('div',{class:'activity-v2-card activity-blood-directory',role:'listitem',data:{category:'献血车专项',region:'nanjing'},'aria-current':String(blood.some(row=>row.id===selected))},
+      h('button',{type:'button',class:'activity-blood-directory__main',on:{click:()=>openActivity(active)}},h('strong',{text:'市血液献血车'}),h('span',{class:'t-caption',text:`${blood.length} 周排班 · 进入后选择周次`})),
+      h('div',{class:'activity-blood-directory__shortcuts'},
+       h('button',{type:'button',class:'activity-blood-directory__shortcut',on:{click:()=>openWeek(historyTarget,'checkins')}},h('strong',{text:'历史周签到记录'}),h('span',{text:'查看签到照片、核验状态与旧表关联'})),
+       h('button',{type:'button',class:'activity-blood-directory__shortcut',on:{click:()=>openWeek(historyTarget,'hours')}},h('strong',{text:'历史时长与导出'}),h('span',{text:'查看已归档周的最终表和导出记录'})))));
+    }
     if(!rows.length)list.append(emptyState({title:'没有符合条件的活动',description:recycling?'移入回收站的活动会出现在这里。':stageValue==='active'?'当前没有未结束活动，可切换到“全部”或“已结束”查看。':'调整筛选或新建活动。'}));
   }
   function renderDetail(){
@@ -394,7 +408,8 @@ export default async function activityWorkspacePage(context){
         // 保存后名称可能已变更：标题直接用详情结果更新，不等目录回源。
         if(current?.['活动名称'])heading.querySelector('h2').replaceChildren(config(current).source?.kind==='generated_blood'?'市血液献血车':activityRegionTitle(current['活动名称'],current));
         if(config(current).source?.kind==='generated_blood'){const label=stageLabel(activityStage(current,{ledger:data.ledger}));for(const item of heading.querySelectorAll('ol li')){const active=item.textContent===label;item.classList.toggle('is-current',active);if(active)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current');}}
-        editor=legacyActivityWorkspace({weekOptions:records().filter(item=>(scheduledSession(current)?scheduledSession(item.event)&&config(item.event).special.rootId===config(current).special.rootId:config(item.event||{}).source?.kind==='generated_blood')&&(context.query.get('history')==='1'?item.stage==='已结束':item.stage!=='已结束')).map(item=>({id:item.id,date:item.date,dates:item.sessions.map(e=>e['报名日期']).filter(Boolean)})),onWeekChange:id=>{const item=records().find(item=>item.id===id);if(item)void openActivity(item);},event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{await syncDirectory();const selectedRow=records().find(item=>item.id===selected);if(context.query.get('history')!=='1'&&selectedRow?.stage==='已结束'){selected='';resolveSelection();}renderDetail();}});
+        const history=context.query.get('history')==='1';
+        editor=legacyActivityWorkspace({weekOptions:records().filter(item=>(scheduledSession(current)?scheduledSession(item.event)&&config(item.event).special.rootId===config(current).special.rootId:config(item.event||{}).source?.kind==='generated_blood')&&(history?item.stage==='已结束':item.stage!=='已结束')).map(item=>({id:item.id,date:item.date,dates:item.sessions.map(e=>e['报名日期']).filter(Boolean),archived:Boolean(config(item.event||{}).bloodWeekArchive)||item.stage==='已结束'})),onWeekChange:id=>{const item=records().find(item=>item.id===id);if(item)void openActivity(item);},event:current,events:data.events,data,actionsNode:moreActions(row),onChanged:async()=>{await syncDirectory();const selectedRow=records().find(item=>item.id===selected);if(!history&&selectedRow?.stage==='已结束'){selected='';resolveSelection();}renderDetail();}});
         pane.append(editor.node);
       }).catch(error=>{if(!disposed&&sequence===detailSequence)loading.replaceWith(notice(error.message||'历史活动加载失败',{tone:'warning'}));});
     }

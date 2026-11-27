@@ -28,7 +28,7 @@ test('blood initial review remains visible, regional final review exports and ar
  const shift=page.getByRole('dialog',{name:'签到审核 · 班次详情',exact:true});await expect(shift).toContainText('审核中');await page.keyboard.press('Escape');
  await page.getByRole('button',{name:'终审与导出',exact:true}).click();await expect(page.getByText('当前账号可查看初审结果；终审、补录和导出由对应分管主席团操作。',{exact:true})).toBeVisible();
  await expect(page.getByRole('button',{name:'全选当前可审核名单',exact:true})).toBeDisabled();
- await page.goto(origin+'/preview/blood-attendance?role=organizer&time=week-ended');eventId=new URL(page.url()).searchParams.get('event');
+ await page.goto(origin+'/preview/blood-attendance?role=organizer&time=week-ended&rosterView=board');eventId=new URL(page.url()).searchParams.get('event');
  detail=await get(`/api/volunteer/workflow/events/${eventId}/detail`);
  const originalIds=detail.registrations.map(r=>r._id);
  const items=detail.registrations.filter(r=>['已确认','已签到'].includes(r['报名状态'])).flatMap(r=>{
@@ -36,7 +36,7 @@ test('blood initial review remains visible, regional final review exports and ar
   return [{id:r._id,hours:{serviceHours:entry?.['服务时长']??4,trainingHours:entry?.['培训时长']??0,travelHours:entry?.['交通时长']??0,work:entry?.['工作内容']||'合成现场服务',expectedDigest:entry?.['核对摘要']},...(!r['签到照片ID']?{attendanceConfirmation:{confirmed:true,reason:'合成测试逐一核实实际到场'}}:{})}];
  });
  if(items.length){const out=await post(`/api/volunteer/workflow/events/${eventId}/attendance-batch`,{items});expect(out.failed,JSON.stringify(out)).toBe(0);}
- await page.goto(origin+'/preview/blood-attendance?role=reviewer');
+ await page.goto(origin+'/preview/blood-attendance?role=reviewer&rosterView=board');
  const reviewPage=page.getByRole('region',{name:'时长审核与导出',exact:true});await expect(reviewPage.getByRole('button',{name:'全选当前可审核名单',exact:true})).toBeEnabled();
  await expect(reviewPage.locator('.service-table-scroll--review')).toHaveCSS('max-height','none');
  await reviewPage.getByRole('button',{name:'全选当前可审核名单',exact:true}).click();
@@ -50,11 +50,10 @@ test('blood initial review remains visible, regional final review exports and ar
  await reviewPage.getByRole('button',{name:'导出并结束本周',exact:true}).click();
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'导出并归档',exact:true}).click();expect((await download).suggestedFilename()).toMatch(/xlsx$/);
  await expect(page.locator('.activity-v2-card').filter({hasText:'10.12-10.18'})).toHaveCount(0);
- await page.goto(origin+'/preview/blood-attendance?role=reviewer');
+ await page.goto(origin+'/preview/blood-attendance?role=reviewer&rosterView=board');
  await page.getByRole('button',{name:'选择排班周',exact:true}).click();await expect(page.getByRole('dialog',{name:'选择排班周（整周选择）',exact:true}).getByRole('button',{name:'2026-10-12 至 2026-10-18',exact:true})).toBeDisabled();await page.keyboard.press('Escape');
  await page.goto(origin+'/console/admin');await page.getByRole('link',{name:'历史活动',exact:true}).click();
- await page.locator('.activity-v2-card').filter({hasText:'市血液献血车'}).click();
- await page.getByRole('button',{name:'选择排班周',exact:true}).click();await page.getByRole('dialog',{name:'选择排班周（整周选择）',exact:true}).getByRole('button',{name:'2026-10-12 至 2026-10-18',exact:true}).click();
+ await page.locator('.activity-v2-card').filter({hasText:'市血液献血车'}).getByRole('button',{name:/历史时长与导出/}).click();
  await expect(page.getByRole('button',{name:'下载最终表',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'在线预览',exact:true}).click();await expect(page.getByRole('dialog',{name:'志愿时长录入表 · 在线预览',exact:true})).toBeVisible();
 });

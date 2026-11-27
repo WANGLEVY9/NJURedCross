@@ -23,6 +23,7 @@ test('weekly matrix fixes seven positions and seven days and preserves unplanned
   await page.goto(`/console/events?event=${event._id}&scheduleTask=${task}`);
   await expect(page.getByRole('button',{name:title,exact:true})).toBeVisible();
   if(task==='hours'){await expect(page.locator('.blood-card-grid')).toHaveCount(0);await page.getByRole('button',{name:'切换为排班看板',exact:true}).click();}
+  else if(await page.getByRole('button',{name:'切换为排班看板',exact:true}).count())await page.getByRole('button',{name:'切换为排班看板',exact:true}).click();
   await expect(page.locator('.blood-card-grid')).toBeVisible();await expect(page.locator('.blood-schedule-card')).toHaveCount(49);
   await expect(page.locator('.blood-inline-selection').getByRole('button',{name:'批量操作',exact:true})).toBeVisible();
   if(task==='checkins'){await expect(page.getByRole('combobox',{name:'岗位',exact:true})).toHaveCount(0);await expect(page.getByRole('combobox',{name:'场次',exact:true})).toHaveCount(0);await expect(page.locator('.service-sort-options')).toHaveCount(0);await expect(page.locator('input[type=date]')).toBeVisible();}
