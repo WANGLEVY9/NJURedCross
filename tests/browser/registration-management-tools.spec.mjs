@@ -74,11 +74,18 @@ test('latest-main mail details and notification preview survive the roster integ
 
 test('registration export button issues a read-only GET request',async({page})=>{
  let method='';
+ await page.route('**/app/portal/shell.js',async route=>{
+  await new Promise(resolve=>setTimeout(resolve,300));
+  await route.continue();
+ });
  await page.route('**/api/volunteer/workflow/events/tools-event/registration-export',route=>{
   method=route.request().method();
   return route.fulfill({status:200,contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',body:'synthetic workbook'});
  });
  await page.goto('/');
+ // Page load does not await the router's asynchronous first render. Mount only
+ // after it finishes so the real home page cannot replace the export fixture.
+ await expect(page.locator('body')).toHaveClass(/\bpage-ready\b/);
  await page.evaluate(async()=>{
   const {h}=await import('/app/core/dom.js');
   const {registrationDownloadButton}=await import('/app/console/pages/registration-download.js');
