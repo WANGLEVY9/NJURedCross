@@ -1079,6 +1079,7 @@ body.is-resizing-activity-directory {
   overflow-wrap: anywhere;
 }
 /* Scroll the roster and its controls together, rather than shrinking the table. */
+@media (min-width: 801px) {
 .activity-v2 .activity-registration-workspace {
   min-height: 0;
   overflow: hidden;
@@ -1095,4 +1096,5 @@ body.is-resizing-activity-directory {
   min-height: 320px;
   max-height: none;
   overflow-y: hidden;
+}
 }

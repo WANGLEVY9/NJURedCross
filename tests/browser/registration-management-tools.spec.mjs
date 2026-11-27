@@ -88,7 +88,8 @@ test('registration export button issues a read-only GET request',async({page})=>
  await expect.poll(()=>method).toBe('GET');
 });
 
-test('roster scrolls with its controls instead of collapsing into a short inner viewport',async({page})=>{
+test('desktop roster scrolls with its controls instead of collapsing into a short inner viewport',async({page},info)=>{
+ test.skip(info.project.name.includes('mobile'),'Desktop sizing; physical mobile scrolling is covered by activity-mobile-scroll.spec.mjs');
  await mount(page);
  await page.locator('.activity-v2').evaluate(el=>{el.style.height='500px';});
  const table=page.locator('.activity-registration-table');
