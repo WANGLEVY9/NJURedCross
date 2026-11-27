@@ -145,3 +145,42 @@ test('legacy migration fails closed when historical evidence cannot be read',asy
  assert.deepEqual(row,before);
  readFailure=false;await w.runRecurringDuty();assert.equal(row['容量'],'2');
 });
+
+test('manual weeks survive timer runs, preserve records and can return to rolling three weeks',async()=>{
+ const {w,tables,time}=fixture();await w.configureRecurringDuty({enabled:true},'owner');
+ const count=tables[WF.events].length;
+ await w.configureRecurringDuty({enabled:true,mode:'manual',weeks:['2030-12-09','2030-12-30']},'owner');
+ const groups=()=>tables[ORDINARY_GROUP_TABLE].filter(g=>g['报名开关']==='开放').map(g=>g['活动组ID']).sort();
+ assert.deepEqual(groups(),['DUTY-2030-12-09','DUTY-2030-12-30']);
+ assert.equal(tables[WF.events].length,count+10);
+ await w.runRecurringDuty();assert.deepEqual(groups(),['DUTY-2030-12-09','DUTY-2030-12-30']);
+ time('2030-12-09T10:00:00+08:00');await w.runRecurringDuty();
+ assert.equal(tables[WF.events].length,count+10);
+ await w.configureRecurringDuty({enabled:false},'owner');assert.deepEqual(groups(),[]);
+ await w.configureRecurringDuty({enabled:true},'owner');assert.deepEqual(groups(),['DUTY-2030-12-09','DUTY-2030-12-30']);
+ await w.configureRecurringDuty({enabled:true,mode:'rolling'},'owner');
+ assert.deepEqual(groups(),['DUTY-2030-12-09','DUTY-2030-12-16','DUTY-2030-12-23']);
+});
+
+test('week settings reject invalid inputs before persisting and export rejects foreign weeks',async()=>{
+ const {w,tables}=fixture();await w.configureRecurringDuty({enabled:true},'owner');
+ for(const weeks of [['2030-12-03'],['2030-02-30'],['2030-12-09','2030-12-09']])await assert.rejects(w.configureRecurringDuty({enabled:true,mode:'manual',weeks},'owner'),{statusCode:400});
+ assert.equal(w.recurringDutyStatus().mode,'rolling');
+ const event=tables[WF.events][0];
+ assert.ok((await w.registrationTemplate(event._id,'owner',undefined,['2030-12-02','2030-12-09'])).buffer.length);
+ await assert.rejects(w.registrationTemplate(event._id,'owner',undefined,[]),{statusCode:400});
+ await assert.rejects(w.registrationTemplate(event._id,'owner',undefined,['2031-01-06']),{statusCode:400});
+ await assert.rejects(w.registrationTemplate(event._id,'owner',[event],['2030-12-09']),{statusCode:403});
+});
+
+test('selected-week workbook includes every chosen week and excludes other weeks',async()=>{
+ const {w,tables}=fixture();await w.configureRecurringDuty({enabled:true},'owner');
+ const events=['2030-12-02','2030-12-09','2030-12-16'].map(week=>tables[WF.events].find(e=>JSON.parse(e['报名页配置']).special.week===week));
+ tables[WF.registrations].push(...events.map((event,i)=>({_id:'export-'+i,活动ID:event['活动ID'],报名ID:'WR-'+i,姓名:'合成同学'+i,学号:'000'+i,邮箱:'synthetic-'+i+'@example.invalid',报名状态:'待筛选',报名日期:event['报名日期'],报名时段:event['报名时段']})));
+ const {default:ExcelJS}=await import('exceljs');
+ const book=new ExcelJS.Workbook();await book.xlsx.load((await w.registrationTemplate(events[0]._id,'owner',undefined,['2030-12-02','2030-12-16'])).buffer);
+ const sheet=book.getWorksheet('报名信息表');
+ assert.equal(sheet.rowCount,3);
+ assert.deepEqual([sheet.getCell('B2').value,sheet.getCell('B3').value],['0000','0002']);
+ assert.deepEqual([sheet.getCell('H2').value,sheet.getCell('H3').value],['WR-0','WR-2']);
+});

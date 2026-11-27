@@ -1,4 +1,5 @@
 import {openScheduleTotal} from './special-schedule-total.js';
+import {registrationDownloadButton} from './registration-download.js';
 import {scheduledSession} from '../../shared/schedule-board-layout.js';
 import {editAdminActivityInformation} from './activity-admin-information.js';
 import {bloodWeekPicker} from './blood-week-picker.js';
@@ -400,6 +401,13 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   if(c.bookingMode==='grouped'&&['draft','approval','ready'].includes(state)&&canManage()&&!c.positionPlan)controls.push(button({label:'配置报名岗位',onClick:()=>configureProjectPositions(row,onChanged)}));
   if(parallel()){
    const low=controls.splice(0);
+   if(c.recurringDuty===true){
+    // Use the same privileged editor and authorized workbook endpoint as other
+    // activities; keep these common duty operations visible outside the menu.
+    const edit=low.find(control=>control.textContent==='活动信息修改');
+    if(edit){low.splice(low.indexOf(edit),1);controls.push(edit);}
+   }
+   if(scheduledSession(row)&&(superAdmin||row.approvalAccess?.canManageRegistration===true))controls.push(registrationDownloadButton(row));
    controls.push(h('details',{class:'blood-more-actions'},h('summary',{text:'更多操作'}),h('div',{class:'blood-more-menu'},button({label:'通知信息编辑',onClick:()=>editRegistrationContact(current()._id).catch(error=>reportError(error,'通知信息暂时无法加载'))}),...low)));
   }
   else if(actionsNode)controls.push(actionsNode);
