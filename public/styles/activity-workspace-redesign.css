@@ -1078,21 +1078,28 @@ body.is-resizing-activity-directory {
   white-space: normal;
   overflow-wrap: anywhere;
 }
-/* Scroll the roster and its controls together, rather than shrinking the table. */
-.activity-v2 .activity-registration-workspace {
-  min-height: 0;
-  overflow: hidden;
-}
-.activity-v2 .activity-registration-content {
-  flex: 1 1 auto;
-  overflow-y: auto;
-}
-.activity-v2 .activity-registration-content > * {
-  flex-shrink: 0;
-}
-.activity-v2 .activity-registration-content > .activity-registration-table:not(.activity-final-hours-table) {
-  flex: 0 0 auto;
-  min-height: 320px;
-  max-height: none;
-  overflow-y: hidden;
+/* Scroll the roster and its controls together, rather than shrinking the table.
+ *
+ * 只在桌面布局里成立：这里的工作区被列表→详情的网格压成了固定高度，内容区才真的
+ * 能滚。手机/平板上工作区没有高度约束，给内容区加 overflow-y:auto 会让它变成一个
+ * 「滚不动却吃掉手势」的滚动容器——手指在名单上划，页面一动不动（Chromium 不会把
+ * 触摸链继续传给外面那层 .activity-v2-detail），整份名单就翻不到底。 */
+@media (min-width: 961px) {
+  .activity-v2 .activity-registration-workspace {
+    min-height: 0;
+    overflow: hidden;
+  }
+  .activity-v2 .activity-registration-content {
+    flex: 1 1 auto;
+    overflow-y: auto;
+  }
+  .activity-v2 .activity-registration-content > * {
+    flex-shrink: 0;
+  }
+  .activity-v2 .activity-registration-content > .activity-registration-table:not(.activity-final-hours-table) {
+    flex: 0 0 auto;
+    min-height: 320px;
+    max-height: none;
+    overflow-y: hidden;
+  }
 }

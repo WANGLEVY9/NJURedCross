@@ -88,7 +88,10 @@ test('registration export button issues a read-only GET request',async({page})=>
  await expect.poll(()=>method).toBe('GET');
 });
 
-test('roster scrolls with its controls instead of collapsing into a short inner viewport',async({page})=>{
+// 这条契约只在桌面布局成立：手机/平板的工作区没有高度约束，内容区一旦变成滚动容器
+// 就会吃掉触摸手势（见 activity-workspace-redesign.css 里的断点说明）。
+test('roster scrolls with its controls instead of collapsing into a short inner viewport',async({page},info)=>{
+ test.skip(!info.project.name.includes('desktop'),'桌面布局契约；手机走整页滚动');
  await mount(page);
  await page.locator('.activity-v2').evaluate(el=>{el.style.height='500px';});
  const table=page.locator('.activity-registration-table');
