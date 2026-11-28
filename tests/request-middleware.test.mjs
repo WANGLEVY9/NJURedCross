@@ -101,6 +101,24 @@ test('attendance photo routes keep upload budget and accept raw image bodies', (
   assert.equal(requestBudgetMsFor('POST', '/api/portal/workflow/registrations/abc/leave'), 30_000);
 });
 
+test('attendance transport limits are applied without optional entry configuration and stay route-scoped',async()=>{
+ for(const [method,path,expected] of [
+  ['POST','/api/portal/workflow/registrations/WR-synthetic/attendance',200],
+  ['POST','/api/portal/workflow/registrations/WR-synthetic/attendance?from=phone',200],
+  ['POST','/api/volunteer/workflow/registrations/synthetic/attendance',200],
+  ['POST','/api/volunteer/workflow/registrations/synthetic/attendance-supplement',200],
+  ['POST','/api/portal/workflow/registrations/synthetic/attendance-request',413],
+  ['POST','/api/portal/workflow/registrations/synthetic/attendance-supplement',413],
+  ['POST','/api/portal/workflow/registrations/synthetic/leave',413],
+  ['PATCH','/api/portal/workflow/registrations/synthetic/attendance',413],
+ ]){
+  const {options,calls}=dependencyStubs();const middleware=createRequestMiddleware(options);
+  const req={method,url:path,headers:{host:'localhost','content-length':String(300*1024),'content-type':'image/jpeg'}};
+  const res={writableEnded:false,destroyed:false,headersSent:false,writeHead(status){this.status=status;},end(){this.writableEnded=true;}};
+  await middleware(req,res);assert.equal(res.status,expected,`${method} ${path}`);assert.equal(calls.api,expected===200?1:0);
+ }
+});
+
 test('concurrency gate bounds active work and rejects an overflowing queue', async () => {
   const gate = createRequestConcurrencyGate({ limit: 1, queueLimit: 1 });
   const first = gate.run(() => new Promise(resolve => setTimeout(resolve, 20)));
