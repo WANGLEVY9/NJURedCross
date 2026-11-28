@@ -864,6 +864,22 @@ details.service-tools:not([open])>:not(summary){display:none}
 .console .activity-schedule-workspace .activity-legacy-roster__table{min-width:1040px;font-size:var(--fs-body);line-height:var(--lh-normal);font-variant-numeric:tabular-nums}
 .console .activity-schedule-workspace .activity-legacy-roster__table :is(th,td){padding:var(--s3) var(--s4);vertical-align:middle}
 .console .activity-schedule-workspace .activity-legacy-roster__table thead th{font-size:var(--fs-secondary);font-weight:var(--fw-semibold)}
+.console .activity-schedule-workspace .activity-legacy-roster__table{table-layout:fixed;min-width:1280px}
+.console .activity-schedule-workspace .activity-legacy-roster__table thead th[data-roster-column="序号"]{width:5%}
+.console .activity-schedule-workspace .activity-legacy-roster__table thead th[data-roster-column="选择"]{width:5%}
+.console .activity-schedule-workspace .activity-legacy-roster__table thead th[data-roster-column="姓名"]{width:11%}
+.console .activity-schedule-workspace .activity-legacy-roster__table thead th[data-roster-column="学号"]{width:11%}
+.console .activity-schedule-workspace .activity-legacy-roster__table thead th[data-roster-column="部门"]{width:9%}
+.console .activity-schedule-workspace .activity-legacy-roster__table thead th[data-roster-column="日期 / 班次"]{width:21%}
+.console .activity-schedule-workspace .activity-legacy-roster__table thead th[data-roster-column="报名 / 请假"]{width:24%}
+.console .activity-schedule-workspace .activity-legacy-roster__table thead th[data-roster-column="操作"]{width:14%;text-align:right}
+.console .activity-schedule-workspace .activity-legacy-roster__table :is(td,th){overflow-wrap:anywhere}
+.console .activity-schedule-workspace .activity-legacy-roster__person strong{font-size:var(--fs-body);font-weight:var(--fw-semibold);white-space:normal}
+.console .activity-schedule-workspace .activity-legacy-roster__context>span:first-child{white-space:normal}
+.console .activity-schedule-workspace .activity-legacy-roster__status{max-width:24%}
+.console .activity-schedule-workspace .activity-legacy-roster__status .t-caption{white-space:normal}
+.console .activity-schedule-workspace .activity-legacy-roster__actions{width:14%;text-align:right}
+.console .activity-schedule-workspace .activity-legacy-roster__actions .btn{font-size:var(--fs-secondary)}
 .console .activity-schedule-workspace .activity-legacy-roster__table .t-caption,.console .activity-schedule-workspace .activity-pending-tasks .t-caption{font-size:var(--fs-secondary);line-height:var(--lh-normal)}
 .console .activity-schedule-workspace .activity-legacy-roster__group th{font-size:var(--fs-body);font-weight:var(--fw-semibold);padding:var(--s3) var(--s4)}
 .console .activity-schedule-workspace .activity-legacy-roster__session th{font-size:var(--fs-secondary);line-height:var(--lh-normal);padding:var(--s2) var(--s4)}
@@ -890,8 +906,34 @@ details.service-tools:not([open])>:not(summary){display:none}
 @media(max-width:960px){
  .console .activity-schedule-workspace .activity-legacy-content{padding:var(--s3);gap:var(--s3)}
  .console .activity-schedule-workspace .activity-schedule-tasks>.btn{white-space:normal}
- .console .activity-schedule-workspace .activity-legacy-roster__table{min-width:880px}
+ .console .activity-schedule-workspace .activity-legacy-roster__table{min-width:1040px}
  .console .activity-schedule-workspace .activity-pending-tasks table{min-width:640px}
+}
+
+/* 志愿者资料抽屉按信息用途分组，避免窄长列表把长资质文本挤成单字换行。 */
+.drawer.registration-profile-drawer{--drawer-w:780px}
+.registration-profile{display:grid;gap:var(--s5);min-width:0}
+.registration-profile__identity{display:flex;align-items:center;gap:var(--s4);padding:var(--s4);border:1px solid var(--border);border-radius:var(--r-lg);background:var(--surface-muted)}
+.registration-profile__identity-text{display:grid;gap:3px;min-width:0;flex:1 1 auto}
+.registration-profile__avatar{flex:0 0 auto;width:48px;height:48px;border-radius:var(--r-md);font-size:var(--fs-title)}
+.registration-profile__name{font-family:var(--font-sans);font-size:var(--fs-h3);font-weight:var(--fw-semibold);line-height:var(--lh-snug);color:var(--text-primary);overflow-wrap:anywhere}
+.registration-profile__meta{font-size:var(--fs-secondary);line-height:var(--lh-normal);color:var(--text-secondary);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.registration-profile__badges{display:flex;flex:0 0 auto;flex-wrap:wrap;gap:var(--s2);align-items:center;justify-content:flex-end}
+.registration-profile__section{display:grid;gap:var(--s3);min-width:0}
+.registration-profile__heading{margin:0;padding-bottom:var(--s2);border-bottom:1px solid var(--border);font-family:var(--font-sans);font-size:var(--fs-title);font-weight:var(--fw-semibold);line-height:var(--lh-snug);color:var(--text-primary)}
+.registration-profile__section .dl{gap:var(--s2);grid-template-columns:repeat(2,minmax(0,1fr));column-gap:var(--s6)}
+.registration-profile__section .dl__row{grid-template-columns:92px minmax(0,1fr);gap:var(--s3);align-items:start;padding:var(--s2) var(--s3);border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface)}
+.registration-profile__section .dl__row dt{font-size:var(--fs-label);font-weight:var(--fw-medium);line-height:var(--lh-normal);color:var(--text-secondary);letter-spacing:0}
+.registration-profile__section .dl__row dd,.registration-profile__section .dl__row dd .t-secondary{font-size:var(--fs-body);line-height:var(--lh-normal);color:var(--text-primary)}
+.registration-profile__section .dl__row dd{min-width:0;overflow-wrap:anywhere;word-break:normal}
+.registration-profile__certificate{display:flex;align-items:center;flex-wrap:wrap;gap:var(--s2)}
+.registration-profile__certificate .badge{flex:0 0 auto}
+.registration-profile__empty{color:var(--text-muted)}
+@media(max-width:720px){
+ .registration-profile__identity{flex-wrap:wrap;align-items:flex-start}
+ .registration-profile__badges{justify-content:flex-start}
+ .registration-profile__section .dl{grid-template-columns:minmax(0,1fr)}
+ .registration-profile__section .dl__row{grid-template-columns:80px minmax(0,1fr)}
 }
 
 /* 补录选人：候选列表限高滚动，避免十几个人把对话框顶得过长；空态直接收起。 */

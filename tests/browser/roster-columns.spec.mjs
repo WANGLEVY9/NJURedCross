@@ -47,3 +47,21 @@ test('all activity roster variants hide department by default, and retain local 
  await page.locator('.roster-column-picker summary').click();await page.locator('#main').evaluate(node=>{node.scrollTop=0;});
  await page.screenshot({path:info.outputPath('roster-columns-closed.png'),fullPage:true,animations:'disabled'});
 });
+
+test('volunteer details group information and keep readable widths on desktop and mobile',async({page},info)=>{
+ await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
+ await page.goto('/console/events');
+ await expect(page.locator('.activity-v2-card').first()).toBeVisible();
+ await mount(page,'legacy');
+ await page.locator('.activity-legacy-roster__more').first().evaluate(node=>{node.open=true;});
+ await page.getByRole('button',{name:'更多资料',exact:true}).first().click();
+ const drawer=page.locator('.drawer, .sheet');
+ await expect(drawer.getByRole('heading',{name:'联系方式与学籍',exact:true})).toBeVisible();
+ await expect(drawer.getByRole('heading',{name:'报名与资料关联',exact:true})).toBeVisible();
+ await expect(drawer.getByRole('heading',{name:'补充说明',exact:true})).toBeVisible();
+ const width=await drawer.evaluate(node=>node.getBoundingClientRect().width);
+ expect(width).toBeGreaterThan(info.project.name==='mobile-chromium'?360:600);
+ await expect(drawer.locator('.registration-profile__section .dl__row')).toHaveCount(21);
+ await expect(drawer.getByRole('contentinfo').getByRole('button',{name:'关闭',exact:true})).toBeVisible();
+ await page.screenshot({path:info.outputPath('volunteer-profile-details.png'),fullPage:true,animations:'disabled'});
+});

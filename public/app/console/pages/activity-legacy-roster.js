@@ -1,15 +1,23 @@
 import {leaveStatus} from './activity-leave-review.js';
 import {rosterColumns} from '../roster-columns.js';
 import {h} from '../../core/dom.js';
-import {button,badge,field,panel,emptyState,notice,definitionList} from '../../ui/primitives.js';
+import {button,badge,field,panel,emptyState,notice,definitionList,avatar} from '../../ui/primitives.js';
 import {openDrawer} from '../../ui/overlay.js';
-import {registrationParticipant} from '../../shared/registration-profile.js';
+import {registrationParticipant,certificateStatus} from '../../shared/registration-profile.js';
 import {createPositionLabels} from '../../shared/position-labels.js';
 
 const canApprove=row=>row['报名状态']==='待筛选'&&row['请假状态']!=='待审批';
 const result=row=>row['报名状态']==='待筛选'?'待审批':row['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(row['报名状态'])?'报名成功':row['报名状态']||'未提供';
 const compare=(a,b)=>String(a||'').localeCompare(String(b||''),'zh-CN',{numeric:true});
 const config=event=>{try{return JSON.parse(event?.['报名页配置']||'{}');}catch{return {};}};
+const profileValue=(value,fallback='未提供')=>{
+ const text=String(value??'').trim();
+ return h('span',{class:text?'':'registration-profile__empty',text:text||fallback});
+};
+const registrationTone=label=>label==='报名成功'?'success':label==='报名失败'?'danger':label==='已请假'?'neutral':'warning';
+const certificateLabel=state=>state==='yes'?'已具备':state==='no'?'未具备':'待核对';
+const certificateTone=state=>state==='yes'?'success':state==='no'?'neutral':'warning';
+const profileSection=(title,rows)=>h('section',{class:'registration-profile__section'},h('h3',{class:'registration-profile__heading',text:title}),definitionList(rows));
 
 export function legacyRosterPanel({event,events=[],registrations=[],directory=[],directoryError=false,state,busy=false,onBatch,onBatchLeave,onApprove,onReason,onDetails,context,matches,compact=false,showLegend=true,headerActions=[]}){
  for(const [key,value] of Object.entries({search:'',date:'',position:'',session:'',status:'',campus:'',leave:'',order:'asc',selectionMode:'approval'}))if(state[key]===undefined)state[key]=value;
@@ -55,9 +63,52 @@ export function legacyRosterPanel({event,events=[],registrations=[],directory=[]
  function showDetails(row){
   if(onDetails)return onDetails(row);
   const participant=registrationParticipant(row,profiles.find(profile=>profile.accountId===row['账号ID'])||{});
-  return openDrawer({title:`志愿者资料 · ${row['姓名']}`,body:[definitionList([
-   ['姓名',row['姓名']],['学号',row['学号']],['邮箱',row['邮箱']||participant.email||'未提供'],['校区',participant.campus||'未提供'],['院系',participant.department||'未提供'],['年级',participant.grade||'未提供'],['性别',participant.gender||'未提供'],['电话',participant.phone||'未提供'],['QQ',participant.qq||'未提供'],['急救证',participant.certificate||'未知'],['活动类别',row['活动类别']||'未分类'],['地区',row['地区']||'未提供'],['备注',row['备注']||'无'],['备注2',row['备注2']||'无'],['注意事项',row['注意事项']||'无'],['资料来源',row['资料来源']||'历史报名资料'],['关联状态',row['关联状态']||'待完善']
-  ])]});
+  const name=row['姓名']||'未提供姓名',value=rowContext(row),resultLabel=result(row);
+  const certificate=certificateStatus(participant.certificate);
+  const initials=avatar(name,{large:true});initials.classList.add('registration-profile__avatar');initials.setAttribute('aria-hidden','true');
+  const badges=h('div',{class:'registration-profile__badges'},
+   badge(resultLabel,{tone:registrationTone(resultLabel)}),
+   row['请假状态']?badge(leaveStatus(row),{tone:String(leaveStatus(row)).includes('待审批')?'warning':'neutral'}):null);
+  const identity=h('div',{class:'registration-profile__identity'},
+   initials,
+   h('div',{class:'registration-profile__identity-text'},
+    h('strong',{class:'registration-profile__name',text:name}),
+    h('span',{class:'registration-profile__meta',text:`学号 ${row['学号']||'未提供'}`}),
+    h('span',{class:'registration-profile__meta',text:`报名编号 ${row['报名ID']||'未提供'}`})),
+   badges);
+  const body=h('div',{class:'registration-profile'},identity,
+   profileSection('联系方式与学籍',[
+    ['邮箱',profileValue(row['邮箱']||participant.email)],
+    ['校区',profileValue(participant.campus)],
+    ['院系',profileValue(participant.department)],
+    ['年级',profileValue(participant.grade)],
+    ['性别',profileValue(participant.gender)],
+    ['电话',profileValue(participant.phone)],
+    ['QQ',profileValue(participant.qq)],
+    ['急救证',h('div',{class:'registration-profile__certificate'},badge(certificateLabel(certificate),{tone:certificateTone(certificate)}),profileValue(participant.certificate))]
+   ]),
+   profileSection('报名与资料关联',[
+    ['活动类别',profileValue(row['活动类别'],'未分类')],
+    ['地区',profileValue(row['地区'])],
+    ['日期 / 班次',profileValue([value.date,value.slot].filter(Boolean).join(' · '),'待完善')],
+    ['地点 / 岗位',profileValue([value.location,value.position||row['岗位']].filter(Boolean).join(' · '),'待完善')],
+    ['报名结果',badge(resultLabel,{tone:registrationTone(resultLabel)})],
+    ['请假状态',row['请假状态']?badge(leaveStatus(row),{tone:String(leaveStatus(row)).includes('待审批')?'warning':'neutral'}):profileValue('', '无')],
+    ['资料来源',profileValue(row['资料来源'],'历史报名资料')],
+    ['关联状态',badge(String(row['关联状态']||'待完善'),{tone:String(row['关联状态']||'').includes('已关联')?'success':'warning'})]
+   ]),
+   profileSection('补充说明',[
+    ['请假原因',profileValue(row['请假原因'],'无')],
+    ['处理说明',profileValue(row['处理说明'],'无')],
+    ['备注',profileValue(row['备注'],'无')],
+    ['备注2',profileValue(row['备注2'],'无')],
+    ['注意事项',profileValue(row['注意事项'],'无')]
+   ]));
+  let drawer;
+  const close=button({label:'关闭',variant:'secondary',onClick:()=>drawer.close()});
+  drawer=openDrawer({title:`志愿者资料 · ${name}`,width:780,body,footer:[close]});
+  drawer.surface.classList.add('registration-profile-drawer');
+  return drawer;
  }
  function secondaryActions(row){
   return h('div',{class:'activity-legacy-roster__secondary'},
