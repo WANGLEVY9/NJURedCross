@@ -1,5 +1,6 @@
 import {test,expect} from '@playwright/test';
 import sharp from 'sharp';
+import {randomBytes} from 'node:crypto';
 
 test.skip(process.env.PREVIEW_SPECIAL_ACTIVITIES!=='1','Run against the opt-in synthetic special activities fixture.');
 
@@ -8,18 +9,19 @@ test('completed-service registration uploads proof and preserves time and positi
  const manifest=await (await page.request.get('/preview/special-manifest')).json();
  await page.goto('/events/workflow:'+manifest.provinceId);
  await expect(page.getByRole('heading',{name:'省血液献血车 · 服务登记',exact:true})).toBeVisible();
- await page.getByLabel('服务日期').fill(test.info().project.name==='mobile-chromium'?'2026-11-08':'2026-11-10');
+ const serviceDate=test.info().project.name==='mobile-chromium'?'2026-11-08':'2026-11-10';
+ await page.getByLabel('服务日期').fill(serviceDate);
  await page.getByLabel('服务开始时间').fill('09:30');
  await page.getByLabel('服务结束时间').fill('13:30');
  await page.getByRole('combobox',{name:'服务岗位',exact:true}).click();
  await page.getByRole('option',{name:'大行宫献血车',exact:true}).click();
- const buffer=await sharp({create:{width:320,height:240,channels:3,background:'#fafafa'}}).png().toBuffer();
+ const buffer=await sharp(randomBytes(1024*768*3),{raw:{width:1024,height:768,channels:3}}).png().toBuffer();
  await page.getByLabel('签到凭证',{exact:true}).setInputFiles({name:'synthetic-proof.png',mimeType:'image/png',buffer});
  await page.getByText('本人确认填写信息真实，并同意用于志愿服务登记与核验。',{exact:true}).click();
  const submitted=page.waitForResponse(r=>r.url().includes('/registry-certificate?')&&r.request().method()==='POST');
  await page.getByRole('button',{name:'提交登记',exact:true}).click();
- const response=await submitted,payload=await response.json();expect(payload.ok).toBe(true);
- const proof=await page.request.get('/api/portal/workflow/registrations/'+encodeURIComponent(payload.result.code)+'/registry-certificate');expect(proof.ok()).toBe(true);expect(proof.headers()['content-type']).toMatch(/^image\//);
+ const response=await submitted,payload=await response.json();expect(response.status()).toBe(201);expect(payload.ok).toBe(true);
+ const proof=await page.request.get('/api/portal/workflow/registrations/'+encodeURIComponent(payload.result.code)+'/registry-certificate');expect(proof.ok()).toBe(true);expect(proof.headers()['content-type']).toMatch(/^image\//);expect((await proof.body()).length).toBeGreaterThan(300*1024);
  await expect(page.getByRole('cell',{name:'09:30–13:30',exact:true}).first()).toBeVisible();
  await expect(page.getByRole('cell',{name:'大行宫献血车',exact:true}).first()).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
@@ -30,9 +32,9 @@ test('completed-service registration uploads proof and preserves time and positi
  await expect(page.getByRole('searchbox',{name:'搜索登记记录'})).toBeVisible();
  await expect(page.getByRole('cell',{name:'09:30–13:30',exact:true}).first()).toBeVisible();
  await page.getByRole('searchbox',{name:'搜索登记记录'}).fill('大行宫');
- await expect(page.locator('.registry-table tbody tr')).toHaveCount(test.info().project.name==='mobile-chromium'?2:1);
  // A pending row carries its own decision controls; batch mode is no longer the only way to verify.
- const pendingRow=page.locator('.registry-table tbody tr').filter({hasText:'大行宫'}).first();
+ const pendingRow=page.locator('.registry-table tbody tr').filter({hasText:'大行宫'}).filter({hasText:serviceDate});
+ await expect(pendingRow).toHaveCount(1);
  await expect(pendingRow.getByRole('button',{name:'核验',exact:true})).toBeVisible();
  await expect(pendingRow.getByRole('button',{name:'退回',exact:true})).toBeVisible();
  await expect(pendingRow.getByRole('button',{name:'查看凭证',exact:true})).toBeVisible();
@@ -42,7 +44,7 @@ test('completed-service registration uploads proof and preserves time and positi
  const decision=page.locator('.drawer, .sheet');
  await expect(decision.getByLabel('处理说明')).toHaveValue('服务登记与签到凭证一致，核验通过');
  await decision.getByRole('button',{name:'确认',exact:true}).click();
- await expect(page.locator('.registry-table tbody tr').filter({hasText:'大行宫'}).first()).toContainText('已核验');
+ await expect(pendingRow).toContainText('已核验');
  await page.getByRole('button',{name:'批量操作',exact:true}).click();
  await expect(page.getByRole('button',{name:'核验通过所选',exact:true})).toBeVisible();
  await page.screenshot({path:test.info().outputPath('registry-admin.png'),fullPage:true});

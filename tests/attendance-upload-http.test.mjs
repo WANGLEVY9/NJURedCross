@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import {once} from 'node:events';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,randomUUID} from 'node:crypto';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -23,12 +23,12 @@ test('raw attendance images pass the real HTTP, session, CSRF, image validation 
   }
   await rm(directory,{recursive:true,force:true});
  });
- let submissions=0;
+ let submissions=0,registryType='province-service';
  const row={报名ID:'WR-synthetic',活动ID:'synthetic-event',账号ID:'synthetic-member',报名状态:'已确认'};
- const workflow={read:async()=>({events:[],registrations:[row]}),ownRegistration:async()=>row,submitAttendance:async(code,account,photoId)=>{
+ const workflow={currentTime:()=>Date.parse('2031-01-01T12:00:00+08:00'),registryList:async()=>({type:registryType,event:{_id:'synthetic-registry',活动ID:'synthetic-registry',状态:'报名中'}}),registryRegister:async(_id,input)=>{submissions++;return {_id:input.photoId,报名ID:'WR-synthetic-registry'};},read:async()=>({events:[],registrations:[row]}),ownRegistration:async()=>row,submitAttendance:async(code,account,photoId)=>{
   assert.equal(code,row['报名ID']);assert.equal(account.accountId,row['账号ID']);submissions++;return {photoId};
  }};
- const ctx={json,getWorkflow:async()=>workflow,getAccount:async()=>({accountId:'synthetic-member',studentId:'999990001'}),
+ const ctx={json,audit:async()=>{},getWorkflow:async()=>workflow,getAccount:async()=>({accountId:'synthetic-member',studentId:'999990001',realName:'合成同学',campus:'鼓楼',department:'合成院系',qq:'123456789',wechat:'synthetic',gender:'其他',phone:'13800000000',certificate:'否'}),
   requirePortalSession:(req,res)=>{if(req.headers['x-synthetic-session']==='member')return {username:'synthetic-member'};json(res,401,{ok:false});return null;},
   requireCsrf:(req,res)=>{if(req.headers['x-csrf-token']==='synthetic-token')return true;json(res,403,{ok:false});return false;}};
  const middleware=createRequestMiddleware({api:(req,res,url)=>workflowRoutes(req,res,url,ctx),staticFile:()=>false,pdfAssets:()=>false,
@@ -60,4 +60,15 @@ test('raw attendance images pass the real HTTP, session, CSRF, image validation 
  assert.equal(submissions,2);
  const ordinary=await fetch(url.replace('/attendance','/leave'),{method:'POST',headers:{...headers,'Content-Type':'application/json'},body:JSON.stringify({reason:'x'.repeat(70000)})});
  assert.equal(ordinary.status,413);await ordinary.arrayBuffer();
+ for(const type of ['province-service','component-donation'])for(const chunked of [false,true]){
+  registryType=type;
+  const fields={requestId:randomUUID(),date:'2030-12-02',...(type==='province-service'?{start:'14:00',end:'16:00',location:'鼓楼广场献血车'}:{quantity:'200'})};
+  const registryUrl=`http://127.0.0.1:${server.address().port}/api/portal/workflow/events/synthetic-registry/registry-certificate?${new URLSearchParams(fields)}`;
+  const body=chunked?new ReadableStream({start(controller){controller.enqueue(photo);controller.close();}}):photo;
+  const response=await fetch(registryUrl,{method:'POST',headers,body,...(chunked?{duplex:'half'}:{})});
+  const payload=await response.json();assert.equal(response.status,201,JSON.stringify(payload));
+  assert.deepEqual(await readFile(join(directory,payload.result.id)),photo);
+  assert.equal(requestBudgetMsFor('POST',new URL(registryUrl).pathname),180000);
+ }
+ assert.equal(submissions,6);
 });
