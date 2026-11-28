@@ -22,7 +22,15 @@ export const DUTY_CAPACITY=2;
 export function dutyPerSessionCapacity(event){
  const sessions=Array.isArray(event?.sessions)?event.sessions:[];
  if(sessions.length){
-  for(let i=sessions.length-1;i>=0;i--){const n=Number(sessions[i]?.capacity);if(Number.isInteger(n)&&n>0)return n;}
+  // A grouped duty card can contain expired or closed historical weeks. The
+  // card describes the capacity of shifts a visitor can still register for.
+  if(event?.recurringDuty){
+   const open=sessions.filter(session=>session.registrationOpen!==false&&session.full!==true);
+   const candidates=open.length?open:sessions;
+   for(let i=candidates.length-1;i>=0;i--){const n=Number(candidates[i]?.capacity);if(Number.isInteger(n)&&n>0)return n;}
+  }else{
+   for(let i=sessions.length-1;i>=0;i--){const n=Number(sessions[i]?.capacity);if(Number.isInteger(n)&&n>0)return n;}
+  }
   return DUTY_CAPACITY;
  }
  const own=Number(event?.capacity);return Number.isInteger(own)&&own>0?own:DUTY_CAPACITY;

@@ -3,6 +3,7 @@ import {bloodAttendanceMark} from './blood-attendance-mark.js';
 import {BLOOD_POINTS} from '../../shared/blood-points.js';
 import {isLegacyHongyangAutoConfirmed} from '../../shared/registration-leave.js';
 import {h} from '../../core/dom.js';
+import {getSessionState} from '../../core/api.js';
 import {button,field,notice} from '../../ui/primitives.js';
 import {openDrawer,confirmAction} from '../../ui/overlay.js';
 import {scheduleBoardLayout} from '../../shared/schedule-board-layout.js';
@@ -11,6 +12,9 @@ import {registrationOpen} from '../../shared/activity-management.js';
 /** A view of the already scoped project snapshot; never fetch a second catalogue. */
 export function bloodRegistrationBoard({events,registrations,state,busy=false,canManage=false,hasLedgerEvidence=()=>false,onApprove,onReject,onLeave,onBatch,onBatchLeave,onToggleSession,onRenotify}){
  const root=h('section',{class:'blood-registration-board','aria-label':scheduleBoardLayout(events)?'报名排班看板':'献血车排班看板'}),grid=h('div',{class:'blood-registration-board__grid'}),count=h('p',{'aria-live':'polite',class:'t-caption'});
+ const session=typeof getSessionState==='function'?getSessionState():null;
+ const superAdmin=session?.user?.role==='super_admin';
+ const canManageRegistration=event=>Boolean(event)&&(superAdmin||event.approvalAccess?.canManageRegistration===true);
  const canApprove=row=>canManage&&!busy&&row['报名状态']==='待筛选'&&!['待审批','已批准'].includes(row['请假状态'])&&events.some(e=>e['活动ID']===row['活动ID']&&!bloodWeekArchived(e)&&['报名中','进行中','已结束'].includes(e['状态']));
  const canAdjustLegacy=row=>{const event=events.find(e=>e['活动ID']===row['活动ID']);return canManage&&!busy&&event?.['状态']==='报名中'&&!row['签到照片ID']&&!row['签到行ID']&&!hasLedgerEvidence(row)&&!['待审批','已批准'].includes(row['请假状态'])&&isLegacyHongyangAutoConfirmed(event,row);};
  const eligible=row=>state.selectionMode==='notice'?canManage&&!busy&&['已确认','已签到','未入选'].includes(row['报名状态'])&&row['请假状态']!=='待审批':state.selectionMode==='leave'?canManage&&!busy&&row['请假状态']==='待审批'&&['待筛选','已确认'].includes(row['报名状态']):canApprove(row);
@@ -67,13 +71,17 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
   const points=layout?.locations||[BLOOD_POINTS[1],BLOOD_POINTS[0],BLOOD_POINTS[3],BLOOD_POINTS[2]],names=layout?.locations||['印象汇','中央','弘阳广场','学则路'];
   const labelOf=row=>row['请假状态']==='待审批'?'请假待审批':row['请假状态']==='已批准'?'请假已批准':row['报名状态']==='待筛选'?'待审批':row['报名状态']==='未入选'?'报名失败':['已确认','已签到'].includes(row['报名状态'])?'报名成功':row['报名状态'];
   function details(event,rows,day,location){
-   const body=h('div',{class:'stack-4'},h('p',{text:day+' '+location+' '+(event?.['报名时段']||'未排班')}));
+   const body=h('div',{class:'stack-4'},h('p',{class:'t-body',text:day+' '+location+' '+(event?.['报名时段']||'未排班')}));
+   if(event&&['报名中','进行中'].includes(event['状态'])){
+    let config={};try{config=JSON.parse(event['报名页配置']||'{}');}catch{config={};}
+    if(config.sourceRegistration?.enabled===false)body.append(notice('本场新报名已停止：已有报名、签到与时长记录保留，公开报名入口不再展示。',{tone:'info'}));
+   }
    for(const row of rows){const actions=h('div',{class:'row-2 row-wrap'});
     if(canApprove(row))actions.append(button({label:'报名成功',onClick:()=>onApprove(row)}),button({label:'报名失败',onClick:()=>onReject(row)}));else if(canAdjustLegacy(row))actions.append(button({label:'报名失败',onClick:()=>onReject(row)}));
     if(canManage&&!busy&&row['请假状态']==='待审批')actions.append(button({label:'批准请假',onClick:()=>onLeave(row,true)}),button({label:'驳回请假',onClick:()=>onLeave(row,false)}));
     body.append(h('section',{class:'stack-3'},statusText(labelOf(row)),h('p',{text:[row['姓名'],row['学号']].filter(Boolean).join(' ')}),h('p',{text:row['报名状态']==='已签到'?'已签到':row['签到照片ID']?'已提交签到资料':'未提交签到资料'}),row['请假原因']?h('p',{text:'请假原因：'+row['请假原因']}):null,actions));
    }
-   if(event&&onToggleSession&&canManage&&['报名中','进行中'].includes(event['状态'])){let c;try{c=JSON.parse(event['报名页配置']||'{}');}catch{c={};}const enabled=c.sourceRegistration?.enabled!==false;body.append(button({label:enabled?'结束本场报名':'重新开放本场报名',onClick:ev=>onToggleSession(event,!enabled,ev.currentTarget)}));}
+   if(event&&onToggleSession&&canManageRegistration(event)&&['报名中','进行中'].includes(event['状态'])){let c;try{c=JSON.parse(event['报名页配置']||'{}');}catch{c={};}const enabled=c.sourceRegistration?.enabled!==false;body.append(button({label:enabled?'停止本场新报名':'恢复本场新报名',onClick:ev=>onToggleSession(event,!enabled,ev.currentTarget)}));}
    if(!rows.length)body.append(h('p',{text:event?'暂无报名人员':'该日期未安排此岗位'}));
    openDrawer({title:'班次详情',body});
   }
@@ -84,7 +92,7 @@ export function bloodRegistrationBoard({events,registrations,state,busy=false,ca
    const rows=event?registrations.filter(r=>r['活动ID']===event['活动ID']):[];
    const live=rows.filter(r=>!['未入选','已取消','已请假'].includes(r['报名状态'])&&r['请假状态']!=='已批准');
    const displayRows=live.slice(0,2);
-   const label=!event?'未排班':['已结束','停点','已归档'].includes(event['状态'])?event['状态']:live.some(r=>r['请假状态']==='待审批')?'请假待审批':live.some(r=>r['报名状态']==='待筛选')?'待审批':live.length?'报名成功':event['状态']==='报名中'&&configEnabled(event)&&(!layout||registrationOpen(event))?'可报名':layout&&event['状态']==='报名中'?(event.registrationControl?.enabled===false||!configEnabled(event)?'报名已暂停':'报名已截止'):event['状态'];
+   const label=!event?'未排班':['已结束','停点','已归档'].includes(event['状态'])?event['状态']:live.some(r=>r['请假状态']==='待审批')?'请假待审批':live.some(r=>r['报名状态']==='待筛选')?'待审批':live.length?'报名成功':event['状态']==='报名中'&&configEnabled(event)&&(!layout||registrationOpen(event))?'可报名':layout&&event['状态']==='报名中'?(event.registrationControl?.enabled===false||!configEnabled(event)?'报名已暂停':'报名已截止'):configEnabled(event)?event['状态']:'报名已暂停';
    const tone=label==='可报名'?'available':['报名成功','已签到'].includes(label)?'success':['待审批','请假待审批'].includes(label)?'review':label==='报名中'?'open':label==='进行中'?'running':['报名失败','停点'].includes(label)?'failed':label.startsWith('请假')?'leave':'ended';
    const card=h('article',{class:'blood-schedule-card'+(!event?' is-unplanned':''),tabindex:0,role:'button','aria-label':day+' '+names[index]+' '+period+' '+label,on:{click:()=>details(event,rows,day,location),keydown:ev=>{if(ev.target===card&&['Enter',' '].includes(ev.key)){ev.preventDefault();details(event,rows,day,location);}}}},
     h('div',{class:'blood-schedule-card__title'},h('span',{class:'blood-schedule-status blood-schedule-status--'+tone,text:label}),h('strong',{text:(JSON.parse(event?.['报名页配置']||'{}').recurringDuty?'组宣部':names[index])+'·'+(layout?layout.label(period):period)})));

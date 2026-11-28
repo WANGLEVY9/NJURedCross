@@ -312,16 +312,24 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   return h('div',{class:'stack-4'},...parts);
  }
 
- async function changeSourceRegistration(row,enabled,scope,control){
+ async function changeSourceRegistration(row,enabled,scope,control,selectionRows=[]){
   if(busy||service?.isSaving?.())return;
   if(service?.hasUnsaved?.()){notify.warning('请先保存当前时长修改');return;}
-  const project=scope==='project',label=enabled?'开放报名':'结束报名';
-  if(!await confirmAction({title:`${project?'整周':'本场'}${label}？`,description:project?'将统一调整本周所有场次的报名开关，后续新增场次继承该选择。停点和已过期场次不会开放，已有报名与时长记录保留。':`${row['报名日期']} · ${row['地点']} · ${row['报名时段']}。仅调整本场，其他场次不受影响；结束报名后可以再次开放。`,confirmLabel:label}))return;
+  const selection=scope==='selection',project=scope==='project',label=enabled?'恢复新报名':'停止新报名';
+  const affected=selection?selectionRows:project?sessions().filter(item=>['报名中','进行中'].includes(item['状态'])):[row];
+  const countRegistrations=status=>affected.reduce((n,item)=>n+data.registrations.filter(registration=>registration['活动ID']===item['活动ID']&&status(registration)).length,0);
+  const confirmed=countRegistrations(registration=>['已确认','已签到'].includes(registration['报名状态']));
+  const pending=countRegistrations(registration=>registration['报名状态']==='待筛选');
+  const leave=countRegistrations(registration=>registration['请假状态']==='待审批');
+  const scopeName=selection?`当前筛选的 ${affected.length} 场`:project?'本周所有场次':`${row['报名日期']} · ${row['地点']} · ${row['报名时段']}`;
+  const description=enabled?`${scopeName}将重新接受新报名；停点和已过期班次仍不会开放。已有报名、签到、时长和邮件记录均保留。`:`${scopeName}将不再接受新报名，公开展示会停止；底表报名结果、签到、时长和邮件不会撤销。${project?'后续新增场次继承该选择。':'其他场次不受影响，之后可以再次恢复。'}`;
+  if(!await confirmAction({title:`${selection?'批量':project?'整周':'本场'}${label}？`,description,confirmLabel:label,details:[`当前范围内：已报名 ${confirmed} 人 · 待确认 ${pending} 人 · 请假待审批 ${leave} 人`,enabled?'仅恢复新报名入口。':'仅停止新报名入口，不取消已报名人员。']}))return;
   busy=true;control.disabled=true;control.setAttribute('aria-busy','true');
   try{
    const c=config(row),decision=project?c.sourceProjectRegistration:c.sourceRegistration;
-   await mutate(`/events/${encodeURIComponent(row._id)}/source-registration`,{enabled,scope,revision:Number(decision?.revision)||0});
-   notify.success(`${project?'整周':'本场'}${enabled?'报名已开放':'报名已结束'}`);
+   const body=selection?{enabled,scope:'selection',revision:0,ids:affected.map(item=>item._id)}:{enabled,scope,revision:Number(decision?.revision)||0};
+   await mutate(`/events/${encodeURIComponent(row._id)}/source-registration`,body);
+   notify.success(`${selection?'所选场次':project?'整周':'本场'}${enabled?'已恢复新报名':'已停止新报名'}`);
   }catch(error){await onChanged().catch(()=>{});reportError(error,'报名开关未完成，已同步为最新状态，请重试');}
   finally{busy=false;if(!disposed){control.disabled=false;control.removeAttribute('aria-busy');}}
  }
@@ -331,14 +339,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   if(busy||service?.isSaving?.())return;
   if(service?.hasUnsaved?.()){notify.warning('请先保存当前时长修改');return;}
   if(!rows.length){notify.warning('当前筛选结果没有可调整的场次');return;}
-  const label=enabled?'开放报名':'结束报名';
-  if(!await confirmAction({title:`对当前筛选的 ${rows.length} 场${label}？`,description:`按当前日期与搜索条件统一${label}，未筛选到的场次不受影响；停点和已过期场次不会开放，结束报名后可以再次开放。`,confirmLabel:label}))return;
-  busy=true;control.disabled=true;control.setAttribute('aria-busy','true');
-  try{
-   await mutate(`/events/${encodeURIComponent(current()._id)}/source-registration`,{enabled,scope:'selection',revision:0,ids:rows.map(row=>row._id)});
-   notify.success(`已对 ${rows.length} 场${enabled?'开放报名':'结束报名'}`);
-  }catch(error){await onChanged().catch(()=>{});reportError(error,'批量报名开关未完成，已同步为最新状态，请重试');}
-  finally{busy=false;if(!disposed){control.disabled=false;control.removeAttribute('aria-busy');}}
+  await changeSourceRegistration(current(),enabled,'selection',control,rows);
  }
 
  function sourceRegistrationPanel(){
@@ -350,7 +351,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
   const batch=h('div',{class:'activity-draft-toolbar row-wrap','aria-label':'按筛选结果批量调整报名'});
   // Buttons capture their disabled flag, so the batch controls are rebuilt with
   // the current filter result instead of being mutated in place.
-  const renderBatch=selectable=>batch.replaceChildren(...[[true,'批量开放报名'],[false,'批量结束报名']].map(([enabled,label])=>
+  const renderBatch=selectable=>batch.replaceChildren(...[[true,'批量恢复新报名'],[false,'批量停止新报名']].map(([enabled,label])=>
    button({label,variant:'secondary',disabled:busy||!selectable.length,onClick:event=>changeSelectionRegistration(selectable,enabled,event.currentTarget)})));
   const renderCards=()=>{
    const visible=rows.filter(row=>(!date.control.value||row['报名日期']===date.control.value)&&(!search.control.value.trim()||`${row['地点']} ${row['报名时段']}`.includes(search.control.value.trim())));
@@ -359,9 +360,9 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
    renderBatch(selectable);
    list.replaceChildren(...visible.map(row=>{
     const c=config(row),available=['报名中','进行中'].includes(row['状态']),enabled=c.sourceRegistration?.enabled!==false;
-    const status=available?enabled?'报名开放':'报名已结束':row['状态']==='停点'?'底表已停点':'场次已结束';
+    const status=available?enabled?'新报名开放':'新报名已暂停':row['状态']==='停点'?'底表已停点':'场次已结束';
     const permitted=superAdmin||row.approvalAccess?.canManageRegistration===true;
-    const toggle=button({label:enabled?'结束报名':'开放报名',variant:enabled?'secondary':'primary',disabled:busy||!available||!permitted,onClick:()=>changeSourceRegistration(row,!enabled,'event',toggle)});
+    const toggle=button({label:enabled?'停止新报名':'恢复新报名',variant:enabled?'secondary':'primary',disabled:busy||!available||!permitted,onClick:()=>changeSourceRegistration(row,!enabled,'event',toggle)});
     return h('article',{class:'source-registration-card',data:{session:row._id},'aria-label':`${row['报名日期']} ${row['地点']} ${row['报名时段']}`},
      h('div',{class:'source-registration-card__content'},h('h4',{text:row['地点']}),h('p',{class:'t-caption',text:`${row['报名日期']} · ${row['报名时段']}`}),h('p',{class:'t-caption',text:`底表名额 ${row['容量']} · ${status}`})),
      h('div',{class:'source-registration-card__action'},toggle,!available?h('span',{class:'t-caption',text:row['状态']==='停点'?'请先在底表恢复排班':row['状态']==='已归档'?'本周项目已结束':'场次已结束'}):null));
@@ -394,7 +395,7 @@ export function legacyActivityWorkspace({event,events,data,actionsNode,weekOptio
    try{await mutate(`/events/${encodeURIComponent(row._id)}/close`,{scope:'project'});notify.success('报名已截止');}catch(error){reportError(error,'报名截止未完成');}
   }}));
   if(config(current()).source?.kind==='generated_blood'&&(superAdmin||row.approvalAccess?.canManageRegistration===true)&&sessions().some(item=>['报名中','进行中'].includes(item['状态']))){
-   for(const [enabled,label] of [[true,'整周开放报名'],[false,'整周结束报名']]){
+   for(const [enabled,label] of [[true,'整周恢复新报名'],[false,'整周停止新报名']]){
     const control=button({label,disabled:busy,onClick:()=>changeSourceRegistration(row,enabled,'project',control)});controls.push(control);
    }
   }

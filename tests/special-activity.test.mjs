@@ -38,6 +38,15 @@ test('duty card reports the newest session capacity instead of the frozen week o
  assert.equal(dutyPerSessionCapacity({}),DUTY_CAPACITY);
  assert.equal(dutyPerSessionCapacity({sessions:[{capacity:3},{capacity:'3'}]}),3);
 });
+test('duty card describes open shifts rather than a frozen historical capacity',()=>{
+ const duty={recurringDuty:true,capacity:'62',sessions:[
+  {capacity:1,registrationOpen:false,full:false},
+  {capacity:2,registrationOpen:true,full:false},
+  {capacity:2,registrationOpen:true,full:true},
+ ]};
+ assert.equal(dutyPerSessionCapacity(duty),2);
+ assert.equal(dutyPerSessionCapacity({recurringDuty:true,capacity:'62',sessions:[{capacity:1,registrationOpen:false},{capacity:1,registrationOpen:false}]}),1);
+});
 test('completion requires a past China date, one-decimal duration, integer quantity and certificate',()=>{
  const c={requestId:'12345678-1234-4234-8234-123456789012',date:'2026-11-10',duration:'1.5',quantity:2,photoId:'12345678-1234-4234-8234-123456789012'},now=Date.parse('2026-11-09T16:05:00Z');
  assert.equal(normalizeCompletionRegistration(c,now).duration,1.5);

@@ -62,6 +62,22 @@ test('board date and point filters scope batch rejection and preserve vacancy ch
  await expect.poll(()=>page.evaluate(()=>window.boardResult)).toEqual({ids:['ra'],decision:'reject',reopen:false,reason:'模拟不再补招'});
 });
 
+test('shift details explain a paused registration gate and use explicit control labels',async({page})=>{
+ await page.goto('/');
+ await page.evaluate(async()=>{
+  const {bloodRegistrationBoard}=await import('/app/console/pages/blood-registration-board.js');
+  const event={_id:'gate',活动ID:'gate',报名日期:'2030-10-23',地点:'新街口印象汇',报名时段:'上午 11~15点',状态:'进行中',报名页配置:JSON.stringify({sourceRegistration:{enabled:false}}),approvalAccess:{canManageRegistration:true}};
+  document.body.append(bloodRegistrationBoard({events:[event],registrations:[],state:{selected:new Set()},canManage:true,onToggleSession:async()=>{}}));
+ });
+ const board=page.getByRole('region',{name:'献血车排班看板'});
+ const card=board.locator('.blood-schedule-card').filter({hasText:'报名已暂停'}).first();
+ await expect(card).toBeVisible();
+ await card.click();
+ const drawer=page.locator('.drawer, .sheet');
+ await expect(drawer).toContainText('本场新报名已停止');
+ await expect(drawer.getByRole('button',{name:'恢复本场新报名',exact:true})).toBeVisible();
+});
+
 test('board confirms in small batches and stops after an uncertain write',async({page})=>{
  await page.request.post('/api/auth/login',{data:{username:'synthetic-super'}});
  const {events}=await(await page.request.get('/api/volunteer/workflow/catalog')).json();

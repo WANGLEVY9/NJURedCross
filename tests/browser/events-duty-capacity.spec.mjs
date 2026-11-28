@@ -24,3 +24,24 @@ test('duty card states the newest session capacity, not the frozen one',async({p
  await expect(card.getByText('每日两班 · 每班2人')).toBeVisible();
  await expect(card.getByText('每班1人')).toHaveCount(0);
 });
+
+const liveDuty={
+ eventId:'workflow:duty-live',name:'省红会组宣部值班',status:'报名中',statusLabel:'剩余 48 个名额',
+ center:'排班专项',region:'南京地区',campus:'',location:'省红会组宣部',
+ recurringDuty:true,longTerm:true,registrationOpen:true,
+ capacity:62,remaining:48,confirmed:14,pending:0,full:false,
+ startAt:'2026-11-16T09:00:00+08:00',endAt:'2026-12-11T17:00:00+08:00',
+ sessions:[
+  {sessionId:'old',startAt:'2026-11-16T09:00:00+08:00',endAt:'2026-11-16T12:00:00+08:00',location:'省红会组宣部',capacity:1,remaining:1,full:false,registrationOpen:false},
+  {sessionId:'current',startAt:'2026-11-30T09:00:00+08:00',endAt:'2026-11-30T12:00:00+08:00',location:'省红会组宣部',capacity:2,remaining:1,full:false,registrationOpen:true},
+  {sessionId:'future',startAt:'2026-12-11T14:00:00+08:00',endAt:'2026-12-11T17:00:00+08:00',location:'省红会组宣部',capacity:2,remaining:0,full:true,registrationOpen:true},
+ ],
+};
+
+test('live duty card reports open shift capacity from the real public catalogue shape',async({page})=>{
+ await page.route('**/api/public/events**',route=>route.fulfill({json:{events:[liveDuty],facets:{campuses:[],categories:['排班专项']}}}));
+ await page.goto('/events');
+ const card=page.locator('.event-row').filter({hasText:'省红会组宣部值班'});
+ await expect(card.getByText('每日两班 · 每班2人')).toBeVisible();
+ await expect(card.getByText('每班1人')).toHaveCount(0);
+});

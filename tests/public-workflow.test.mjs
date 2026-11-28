@@ -107,6 +107,15 @@ test('an ordinary group with a passed deadline stays listed as paused instead of
   assert.equal(publicWorkflowEvents({events:rows,registrations:[]},now).length,2);
 });
 
+test('a recurring duty group exposes each session registration state for display decisions',()=>{
+ const now=Date.parse('2026-10-01T00:00:00+08:00');
+ const session=(index,capacity,registrationOpen)=>published({_id:`duty-${index}`,活动ID:`duty-${index}`,容量:String(capacity),状态:'报名中',报名页配置:JSON.stringify({recurringDuty:true,ordinary:{groupId:'duty-group',start:'2026-10-12T09:00:00+08:00',end:'2026-10-12T12:00:00+08:00'}}),registrationControl:{published:true,enabled:registrationOpen,deadline:'2026-10-11T00:00:00+08:00'}});
+ const [group]=projectWorkflowEvents([session(0,1,false),session(1,2,true)],[],now);
+ assert.equal(group.sessions.length,2);
+ assert.deepEqual(group.sessions.map(item=>item.registrationOpen),[false,true]);
+ assert.deepEqual(group.sessions.map(item=>item.capacity),[1,2]);
+});
+
 test('blood catalogue preserves open booking sessions across weeks and hides closed sessions',()=>{
   const now=Date.parse('2026-10-25T12:00:00+08:00');
   const dates=['2026-10-05','2026-10-12','2026-10-13','2026-10-19','2026-10-25','2026-10-26','2026-11-02','2026-11-03','2026-11-09'];

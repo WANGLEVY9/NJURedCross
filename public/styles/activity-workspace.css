@@ -837,6 +837,63 @@ details.service-tools:not([open])>:not(summary){display:none}
 .recurring-duty-grid .blood-schedule-card{padding:10px 8px}
 .recurring-duty-grid .blood-schedule-card__title strong{font-size:.83rem}
 
+/* Operate surfaces need readable records. Compact legacy styles above are
+  历史收敛值；这里为献血车管理页统一角色尺度与列节奏。 */
+.console .activity-schedule-workspace .activity-legacy-content{gap:var(--s4);padding:var(--s4)}
+.console .activity-schedule-workspace .activity-pending-tasks{padding:var(--s4);border-radius:var(--r-lg);background:var(--surface-muted);font-size:var(--fs-body);line-height:var(--lh-normal)}
+.console .activity-schedule-workspace .activity-pending-tasks>strong{display:block;margin-bottom:var(--s3);font-size:var(--fs-body);font-weight:var(--fw-semibold)}
+.console .activity-schedule-workspace .activity-pending-tasks .activity-registration-table{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface)}
+.console .activity-schedule-workspace .activity-pending-tasks table{width:100%;min-width:720px;border-collapse:collapse;font-size:var(--fs-body);font-variant-numeric:tabular-nums}
+.console .activity-schedule-workspace .activity-pending-tasks :is(th,td){padding:var(--s3) var(--s4);border-bottom:1px solid var(--border);text-align:left;vertical-align:middle;line-height:var(--lh-normal)}
+.console .activity-schedule-workspace .activity-pending-tasks th{color:var(--text-secondary);font-size:var(--fs-secondary);font-weight:var(--fw-medium)}
+.console .activity-schedule-workspace .activity-pending-tasks td>.btn{min-height:40px;padding-inline:var(--s4);font-size:var(--fs-secondary)}
+.console .activity-schedule-workspace .activity-pending-tasks td>.btn+.btn{margin-left:var(--s2)}
+.console .activity-schedule-workspace .activity-schedule-tasks{gap:var(--s2)}
+.console .activity-schedule-workspace .activity-schedule-tasks>.btn{min-height:40px;padding-inline:var(--s4);font-size:var(--fs-secondary);white-space:nowrap}
+.console .activity-schedule-workspace .blood-more-actions>summary{min-height:40px;padding:var(--s2) var(--s4);font-size:var(--fs-secondary)}
+.console .activity-schedule-workspace .service-heading h3{font-size:var(--fs-h3)}
+.console .activity-schedule-workspace .service-heading p,.console .activity-schedule-workspace .service-counts,.console .activity-schedule-workspace .activity-schedule-hint{font-size:var(--fs-secondary);line-height:var(--lh-normal)}
+.console .activity-schedule-workspace .service-workspace{padding:var(--s4);gap:var(--s3)}
+.console .activity-schedule-workspace .activity-legacy-roster{gap:var(--s3)}
+.console .activity-schedule-workspace .activity-legacy-roster__filters{gap:var(--s3)}
+.console .activity-schedule-workspace .activity-legacy-roster__filters :is(.field__label,.input,.select-menu__trigger){font-size:var(--fs-secondary)}
+.console .activity-schedule-workspace .activity-legacy-roster__filters :is(.input,.select-menu__trigger){min-height:40px}
+.console .activity-schedule-workspace .activity-legacy-roster__batch{gap:var(--s2);padding-block:var(--s2)}
+.console .activity-schedule-workspace .activity-legacy-roster__batch [role=status]{font-size:var(--fs-secondary);line-height:var(--lh-normal)}
+.console .activity-schedule-workspace .activity-legacy-roster__batch>.btn{min-height:40px;font-size:var(--fs-secondary)}
+.console .activity-schedule-workspace .activity-legacy-roster__table{min-width:1040px;font-size:var(--fs-body);line-height:var(--lh-normal);font-variant-numeric:tabular-nums}
+.console .activity-schedule-workspace .activity-legacy-roster__table :is(th,td){padding:var(--s3) var(--s4);vertical-align:middle}
+.console .activity-schedule-workspace .activity-legacy-roster__table thead th{font-size:var(--fs-secondary);font-weight:var(--fw-semibold)}
+.console .activity-schedule-workspace .activity-legacy-roster__table .t-caption,.console .activity-schedule-workspace .activity-pending-tasks .t-caption{font-size:var(--fs-secondary);line-height:var(--lh-normal)}
+.console .activity-schedule-workspace .activity-legacy-roster__group th{font-size:var(--fs-body);font-weight:var(--fw-semibold);padding:var(--s3) var(--s4)}
+.console .activity-schedule-workspace .activity-legacy-roster__session th{font-size:var(--fs-secondary);line-height:var(--lh-normal);padding:var(--s2) var(--s4)}
+.console .activity-schedule-workspace .activity-legacy-roster__actions{white-space:nowrap}
+.console .activity-schedule-workspace .activity-legacy-roster__actions .btn{min-height:40px;font-size:var(--fs-secondary);white-space:normal}
+.console .activity-schedule-workspace .activity-legacy-roster__secondary{gap:var(--s2)}
+.console .activity-schedule-workspace .source-registration-filters{gap:var(--s3)}
+.console .activity-schedule-workspace .source-registration-list{gap:var(--s3)}
+.console .activity-schedule-workspace .source-registration-card{padding:var(--s4);border-radius:var(--r-lg)}
+.console .activity-schedule-workspace .source-registration-card h4{font-size:var(--fs-title);line-height:var(--lh-snug)}
+.console .activity-schedule-workspace .source-registration-card p{font-size:var(--fs-secondary);line-height:var(--lh-normal)}
+.console .activity-schedule-workspace .source-registration-card__action .btn{min-height:40px;font-size:var(--fs-secondary)}
+.console .activity-schedule-workspace .blood-schedule-card{padding:var(--s4);border-radius:var(--r-lg)}
+.console .activity-schedule-workspace .blood-schedule-card__title{font-size:var(--fs-body);line-height:var(--lh-snug)}
+.console .activity-schedule-workspace .blood-schedule-card__people,.console .activity-schedule-workspace .blood-schedule-card__people>div>span{font-size:var(--fs-secondary);line-height:var(--lh-normal)}
+.console .activity-schedule-workspace .blood-schedule-status{font-size:var(--fs-label);line-height:var(--lh-snug);padding:var(--s1) var(--s2)}
+.console .activity-schedule-workspace .blood-checkin-pending,.console .activity-schedule-workspace .blood-checkin-photo,.console .activity-schedule-workspace .blood-hours-count{font-size:var(--fs-label);line-height:var(--lh-snug)}
+.console .activity-schedule-workspace .blood-hours-list .service-table td,.console .activity-schedule-workspace .blood-hours-list .service-table th{padding:var(--s3) var(--s4);font-size:var(--fs-body);line-height:var(--lh-normal)}
+.console .activity-schedule-workspace .blood-hours-list .service-table td{height:auto;max-width:320px;white-space:normal;overflow-wrap:anywhere}
+.console .activity-schedule-workspace .blood-hours-list .service-table .blood-hours-edit{min-height:40px;height:auto;font-size:var(--fs-secondary)}
+.console .activity-schedule-workspace .blood-hours-filters .field__label,.console .activity-schedule-workspace .blood-hours-filters>.field>.field__label,.console .activity-schedule-workspace .service-tools .field__label{font-size:var(--fs-secondary);line-height:var(--lh-normal)}
+.console .activity-schedule-workspace .blood-hours-filters :is(.input,.select-menu__trigger){font-size:var(--fs-secondary)}
+.console .activity-schedule-workspace .roster-column-picker__options label{font-size:var(--fs-secondary)}
+@media(max-width:960px){
+ .console .activity-schedule-workspace .activity-legacy-content{padding:var(--s3);gap:var(--s3)}
+ .console .activity-schedule-workspace .activity-schedule-tasks>.btn{white-space:normal}
+ .console .activity-schedule-workspace .activity-legacy-roster__table{min-width:880px}
+ .console .activity-schedule-workspace .activity-pending-tasks table{min-width:640px}
+}
+
 /* 补录选人：候选列表限高滚动，避免十几个人把对话框顶得过长；空态直接收起。 */
 .hours-supplement-results{max-height:220px;overflow:auto;border:1px solid var(--border,#d7dbe0);border-radius:10px;padding:6px}
 .hours-supplement-results:empty{display:none}
